@@ -144,13 +144,3 @@ function loadTaskState() {
 }
 
 // Add CSS class for uploaded photos
-document.head.insertAdjacentHTML('beforeend', `
-<style>
-.uploaded-photo {
-    max-width: 100px;
-    margin-top: 10px;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-</style>
-`);

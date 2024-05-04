@@ -9,7 +9,7 @@ body, html {
     margin: 0 auto;
     padding: 20px;
     background: #fff;
-    box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     border-radius: 8px;
 }
 
@@ -29,7 +29,7 @@ header {
 }
 
 .room-list .room:hover {
-    background-color: #e8f4ff;
+    background-color: #f9f9f9;
 }
 
 .room-list .room-name {
@@ -58,21 +58,13 @@ div p {
 }
 
 button {
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    margin-top: 20px;
+    background-color: #f4f4f9;
+    border: 1px solid #ccc;
+    padding: 8px 16px;
+    font-size: 14px;
     cursor: pointer;
-    width: 100%;
-    display: block;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    transition: background-color 0.3s, transform 0.3s;
-}
-
-button:hover {
-    background-color: #66bb6a;
-    transform: translateY(-2px);
+    border-radius: 4px;
+    margin-top: 10px;
 }
 
 #detailContainer {
@@ -109,25 +101,6 @@ button:hover {
     margin-right: 10px;
 }
 
-@media (max-width: 768px) {
-    .app-container {
-        padding: 10px;
-    }
-
-    .room-list .room {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .room-list .room-name, .room-list .item-count {
-        margin-left: 0;
-        margin-bottom: 5px;
-    }
-
-    .room-list .arrow {
-        align-self: flex-end;
-    }
-}
 #detailContainer {
     padding: 20px;
     transition: opacity 0.5s ease;
