@@ -1,0 +1,130 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+}
+
+.app-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    background: #fff;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+header {
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.room-list .room {
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.room-list .room:hover {
+    background-color: #f9f9f9;
+}
+
+.room-list .room-name {
+    flex-grow: 1;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.room-list .item-count {
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.room-list .arrow {
+    font-size: 1.5rem;
+    color: #ccc;
+}
+
+/* Detail view styling */
+div h2 {
+    color: #006699;
+}
+
+div p {
+    font-size: 16px;
+}
+
+button {
+    background-color: #f4f4f9;
+    border: 1px solid #ccc;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+#detailContainer {
+    transition: opacity 0.5s ease;
+}
+
+.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+.tasks {
+    margin-top: 20px;
+}
+
+.task {
+    margin-bottom: 10px;
+}
+
+.task input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+.photo-upload {
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+.photo-upload label {
+    margin-right: 10px;
+}
+
+#detailContainer {
+    padding: 20px;
+    transition: opacity 0.5s ease;
+}
+
+.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+button {
+    display: block;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    margin-top: 20px;
+    cursor: pointer;
+    width: 100%;
+}
+
+
+
