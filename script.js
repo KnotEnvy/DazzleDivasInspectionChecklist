@@ -74,8 +74,19 @@ function loadRoomDetails(room, container) {
 }
 
 function toggleDetail(show) {
-    document.getElementById('detailContainer').style.display = show ? 'block' : 'none';
-    document.getElementById('roomList').style.display = show ? 'none' : 'block';
+    const detailContainer = document.getElementById('detailContainer');
+    const roomList = document.getElementById('roomList');
+    if (show) {
+        detailContainer.classList.add('visible');
+        detailContainer.classList.remove('hidden');
+        roomList.classList.add('hidden');
+        roomList.classList.remove('visible');
+    } else {
+        detailContainer.classList.add('hidden');
+        detailContainer.classList.remove('visible');
+        roomList.classList.add('visible');
+        roomList.classList.remove('hidden');
+    }
 }
 
 function setupPhotoUploads() {
@@ -103,12 +114,17 @@ function handleFileChange(event) {
                 photoContainer.appendChild(img);
             }
             img.src = e.target.result;
-            img.style.maxWidth = '100px';
-            img.style.marginTop = '10px';
+            img.classList.add('uploaded-photo');
         };
         reader.readAsDataURL(file);
     }
 }
+
+document.addEventListener('change', function(event) {
+    if (event.target.matches('.tasks input[type="checkbox"]')) {
+        saveTaskState();
+    }
+});
 
 function saveTaskState() {
     const state = {};
@@ -126,3 +142,15 @@ function loadTaskState() {
         });
     }
 }
+
+// Add CSS class for uploaded photos
+document.head.insertAdjacentHTML('beforeend', `
+<style>
+.uploaded-photo {
+    max-width: 100px;
+    margin-top: 10px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+</style>
+`);
