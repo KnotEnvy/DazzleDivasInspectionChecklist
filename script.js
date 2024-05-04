@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
         { name: 'Bathroom 1', itemCount: 3 },
         { name: 'Bedroom 1', itemCount: 3 },
         { name: 'Entrance', itemCount: 3 },
-        { name: 'General', itemCount: 3 },
+        { name: 'General', itemCount: 5 },
         { name: 'Kitchen', itemCount: 5 },
         { name: 'Living Room', itemCount: 3 },
         { name: 'Washer/Dryer', itemCount: 2 }
@@ -28,14 +28,21 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTaskState();
 });
 
+function generateUniqueID(prefix) {
+    return `${prefix}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
 function loadRoomDetails(room, container) {
+    const uniquePhotoId1 = generateUniqueID('photo1');
+    const uniquePhotoId2 = generateUniqueID('photo2');
+
     const tasks = {
         'Backyard': ['Clean patio', 'Arrange chairs', 'Sweep leaves'],
         'Bathroom 1': ['Scrub tiles', 'Clean sink', 'Refill soaps'],
         'Bedroom 1': ['Make beds', 'Vacuum carpet', 'Dust shelves'],
         'Entrance': ['Clean door', 'Polish doorknob', 'Sweep floor'],
-        'General': ['Check lights', 'Set A/C to 78', 'Check supplies closet'],
-        'Kitchen': ['Check drawers', 'All Surfaces wiped and clear', 'Inside fridge, microwave, oven etc. clean','Empty Ice Tray', 'Remove Garbage' ],
+        'General': ['Check lights', 'Test smoke alarms', 'Arrange magazines', 'Empty Ice Tray', 'Remove Garbage'],
+        'Kitchen': ['Check drawers', 'All Surfaces wiped and clear', 'Inside fridge, microwave, oven etc. clean'],
         'Living Room': ['All lights are functional', 'Pillows on couches are straightened', 'carpets are vacuumed'],
         'Washer/Dryer': ['Clean lint trap', 'Wipe surfaces', 'Check hoses']
     };
@@ -52,12 +59,12 @@ function loadRoomDetails(room, container) {
         <div class="tasks">${taskHtml}</div>
         <div class="photos">
             <div class="photo-upload">
-                <label for="photo1">Add Photo:</label>
-                <input type="file" id="photo1" name="photo1" accept="image/*">
+                <label for="${uniquePhotoId1}">Add Photo:</label>
+                <input type="file" id="${uniquePhotoId1}" name="photo" accept="image/*">
             </div>
             <div class="photo-upload">
-                <label for="photo2">Add Photo:</label>
-                <input type="file" id="photo2" name="photo2" accept="image/*">
+                <label for="${uniquePhotoId2}">Add Photo:</label>
+                <input type="file" id="${uniquePhotoId2}" name="photo" accept="image/*">
             </div>
         </div>
         <button onclick="toggleDetail(false)">Return to List</button>
@@ -74,25 +81,33 @@ function toggleDetail(show) {
 function setupPhotoUploads() {
     const photoInputs = document.querySelectorAll('.photo-upload input[type="file"]');
     photoInputs.forEach(input => {
-        input.addEventListener('change', function() {
-            const file = input.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {``
-                    const photoContainer = input.parentElement;
-                    let img = photoContainer.querySelector('img');
-                    if (!img) {
-                        img = document.createElement('img');
-                        photoContainer.appendChild(img);
-                    }
-                    img.src = e.target.result;
-                    img.style.maxWidth = '100px';
-                    img.style.marginTop = '10px';
-                };
-                reader.readAsDataURL(file);
-            }
-        });
+        input.removeEventListener('change', handleFileChange);
+        input.addEventListener('change', handleFileChange);
     });
+}
+
+function handleFileChange(event) {
+    const file = event.target.files[0];
+    if (file) {
+        if (file.size > 10485760) { // 10 MB limit
+            alert('File is too large. Please upload a file smaller than 10MB.');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onerror = () => alert('Failed to read file!');
+        reader.onload = function(e) {
+            const photoContainer = event.target.parentElement;
+            let img = photoContainer.querySelector('img');
+            if (!img) {
+                img = document.createElement('img');
+                photoContainer.appendChild(img);
+            }
+            img.src = e.target.result;
+            img.style.maxWidth = '100px';
+            img.style.marginTop = '10px';
+        };
+        reader.readAsDataURL(file);
+    }
 }
 
 function saveTaskState() {
