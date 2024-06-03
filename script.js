@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
+
     const roomListElement = document.getElementById('roomList');
     const detailContainer = document.getElementById('detailContainer');
     const rooms = [
@@ -38,10 +39,18 @@ function loadRoomDetails(room, container) {
 
     const tasks = {
         'Backyard': ['Clean patio', 'Arrange chairs', 'Sweep leaves'],
-        'Bathroom 1': ['Scrub tiles', 'Clean sink', 'Refill soaps'],
-        'Bedroom 1': ['Make beds', 'Vacuum carpet', 'Dust shelves'],
+        'Bathroom 1': ['Make sure cabinets, drawers, and trash cans are all clean and presentable', 
+                       'Towel bar and shower curtain rods are secure and curtain/towels are free of mold or stains', 
+                       'The toilet flushes and is clean and the hot water works'],
+        'Bedroom 1': ['All appliances are operational – tvs, lights, lamps, fans, etc.', 
+                      'All linens are free of stains and the beds are made', 
+                      'All surfaces are clean, this includes floors, window sills, blinds, and ceiling fans'],
         'Entrance': ['Clean door', 'Polish doorknob', 'Sweep floor'],
-        'General': ['Check lights', 'Test smoke alarms', 'Arrange magazines', 'Empty Ice Tray', 'Remove Garbage'],
+        'General': ['Turn on/off AC or Heat depending on season', 
+                    'Check the HVAC vents for mold or dust throughout the house', 
+                    'Confirm that all windows and doors are properly closed and locked', 
+                    'All entertainment equipment such as big screen TVs, video game consoles, arcade-style gaming devices are secure', 
+                    'Confirm that the supply closet has sufficient toiletries'],
         'Kitchen': ['Check drawers', 'All Surfaces wiped and clear', 'Inside fridge, microwave, oven etc. clean'],
         'Living Room': ['All lights are functional', 'Pillows on couches are straightened', 'carpets are vacuumed'],
         'Washer/Dryer': ['Clean lint trap', 'Wipe surfaces', 'Check hoses']
@@ -56,15 +65,29 @@ function loadRoomDetails(room, container) {
 
     container.innerHTML = `
         <h2>${room.name}</h2>
-        <div class="tasks">${taskHtml}</div>
-        <div class="photos">
-            <div class="photo-upload">
-                <label for="${uniquePhotoId1}">Add Photo:</label>
-                <input type="file" id="${uniquePhotoId1}" name="photo" accept="image/*">
+        <div class="steps">
+            <div class="step">
+                <h3>Step 1: Visually check and confirm the following</h3>
+                <div class="tasks">${taskHtml}</div>
             </div>
-            <div class="photo-upload">
-                <label for="${uniquePhotoId2}">Add Photo:</label>
-                <input type="file" id="${uniquePhotoId2}" name="photo" accept="image/*">
+            <div class="step">
+                <h3>Step 2: Upload two images for record keeping</h3>
+                <div class="photos">
+                    <div class="photo-upload">
+                        <div class="photo-placeholder" id="placeholder-${uniquePhotoId1}">
+                            <input type="file" id="${uniquePhotoId1}" name="photo" accept="image/*" style="display: none;">
+                            <button class="add-photo-btn" onclick="document.getElementById('${uniquePhotoId1}').click();">+</button>
+                            <button class="remove-photo-btn" style="display: none;" onclick="removePhoto('${uniquePhotoId1}');">x</button>
+                        </div>
+                    </div>
+                    <div class="photo-upload">
+                        <div class="photo-placeholder" id="placeholder-${uniquePhotoId2}">
+                            <input type="file" id="${uniquePhotoId2}" name="photo" accept="image/*" style="display: none;">
+                            <button class="add-photo-btn" onclick="document.getElementById('${uniquePhotoId2}').click();">+</button>
+                            <button class="remove-photo-btn" style="display: none;" onclick="removePhoto('${uniquePhotoId2}');">x</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         <button onclick="toggleDetail(false)">Return to List</button>
@@ -73,20 +96,10 @@ function loadRoomDetails(room, container) {
     setupPhotoUploads();
 }
 
+
 function toggleDetail(show) {
-    const detailContainer = document.getElementById('detailContainer');
-    const roomList = document.getElementById('roomList');
-    if (show) {
-        detailContainer.classList.add('visible');
-        detailContainer.classList.remove('hidden');
-        roomList.classList.add('hidden');
-        roomList.classList.remove('visible');
-    } else {
-        detailContainer.classList.add('hidden');
-        detailContainer.classList.remove('visible');
-        roomList.classList.add('visible');
-        roomList.classList.remove('hidden');
-    }
+    document.getElementById('detailContainer').style.display = show ? 'block' : 'none';
+    document.getElementById('roomList').style.display = show ? 'none' : 'block';
 }
 
 function setupPhotoUploads() {
@@ -104,27 +117,51 @@ function handleFileChange(event) {
             alert('File is too large. Please upload a file smaller than 10MB.');
             return;
         }
-        const reader = new FileReader();
-        reader.onerror = () => alert('Failed to read file!');
-        reader.onload = function(e) {
-            const photoContainer = event.target.parentElement;
-            let img = photoContainer.querySelector('img');
-            if (!img) {
-                img = document.createElement('img');
-                photoContainer.appendChild(img);
+
+        // Compress the image before displaying
+        new Compressor(file, {
+            quality: 0.75,
+            maxWidth: 1920,
+            maxHeight: 1920,
+            success(result) {
+                const reader = new FileReader();
+                reader.onerror = () => alert('Failed to read file!');
+                reader.onload = function(e) {
+                    const photoContainer = event.target.parentElement;
+                    let img = photoContainer.querySelector('img');
+                    if (!img) {
+                        img = document.createElement('img');
+                        photoContainer.appendChild(img);
+                    }
+                    img.src = e.target.result;
+                    img.style.maxWidth = '100px';
+                    img.style.marginTop = '10px';
+                    
+                    // Show remove button and hide add button
+                    photoContainer.querySelector('.add-photo-btn').style.display = 'none';
+                    photoContainer.querySelector('.remove-photo-btn').style.display = 'block';
+                };
+                reader.readAsDataURL(result);
+            },
+            error(err) {
+                console.error('Compression failed:', err.message);
             }
-            img.src = e.target.result;
-            img.classList.add('uploaded-photo');
-        };
-        reader.readAsDataURL(file);
+        });
     }
 }
 
-document.addEventListener('change', function(event) {
-    if (event.target.matches('.tasks input[type="checkbox"]')) {
-        saveTaskState();
+function removePhoto(photoId) {
+    const photoContainer = document.getElementById(`placeholder-${photoId}`);
+    const img = photoContainer.querySelector('img');
+    if (img) {
+        photoContainer.removeChild(img);
     }
-});
+    const fileInput = document.getElementById(photoId);
+    fileInput.value = '';
+    photoContainer.querySelector('.add-photo-btn').style.display = 'block';
+    photoContainer.querySelector('.remove-photo-btn').style.display = 'none';
+}
+
 
 function saveTaskState() {
     const state = {};
@@ -142,5 +179,3 @@ function loadTaskState() {
         });
     }
 }
-
-// Add CSS class for uploaded photos
