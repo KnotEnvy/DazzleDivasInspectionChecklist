@@ -1,3 +1,5 @@
+//script.js
+
 document.addEventListener('DOMContentLoaded', function() {
 
     const roomListElement = document.getElementById('roomList');

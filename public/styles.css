@@ -1,0 +1,221 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    background: #cac1f1;
+}
+
+.app-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    background: #fff;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    border-radius: 8px;
+}
+
+header {
+    border-bottom: 1px solid #ccc;
+    border-radius: 10px;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+    background-color: #d75fbd;
+    color: white;
+    padding: 10px 0;
+    text-align: center;
+}
+
+.room-list .room {
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.room-list .room:hover {
+    background-color: #edecec;
+}
+
+.room-list .room.completed .room-name,
+.room-list .room.completed .item-count {
+    color: green;
+}
+
+.room-list .room.partial .room-name,
+.room-list .room.partial .item-count {
+    color: orange;
+}
+
+.room-list .room-name {
+    flex-grow: 1;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.room-list .item-count {
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.room-list .arrow {
+    font-size: 1.5rem;
+    color: #ccc;
+}
+
+/* Detail view styling */
+div h2 {
+    color: #8c09ff;
+}
+
+div p {
+    font-size: 16px;
+}
+
+button {
+    background-color: #f4f4f9;
+    border: 1px solid #ccc;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+#detailContainer {
+    display: none;
+    transition: opacity 0.5s ease;
+}
+
+.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.tasks {
+    margin-top: 20px;
+}
+
+.task {
+    margin-bottom: 10px;
+}
+
+.task input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+.photo-upload {
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+
+.photo-upload label {
+    margin-right: 10px;
+}
+
+#detailContainer {
+    padding: 20px;
+    transition: opacity 0.5s ease;
+}
+
+button {
+    display: block;
+    background-color: #d75fbd;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    margin-top: 20px;
+    cursor: pointer;
+    width: 100%;
+}
+
+.submit-checklist {
+    background-color: green;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    cursor: pointer;
+    width: calc(100% - 40px);
+    margin: 20px;
+}
+
+/* New Styles for Steps and Photo Placeholders */
+.steps {
+    margin-bottom: 20px;
+}
+
+.step {
+    margin-bottom: 20px;
+}
+
+.step h3 {
+    margin-bottom: 10px;
+}
+
+.tasks .task {
+    margin-bottom: 10px;
+}
+
+.photo-upload {
+    margin-top: 10px;
+}
+
+.photo-label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.photos {
+    display: flex;
+    justify-content: space-evenly;
+}
+
+.photo-placeholder {
+    width: 100px;
+    height: 100px;
+    border: 2px dashed #d75fbd8a;
+    border-radius: 5px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    overflow: hidden; /* Ensures the image fits within the placeholder */
+}
+
+.photo-placeholder img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: cover; /* Ensures the image covers the placeholder area */
+}
+
+.add-photo-btn, .remove-photo-btn {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: #ccc;
+    cursor: pointer;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -80%); /* Centers the plus button */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    outline: none;
+}
+
+.remove-photo-btn {
+    font-size: 1.5rem;
+    color: #d75fbd;
+    top: 1px;
+    left: 10px;
+}

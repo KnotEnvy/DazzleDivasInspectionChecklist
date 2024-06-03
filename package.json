@@ -1,0 +1,14 @@
+{
+    "name": "dazzle-divas-inspection",
+    "version": "1.0.0",
+    "description": "Cleaning Checklist with photo upload",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js"
+    },
+    "dependencies": {
+        "express": "^4.19.2"
+    },
+    "author": "",
+    "license": "ISC"
+}
