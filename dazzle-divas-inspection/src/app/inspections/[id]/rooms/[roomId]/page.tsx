@@ -22,13 +22,25 @@ interface Photo {
   id?: string;
   url?: string;
   file?: File;
+  delete?: boolean;
 }
 
 interface RoomInspectionData {
   id: string;
   room: Room;
-  tasks: Task[];
-  photos: Photo[];
+  taskResults: {
+    id: string;
+    completed: boolean;
+    task: {
+      id: string;
+      description: string;
+    };
+  }[];
+  photos: {
+    id: string;
+    url: string;
+    fileName: string;
+  }[];
   status: string;
 }
 
@@ -45,7 +57,7 @@ export default function RoomInspectionPage({
   const [saving, setSaving] = useState(false);
   const [roomInspection, setRoomInspection] = useState<RoomInspectionData | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([{}, {}]);
 
   const fetchRoomInspection = useCallback(async () => {
     try {
@@ -58,8 +70,31 @@ export default function RoomInspectionPage({
       
       const data = await response.json();
       setRoomInspection(data);
-      setTasks(data.tasks || []);
-      setPhotos(data.photos || []);
+      
+      // Transform task results to the format needed for the UI
+      const transformedTasks = data.taskResults.map((tr: any) => ({
+        id: tr.id,
+        description: tr.task.description,
+        completed: tr.completed,
+      }));
+      
+      setTasks(transformedTasks);
+      
+      // Set photos from the API response
+      const existingPhotos: Photo[] = data.photos.map((photo: any) => ({
+        id: photo.id,
+        url: photo.url,
+      }));
+      
+      // Fill the photos array with existing photos or empty objects
+      const photoArray: Photo[] = [{}, {}];
+      existingPhotos.forEach((photo, index) => {
+        if (index < 2) {
+          photoArray[index] = photo;
+        }
+      });
+      
+      setPhotos(photoArray);
     } catch (error) {
       console.error('Error fetching room inspection:', error);
       toast.error('Failed to load room inspection data');
@@ -111,7 +146,7 @@ export default function RoomInspectionPage({
     
     try {
       // First, save the task results
-      await fetch(`/api/inspections/${params.id}/rooms/${params.roomId}/tasks`, {
+      const response = await fetch(`/api/inspections/${params.id}/rooms/${params.roomId}/tasks`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -119,25 +154,33 @@ export default function RoomInspectionPage({
         body: JSON.stringify({ tasks }),
       });
       
+      if (!response.ok) {
+        throw new Error('Failed to save task results');
+      }
+      
       // Then, handle the photos - upload new ones and delete marked ones
       if (photos.some(p => p.file || p.delete)) {
         const formData = new FormData();
         
         photos.forEach((photo, index) => {
           if (photo.file) {
-            formData.append(`photos`, photo.file);
-            formData.append(`photoIndices`, index.toString());
+            formData.append('photos', photo.file);
+            formData.append('photoIndices', index.toString());
           }
           
           if (photo.delete && photo.id) {
-            formData.append(`deletePhotoIds`, photo.id);
+            formData.append('deletePhotoIds', photo.id);
           }
         });
         
-        await fetch(`/api/inspections/${params.id}/rooms/${params.roomId}/photos`, {
+        const photoResponse = await fetch(`/api/inspections/${params.id}/rooms/${params.roomId}/photos`, {
           method: 'POST',
           body: formData,
         });
+        
+        if (!photoResponse.ok) {
+          throw new Error('Failed to process photos');
+        }
       }
       
       toast.success('Inspection saved successfully');
@@ -158,7 +201,8 @@ export default function RoomInspectionPage({
     }
     
     // Check if there are at least 2 photos
-    if (photos.filter(p => p.url && !p.delete).length < 2) {
+    const validPhotos = photos.filter(p => p.url && !p.delete);
+    if (validPhotos.length < 2) {
       toast.error('Please upload at least 2 photos');
       return;
     }
@@ -170,15 +214,20 @@ export default function RoomInspectionPage({
       await saveInspection();
       
       // Mark room inspection as completed
-      await fetch(`/api/inspections/${params.id}/rooms/${params.roomId}/complete`, {
+      const response = await fetch(`/api/inspections/${params.id}/rooms/${params.roomId}/complete`, {
         method: 'PUT',
       });
       
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to complete room inspection');
+      }
+      
       toast.success('Room inspection completed');
       router.push(`/inspections/${params.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error completing inspection:', error);
-      toast.error('Failed to complete inspection');
+      toast.error(error.message || 'Failed to complete inspection');
     } finally {
       setSaving(false);
     }
