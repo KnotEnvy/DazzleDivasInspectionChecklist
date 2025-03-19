@@ -1,0 +1,127 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"  // Use "postgresql" for production
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String       @id @default(uuid())
+  email         String       @unique
+  name          String
+  password      String
+  role          String       @default("INSPECTOR")
+  inspections   Inspection[]
+  assignments   PropertyAssignment[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Property {
+  id           String       @id @default(uuid())
+  name         String
+  address      String
+  description  String?
+  propertyType String       @default("RESIDENTIAL") // RESIDENTIAL, COMMERCIAL, etc.
+  bedrooms     Int?         // For residential properties
+  bathrooms    Int?         // For residential properties
+  notes        String?
+  isActive     Boolean      @default(true)
+  assignments  PropertyAssignment[]
+  inspections  Inspection[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model PropertyAssignment {
+  id         String    @id @default(uuid())
+  propertyId String
+  property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  inspectorId String
+  inspector  User      @relation(fields: [inspectorId], references: [id], onDelete: Cascade)
+  startDate  DateTime  @default(now())
+  endDate    DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([propertyId, inspectorId])
+}
+
+model Room {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  tasks       Task[]
+  inspections RoomInspection[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  description String
+  roomId      String
+  room        Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  taskResults TaskResult[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Inspection {
+  id            String          @id @default(uuid())
+  propertyName  String
+  propertyId    String?
+  property      Property?       @relation(fields: [propertyId], references: [id])
+  inspectorId   String
+  inspector     User            @relation(fields: [inspectorId], references: [id])
+  status        String          @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED
+  notes         String?
+  roomInspections RoomInspection[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model RoomInspection {
+  id            String        @id @default(uuid())
+  roomId        String
+  room          Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  inspectionId  String
+  inspection    Inspection    @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  status        String        @default("PENDING") // PENDING, COMPLETED
+  notes         String?
+  taskResults   TaskResult[]
+  photos        Photo[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([roomId, inspectionId])
+}
+
+model TaskResult {
+  id              String        @id @default(uuid())
+  taskId          String
+  task            Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  roomInspectionId String
+  roomInspection  RoomInspection @relation(fields: [roomInspectionId], references: [id], onDelete: Cascade)
+  completed       Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([taskId, roomInspectionId])
+}
+
+model Photo {
+  id              String        @id @default(uuid())
+  url             String
+  fileName        String
+  roomInspectionId String
+  roomInspection  RoomInspection @relation(fields: [roomInspectionId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
