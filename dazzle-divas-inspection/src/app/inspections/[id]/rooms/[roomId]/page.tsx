@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
+import Camera from '@/components/Camera';
+import PhotoViewer from '@/components/PhotoViewer';
 
 interface Task {
   id: string;
@@ -58,6 +60,10 @@ export default function RoomInspectionPage({
   const [roomInspection, setRoomInspection] = useState<RoomInspectionData | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [photos, setPhotos] = useState<Photo[]>([{}, {}]);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState<number>(0);
+  const [viewerActive, setViewerActive] = useState(false);
+  const [viewerInitialIndex, setViewerInitialIndex] = useState(0);
 
   const fetchRoomInspection = useCallback(async () => {
     try {
@@ -124,6 +130,25 @@ export default function RoomInspectionPage({
     const newPhotos = [...photos];
     newPhotos[index] = { file, url };
     setPhotos(newPhotos);
+  };
+  
+  const openCamera = (index: number) => {
+    setCurrentPhotoIndex(index);
+    setCameraActive(true);
+  };
+  
+  const handleCameraCapture = (file: File) => {
+    handlePhotoUpload(currentPhotoIndex, file);
+    setCameraActive(false);
+  };
+  
+  const handleCameraClose = () => {
+    setCameraActive(false);
+  };
+  
+  const openPhotoViewer = (index: number) => {
+    setViewerInitialIndex(index);
+    setViewerActive(true);
   };
 
   const handleRemovePhoto = (index: number) => {
@@ -280,8 +305,54 @@ export default function RoomInspectionPage({
         )}
         
         {roomInspection.status === 'COMPLETED' ? (
-          <div className="bg-green-100 text-green-800 px-4 py-2 rounded-md mb-6">
-            This room inspection has been completed.
+          <div>
+            <div className="bg-green-100 text-green-800 px-4 py-2 rounded-md mb-6">
+              This room inspection has been completed.
+            </div>
+            
+            <div className="mt-8">
+              <h2 className="text-xl font-semibold mb-4">Completed Tasks</h2>
+              <div className="space-y-3 mb-8">
+                {tasks.map((task) => (
+                  <div key={task.id} className="flex items-start">
+                    <div className="mt-1 h-4 w-4 text-green-600 rounded flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <span className="ml-3 text-sm text-gray-700">
+                      {task.description}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              
+              <h2 className="text-xl font-semibold mb-4">Photos</h2>
+              <div className="grid grid-cols-2 gap-6 mb-8">
+                {roomInspection.photos.map((photo, index) => (
+                  <div key={photo.id} className="flex flex-col items-center">
+                    <div className="w-full h-48 bg-gray-100 rounded-lg overflow-hidden">
+                      <Image 
+                        src={photo.url} 
+                        alt={`Photo ${index + 1}`} 
+                        width={400}
+                        height={300}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        className="rounded-lg cursor-pointer"
+                        onClick={() => openPhotoViewer(index)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openPhotoViewer(index)}
+                      className="mt-2 text-sm text-pink-600 hover:text-pink-800"
+                    >
+                      View Full Size
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           <div className="mb-6">
@@ -347,14 +418,28 @@ export default function RoomInspectionPage({
                           }}
                           disabled={roomInspection.status === 'COMPLETED'}
                         />
-                        <button
-                          type="button"
-                          onClick={() => fileInputRefs[index].current?.click()}
-                          className="bg-gray-100 text-gray-600 rounded-md px-4 py-2 hover:bg-gray-200"
-                          disabled={roomInspection.status === 'COMPLETED'}
-                        >
-                          Upload Photo {index + 1}
-                        </button>
+                        <div className="flex flex-col space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRefs[index].current?.click()}
+                            className="bg-gray-100 text-gray-600 rounded-md px-4 py-2 hover:bg-gray-200"
+                            disabled={roomInspection.status === 'COMPLETED'}
+                          >
+                            Choose File
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openCamera(index)}
+                            className="bg-pink-100 text-pink-600 rounded-md px-4 py-2 hover:bg-pink-200 flex items-center justify-center"
+                            disabled={roomInspection.status === 'COMPLETED'}
+                          >
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            Take Photo
+                          </button>
+                        </div>
                       </>
                     )}
                   </div>
@@ -383,6 +468,21 @@ export default function RoomInspectionPage({
           </div>
         )}
       </div>
+      
+      {cameraActive && (
+        <Camera 
+          onCapture={handleCameraCapture} 
+          onClose={handleCameraClose} 
+        />
+      )}
+      
+      {viewerActive && roomInspection && (
+        <PhotoViewer 
+          photos={roomInspection.photos}
+          initialIndex={viewerInitialIndex}
+          onClose={() => setViewerActive(false)} 
+        />
+      )}
     </div>
   );
 }
