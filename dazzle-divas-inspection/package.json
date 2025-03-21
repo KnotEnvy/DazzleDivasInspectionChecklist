@@ -1,6 +1,6 @@
 {
   "name": "dazzle-divas-inspection",
-  "version": "0.1.0",
+  "version": "1.5.41",
   "private": true,
   "scripts": {
     "dev": "next dev",
