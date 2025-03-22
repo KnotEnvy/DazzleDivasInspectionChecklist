@@ -22,7 +22,7 @@ export default function Nav() {
         <div className="flex justify-between h-16 items-center">
           <div className="flex-shrink-0">
             <Link href="/" className="flex items-center">
-              <span className="text-2xl font-bold text-pink-600">Dazzle Divas</span>
+              <span className="text-2xl font-bold text-pink-600">Dazzle Divas Cleaning</span>
             </Link>
           </div>
           
@@ -36,11 +36,11 @@ export default function Nav() {
               {status === 'authenticated' && (
                 <>
                   <Link href="/dashboard" className={`px-3 py-2 rounded-md text-sm font-medium ${isActive('/dashboard')}`}>
-                    Dashboard
+                    Inspection Dashboard
                   </Link>
-                  <Link href="/inspections/new" className={`px-3 py-2 rounded-md text-sm font-medium ${isActive('/inspections/new')}`}>
+                  {/* <Link href="/inspections/new" className={`px-3 py-2 rounded-md text-sm font-medium ${isActive('/inspections/new')}`}>
                     New Inspection
-                  </Link>
+                  </Link> */}
                   <Link href="/history" className={`px-3 py-2 rounded-md text-sm font-medium ${isActive('/history')}`}>
                     History
                   </Link>

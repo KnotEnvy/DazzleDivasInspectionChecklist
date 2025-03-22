@@ -16,6 +16,7 @@ model User {
   name          String
   password      String
   role          String       @default("INSPECTOR")
+  isActive      Boolean      @default(true)
   inspections   Inspection[]
   assignments   PropertyAssignment[]
   createdAt     DateTime     @default(now())
