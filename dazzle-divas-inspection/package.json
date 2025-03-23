@@ -12,12 +12,15 @@
     "@prisma/client": "^6.5.0",
     "bcrypt": "^5.1.1",
     "compressorjs": "^1.2.1",
+    "csv-stringify": "^6.5.2",
     "next": "15.2.3",
     "next-auth": "^4.24.11",
+    "pdfmake": "^0.2.18",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.5.2",
     "uuid": "^11.1.0",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -36,6 +39,6 @@
     "typescript": "^5"
   },
   "prisma": {
-  "seed": "npx ts-node --project tsconfig-seed.json prisma/seed.ts"
-}
+    "seed": "npx ts-node --project tsconfig-seed.json prisma/seed.ts"
+  }
 }

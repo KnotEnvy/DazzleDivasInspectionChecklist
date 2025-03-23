@@ -10,7 +10,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
   // Check if the request is for a file in the uploads directory
-  if (pathname.startsWith('/uploads/')) {
+  if (pathname.startsWith('../uploads/')) {
     try {
       const filePath = path.join(process.cwd(), pathname);
       
