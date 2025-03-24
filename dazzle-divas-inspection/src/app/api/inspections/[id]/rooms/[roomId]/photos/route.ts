@@ -65,8 +65,8 @@ export async function POST(
       return NextResponse.json({ error: 'Room inspection not found' }, { status: 404 });
     }
     
-    // Set up base upload directory
-    const baseUploadDir = path.join(process.cwd(), 'uploads');
+    // Set up base upload directory in public folder
+    const baseUploadDir = path.join(process.cwd(), 'public', 'uploads');
     if (!fs.existsSync(baseUploadDir)) {
       fs.mkdirSync(baseUploadDir, { recursive: true, mode: 0o755 });
     }
@@ -106,7 +106,15 @@ export async function POST(
         
         if (photo) {
           // Delete the file from storage if it exists
-          const filePath = path.join(process.cwd(), photo.url.replace(/^\//, ''));
+          // Convert URL from /uploads/... to public/uploads/...
+          let filePath;
+          if (photo.url.startsWith('/uploads/')) {
+            const relativePath = photo.url.substring('/uploads/'.length);
+            filePath = path.join(process.cwd(), 'public', 'uploads', relativePath);
+          } else {
+            filePath = path.join(process.cwd(), photo.url.replace(/^\//, ''));
+          }
+          
           console.log(`Attempting to delete file: ${filePath}`);
           
           try {
@@ -160,7 +168,8 @@ export async function POST(
           console.error(`Failed to save file: ${filePath}`);
         }
         
-        // Create a relative URL for the file
+        // Create a relative URL for the file - now using /uploads/... format
+        // Which will be served from public/uploads
         const relativeUrl = `/uploads/${inspectionId}/${roomId}/${fileName}`;
         
         console.log(`Created relative URL: ${relativeUrl}`);
@@ -234,7 +243,15 @@ export async function GET(
     // Check if photos exist physically
     const verifiedPhotos = await Promise.all(
       roomInspection.photos.map(async (photo) => {
-        const filePath = path.join(process.cwd(), photo.url.replace(/^\//, ''));
+        // Convert URL path to filesystem path
+        let filePath;
+        if (photo.url.startsWith('/uploads/')) {
+          const relativePath = photo.url.substring('/uploads/'.length);
+          filePath = path.join(process.cwd(), 'public', 'uploads', relativePath);
+        } else {
+          filePath = path.join(process.cwd(), 'public', photo.url.replace(/^\//, ''));
+        }
+        
         const exists = fs.existsSync(filePath);
         
         return {
