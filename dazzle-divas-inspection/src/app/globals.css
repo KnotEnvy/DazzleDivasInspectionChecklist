@@ -24,3 +24,13 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* Base styles are mobile-first, then scale up */
+.container {
+  padding: 1rem;  /* Mobile padding */
+}
+
+@media (min-width: 768px) {
+  .container {
+    padding: 2rem;  /* Larger padding on desktop */
+  }
+}
