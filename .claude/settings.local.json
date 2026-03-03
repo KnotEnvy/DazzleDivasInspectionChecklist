@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:labs.convex.dev)",
+      "WebFetch(domain:docs.convex.dev)",
+      "Bash(python:*)",
+      "Bash(bun:*)",
+      "Bash(npx convex:*)",
+      "Bash(npx tsc:*)",
+      "Bash(./node_modules/.bin/tsc:*)"
+    ]
+  }
+}

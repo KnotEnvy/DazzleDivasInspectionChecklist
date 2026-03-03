@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.bun/
+
+# Build outputs
+dist/
+.next/
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Convex
+packages/backend/.env.local
+
+# Rust
+packages/rust-services/target/
+
+# Logs
+*.log
+npm-debug.log*

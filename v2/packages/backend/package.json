@@ -1,0 +1,20 @@
+{
+  "name": "@dazzle/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "convex dev",
+    "deploy": "convex deploy",
+    "clean": "rm -rf node_modules"
+  },
+  "dependencies": {
+    "@convex-dev/auth": "^0.0.80",
+    "@auth/core": "0.37.0",
+    "convex": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
