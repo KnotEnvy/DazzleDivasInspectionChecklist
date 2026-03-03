@@ -41,6 +41,8 @@ next-env.d.ts
 *.db
 *.db-journal
 
+/prisma/dev.db
+
 # Uploads - track the directory but not its contents
 /uploads/*
 !/uploads/.gitkeep
