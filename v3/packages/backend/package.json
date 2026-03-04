@@ -1,0 +1,25 @@
+{
+  "name": "@dazzle/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "convex dev",
+    "build": "convex codegen",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"No lint configured for @dazzle/backend\"",
+    "deploy": "convex deploy",
+    "clean": "rmdir /s /q convex\\_generated 2>nul || exit 0"
+  },
+  "dependencies": {
+    "@auth/core": "^0.37.0",
+    "@convex-dev/auth": "^0.0.80",
+    "@dazzle/shared": "workspace:*",
+    "convex": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.3"
+  }
+}
+

@@ -1,0 +1,25 @@
+{
+  "name": "dazzle-divas-v3",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,web -c blue,green \"bun run dev:backend\" \"bun run dev:web\"",
+    "dev:web": "bun run --cwd apps/web dev",
+    "dev:backend": "bun run --cwd packages/backend dev",
+    "build": "bun run build:web",
+    "build:web": "bun run --cwd packages/shared build && bun run --cwd apps/web build",
+    "build:backend": "bun run --cwd packages/backend build",
+    "typecheck": "bun run --cwd packages/shared typecheck && bun run --cwd apps/web typecheck",
+    "typecheck:backend": "bun run --cwd packages/backend typecheck",
+    "lint": "bun run --cwd packages/shared lint && bun run --cwd packages/backend lint && bun run --cwd apps/web lint",
+    "clean": "bun run --cwd packages/shared clean && bun run --cwd packages/backend clean && bun run --cwd apps/web clean"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "bun@1.2.0"
+}
