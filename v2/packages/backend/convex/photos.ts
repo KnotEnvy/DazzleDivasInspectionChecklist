@@ -27,10 +27,7 @@ export const save = mutation({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
-    return await ctx.db.insert("photos", {
-      ...args,
-      isCompressed: false,
-    });
+    return await ctx.db.insert("photos", args);
   },
 });
 
@@ -58,16 +55,10 @@ export const listByRoomInspection = query({
       )
       .collect();
 
-    // Enrich with URLs
     return await Promise.all(
       photos.map(async (photo) => {
-        const url = await ctx.storage.getUrl(
-          photo.compressedStorageId ?? photo.storageId
-        );
-        const originalUrl = photo.compressedStorageId
-          ? await ctx.storage.getUrl(photo.storageId)
-          : url;
-        return { ...photo, url, originalUrl };
+        const url = await ctx.storage.getUrl(photo.storageId);
+        return { ...photo, url, originalUrl: url };
       })
     );
   },
@@ -83,28 +74,7 @@ export const remove = mutation({
     const photo = await ctx.db.get(args.photoId);
     if (!photo) throw new Error("Photo not found");
 
-    // Delete storage files
     await ctx.storage.delete(photo.storageId);
-    if (photo.compressedStorageId) {
-      await ctx.storage.delete(photo.compressedStorageId);
-    }
-
     await ctx.db.delete(args.photoId);
-  },
-});
-
-/**
- * Mark a photo as compressed (called after Rust service processes it).
- */
-export const markCompressed = mutation({
-  args: {
-    photoId: v.id("photos"),
-    compressedStorageId: v.id("_storage"),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.photoId, {
-      compressedStorageId: args.compressedStorageId,
-      isCompressed: true,
-    });
   },
 });

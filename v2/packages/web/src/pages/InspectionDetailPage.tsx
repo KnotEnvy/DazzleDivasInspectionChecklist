@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ProgressBar } from "@/components/common/ProgressBar";
+import { ExportControls } from "@/components/common/ExportControls";
 import {
   ArrowLeft,
   CheckCircle,
@@ -83,6 +84,9 @@ export function InspectionDetailPage() {
             Inspector: {inspection.inspectorName}
           </p>
         </div>
+        {inspection.status === "COMPLETED" && (
+          <ExportControls inspectionId={inspectionId} />
+        )}
         <StatusBadge status={inspection.status} />
       </div>
 

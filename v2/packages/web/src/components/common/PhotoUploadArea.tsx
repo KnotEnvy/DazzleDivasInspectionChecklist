@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Camera, Upload, X, ImagePlus } from "lucide-react";
 import toast from "react-hot-toast";
+import { compressImage } from "@/lib/imageCompression";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB (compression handles output size)
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 
 interface PhotoUploadAreaProps {
@@ -39,7 +40,7 @@ export function PhotoUploadArea({
         continue;
       }
       if (file.size > MAX_FILE_SIZE) {
-        toast.error(`${file.name}: File too large (max 10MB)`);
+        toast.error(`${file.name}: File too large (max 20MB)`);
         continue;
       }
       validFiles.push(file);
@@ -53,28 +54,31 @@ export function PhotoUploadArea({
     let successCount = 0;
     for (const file of validFiles) {
       try {
-        // 1. Get presigned upload URL
+        // 1. Compress image client-side
+        const compressed = await compressImage(file);
+
+        // 2. Get presigned upload URL
         const uploadUrl = await generateUploadUrl();
 
-        // 2. Upload the file
+        // 3. Upload the compressed file
         const result = await fetch(uploadUrl, {
           method: "POST",
-          headers: { "Content-Type": file.type },
-          body: file,
+          headers: { "Content-Type": compressed.type },
+          body: compressed,
         });
 
         if (!result.ok) throw new Error("Upload failed");
 
         const { storageId } = await result.json();
 
-        // 3. Save metadata
+        // 4. Save metadata
         await savePhoto({
           storageId,
           roomInspectionId,
           inspectionId,
           fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type,
+          fileSize: compressed.size,
+          mimeType: compressed.type,
         });
 
         successCount++;

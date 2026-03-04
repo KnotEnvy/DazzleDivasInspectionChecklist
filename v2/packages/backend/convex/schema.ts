@@ -107,8 +107,6 @@ const schema = defineSchema({
     fileName: v.string(),
     fileSize: v.number(),
     mimeType: v.string(),
-    compressedStorageId: v.optional(v.id("_storage")),
-    isCompressed: v.boolean(),
   })
     .index("by_room_inspection", ["roomInspectionId"])
     .index("by_inspection", ["inspectionId"]),

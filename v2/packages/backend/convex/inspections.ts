@@ -162,6 +162,71 @@ export const create = mutation({
 /**
  * Complete an inspection.
  */
+/**
+ * Get full inspection report data for PDF/CSV export.
+ */
+export const getFullReport = query({
+  args: { inspectionId: v.id("inspections") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const inspection = await ctx.db.get(args.inspectionId);
+    if (!inspection) return null;
+
+    const property = await ctx.db.get(inspection.propertyId);
+
+    const roomInspections = await ctx.db
+      .query("roomInspections")
+      .withIndex("by_inspection", (q) =>
+        q.eq("inspectionId", args.inspectionId)
+      )
+      .collect();
+
+    const rooms = await Promise.all(
+      roomInspections.map(async (ri) => {
+        const taskResults = await ctx.db
+          .query("taskResults")
+          .withIndex("by_room_inspection", (q) =>
+            q.eq("roomInspectionId", ri._id)
+          )
+          .collect();
+
+        const photos = await ctx.db
+          .query("photos")
+          .withIndex("by_room_inspection", (q) =>
+            q.eq("roomInspectionId", ri._id)
+          )
+          .collect();
+
+        return {
+          room_name: ri.roomName,
+          status: ri.status,
+          notes: ri.notes ?? null,
+          tasks: taskResults.map((t) => ({
+            description: t.taskDescription,
+            completed: t.completed,
+          })),
+          photo_count: photos.length,
+        };
+      })
+    );
+
+    return {
+      property_name: inspection.propertyName,
+      property_address: property?.address ?? "",
+      inspector_name: inspection.inspectorName,
+      inspection_date: inspection.completedAt
+        ? new Date(inspection.completedAt).toLocaleDateString()
+        : new Date(inspection._creationTime).toLocaleDateString(),
+      status: inspection.status,
+      notes: inspection.notes ?? null,
+      rooms,
+    };
+  },
+});
+
+/**
+ * Complete an inspection.
+ */
 export const complete = mutation({
   args: {
     inspectionId: v.id("inspections"),

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { History, ChevronRight, Calendar, User } from "lucide-react";
+import { ExportControls } from "@/components/common/ExportControls";
 
 export function HistoryPage() {
   const inspections = useQuery(api.inspections.listCompleted);
@@ -54,6 +55,7 @@ export function HistoryPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 ml-4">
+                <ExportControls inspectionId={inspection._id} compact />
                 <Badge variant="success">Completed</Badge>
                 <ChevronRight className="h-4 w-4 text-muted" />
               </div>

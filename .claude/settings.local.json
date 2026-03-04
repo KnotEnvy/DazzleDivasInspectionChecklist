@@ -9,7 +9,9 @@
       "Bash(npx convex:*)",
       "Bash(npx tsc:*)",
       "Bash(./node_modules/.bin/tsc:*)",
-      "Bash(do echo:*)"
+      "Bash(do echo:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(ls:*)"
     ]
   }
 }

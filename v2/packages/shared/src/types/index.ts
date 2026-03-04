@@ -120,8 +120,6 @@ export interface Photo {
   fileName: string;
   fileSize: number;
   mimeType: string;
-  compressedStorageId?: string;
-  isCompressed: boolean;
   _creationTime: number;
 }
 

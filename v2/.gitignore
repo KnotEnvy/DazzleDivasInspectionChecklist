@@ -25,9 +25,6 @@ Thumbs.db
 # Convex
 packages/backend/.env.local
 
-# Rust
-packages/rust-services/target/
-
 # Logs
 *.log
 npm-debug.log*
