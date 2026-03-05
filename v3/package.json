@@ -7,7 +7,9 @@
   ],
   "scripts": {
     "dev": "concurrently -n backend,web -c blue,green \"bun run dev:backend\" \"bun run dev:web\"",
-    "dev:web": "bun run --cwd apps/web dev",
+    "sync:env": "bun scripts/sync-env.mjs",
+    "setup:auth": "bun run --cwd packages/backend setup:auth",
+    "dev:web": "bun run sync:env && bun run --cwd apps/web dev",
     "dev:backend": "bun run --cwd packages/backend dev",
     "build": "bun run build:web",
     "build:web": "bun run --cwd packages/shared build && bun run --cwd apps/web build",

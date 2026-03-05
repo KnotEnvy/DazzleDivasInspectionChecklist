@@ -4,6 +4,22 @@ import { useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import toast from "react-hot-toast";
 
+function formatAuthErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return "Authentication failed";
+  }
+
+  if (error.message === "InvalidAccountId") {
+    return "No account found for this email. Use Create Account first.";
+  }
+
+  if (error.message === "InvalidSecret") {
+    return "Incorrect password. Please try again.";
+  }
+
+  return error.message;
+}
+
 export function LoginPage() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signIn } = useAuthActions();
@@ -30,7 +46,7 @@ export function LoginPage() {
       await signIn("password", formData);
       toast.success(flow === "signIn" ? "Welcome back" : "Account created");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Authentication failed");
+      toast.error(formatAuthErrorMessage(error));
     } finally {
       setPending(false);
     }
@@ -74,7 +90,7 @@ export function LoginPage() {
               type="password"
               required
               minLength={6}
-              placeholder="••••••••"
+              placeholder="********"
             />
           </label>
 
@@ -94,4 +110,3 @@ export function LoginPage() {
     </div>
   );
 }
-

@@ -8,6 +8,7 @@
     "build": "convex codegen",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo \"No lint configured for @dazzle/backend\"",
+    "setup:auth": "bunx @convex-dev/auth --skip-git-check",
     "deploy": "convex deploy",
     "clean": "rmdir /s /q convex\\_generated 2>nul || exit 0"
   },

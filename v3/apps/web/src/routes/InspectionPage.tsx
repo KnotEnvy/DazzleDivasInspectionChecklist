@@ -38,6 +38,10 @@ export function InspectionPage() {
   }
 
   async function handleComplete() {
+    if (!inspectionId) {
+      return;
+    }
+
     try {
       await completeInspection({ inspectionId });
       toast.success("Checklist marked as completed");

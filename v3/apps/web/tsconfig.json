@@ -1,13 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
     "baseUrl": ".",
     "jsx": "react-jsx",
     "types": ["vite/client", "vite-plugin-pwa/client"],
     "paths": {
-      "@/*": ["src/*"],
-      "convex/_generated/*": ["../../packages/backend/convex/_generated/*"]
+      "@/*": ["src/*"]
     }
   },
   "include": ["src", "vite.config.ts", "vite-env.d.ts"]
