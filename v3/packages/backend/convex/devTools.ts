@@ -6,7 +6,9 @@ const RESET_CONFIRM_TOKEN = "RESET_DAZZLE_V3";
 
 function assertDevDeployment() {
   const deployment = process.env.CONVEX_DEPLOYMENT ?? "";
-  if (!deployment.startsWith("dev:")) {
+  // In some local/dev runtime contexts this env var can be unset.
+  // Only explicitly block known prod deployments.
+  if (deployment && !deployment.startsWith("dev:")) {
     throw new Error("This mutation is only allowed on a dev deployment");
   }
 }

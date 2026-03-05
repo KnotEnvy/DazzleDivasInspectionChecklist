@@ -1,19 +1,17 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { assignmentRoleForChecklistType } from "./validators";
 
 type Ctx = QueryCtx | MutationCtx;
 
 export async function requireAuth(ctx: Ctx): Promise<Doc<"users">> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity?.email) {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
     throw new Error("Not authenticated");
   }
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_email", (q) => q.eq("email", identity.email!))
-    .unique();
+  const user = await ctx.db.get(userId);
 
   if (!user) {
     throw new Error("User not found");

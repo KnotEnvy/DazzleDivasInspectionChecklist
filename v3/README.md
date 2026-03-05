@@ -126,7 +126,8 @@ Then restart `bun run dev:backend`.
 
 ## Test Users (Credentials)
 
-Create these via the login page Sign Up flow:
+Create these via the login page Sign Up flow.
+New accounts default to `CLEANER`.
 
 - Admin: `admin@dazzledivas.test` / `DazzleAdmin123!`
 - Cleaner: `cleaner@dazzledivas.test` / `DazzleCleaner123!`
@@ -146,6 +147,8 @@ Assign cleaner and inspector to all active properties:
 npx convex run devTools:assignUserToAllProperties '{"confirm":"RESET_DAZZLE_V3","email":"cleaner@dazzledivas.test","assignmentRole":"CLEANER"}'
 npx convex run devTools:assignUserToAllProperties '{"confirm":"RESET_DAZZLE_V3","email":"inspector@dazzledivas.test","assignmentRole":"INSPECTOR"}'
 ```
+
+After at least one admin exists, role changes can also be done in the web Admin Console.
 
 ## Important Convex Note
 

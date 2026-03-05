@@ -19,12 +19,14 @@ export const listForCurrentUser = query({
         .collect();
     }
 
+    const assignmentRole: "CLEANER" | "INSPECTOR" = user.role;
+
     const assignments = await ctx.db
       .query("propertyAssignments")
       .withIndex("by_user_role_active", (q) =>
         q
           .eq("userId", user._id)
-          .eq("assignmentRole", user.role)
+          .eq("assignmentRole", assignmentRole)
           .eq("isActive", true)
       )
       .collect();

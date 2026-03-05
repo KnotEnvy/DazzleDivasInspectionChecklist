@@ -4,17 +4,12 @@ import type { DataModel } from "./_generated/dataModel";
 
 const CustomPassword = Password<DataModel>({
   profile(params) {
-    const role =
-      params.role === "ADMIN"
-        ? ("ADMIN" as const)
-        : params.role === "INSPECTOR"
-          ? ("INSPECTOR" as const)
-          : ("CLEANER" as const);
-
     return {
       name: (params.name as string) ?? "User",
       email: params.email as string,
-      role,
+      // New self-serve accounts always start as cleaners.
+      // Role changes are handled through admin-only mutations.
+      role: "CLEANER" as const,
       isActive: true,
     };
   },
