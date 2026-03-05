@@ -8,6 +8,8 @@ import { NewChecklistPage } from "@/routes/NewChecklistPage";
 import { InspectionPage } from "@/routes/InspectionPage";
 import { HistoryPage } from "@/routes/HistoryPage";
 import { AdminPage } from "@/routes/AdminPage";
+import { AdminPropertiesPage } from "@/routes/AdminPropertiesPage";
+import { MySchedulePage } from "@/routes/MySchedulePage";
 import { NotFoundPage } from "@/routes/NotFoundPage";
 
 export default function App() {
@@ -26,11 +28,20 @@ export default function App() {
         <Route path="checklists/new" element={<NewChecklistPage />} />
         <Route path="checklists/:inspectionId" element={<InspectionPage />} />
         <Route path="history" element={<HistoryPage />} />
+        <Route path="my-schedule" element={<MySchedulePage />} />
         <Route
           path="admin"
           element={
             <RoleGuard role="ADMIN">
               <AdminPage />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="admin/properties"
+          element={
+            <RoleGuard role="ADMIN">
+              <AdminPropertiesPage />
             </RoleGuard>
           }
         />

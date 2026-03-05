@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { ClipboardList, Clock3, House, Shield } from "lucide-react";
+import { Building2, CalendarDays, ClipboardList, Clock3, House, Shield } from "lucide-react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxCount } from "@/hooks/useOutboxCount";
@@ -55,6 +55,14 @@ export function AppShell() {
           <ClipboardList className="mr-1 inline-block h-4 w-4" /> New Checklist
         </NavLink>
         <NavLink
+          to="/my-schedule"
+          className={({ isActive }) =>
+            `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
+          }
+        >
+          <CalendarDays className="mr-1 inline-block h-4 w-4" /> My Schedule
+        </NavLink>
+        <NavLink
           to="/history"
           className={({ isActive }) =>
             `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
@@ -70,6 +78,16 @@ export function AppShell() {
             }
           >
             <Shield className="mr-1 inline-block h-4 w-4" /> Admin
+          </NavLink>
+        )}
+        {isAdmin && (
+          <NavLink
+            to="/admin/properties"
+            className={({ isActive }) =>
+              `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
+            }
+          >
+            <Building2 className="mr-1 inline-block h-4 w-4" /> Properties
           </NavLink>
         )}
       </nav>

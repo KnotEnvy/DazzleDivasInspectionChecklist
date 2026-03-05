@@ -25,9 +25,15 @@ const schema = defineSchema({
     bedrooms: v.optional(v.number()),
     bathrooms: v.optional(v.number()),
     notes: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    accessInstructions: v.optional(v.string()),
+    entryMethod: v.optional(v.string()),
+    serviceNotes: v.optional(v.string()),
+    isArchived: v.optional(v.boolean()),
     isActive: v.boolean(),
   })
     .index("by_active", ["isActive"])
+    .index("by_archived", ["isArchived"])
     .searchIndex("search_name", { searchField: "name" }),
 
   propertyAssignments: defineTable({
@@ -47,6 +53,85 @@ const schema = defineSchema({
       "isActive",
     ])
     .index("by_user_role_active", ["userId", "assignmentRole", "isActive"]),
+
+  servicePlans: defineTable({
+    propertyId: v.id("properties"),
+    planType: v.union(
+      v.literal("CLEANING"),
+      v.literal("INSPECTION"),
+      v.literal("DEEP_CLEAN"),
+      v.literal("MAINTENANCE")
+    ),
+    frequency: v.union(
+      v.literal("DAILY"),
+      v.literal("WEEKLY"),
+      v.literal("BIWEEKLY"),
+      v.literal("MONTHLY"),
+      v.literal("CUSTOM_RRULE")
+    ),
+    daysOfWeek: v.optional(v.array(v.number())),
+    timeWindowStart: v.string(),
+    timeWindowEnd: v.string(),
+    defaultDurationMinutes: v.number(),
+    defaultAssigneeRole: v.union(v.literal("CLEANER"), v.literal("INSPECTOR")),
+    priority: v.optional(
+      v.union(v.literal("LOW"), v.literal("MEDIUM"), v.literal("HIGH"), v.literal("URGENT"))
+    ),
+    notes: v.optional(v.string()),
+    customRrule: v.optional(v.string()),
+    anchorDate: v.optional(v.number()),
+    isActive: v.boolean(),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_active", ["isActive"])
+    .index("by_property_active", ["propertyId", "isActive"]),
+
+  jobs: defineTable({
+    propertyId: v.id("properties"),
+    servicePlanId: v.optional(v.id("servicePlans")),
+    jobType: v.union(
+      v.literal("CLEANING"),
+      v.literal("INSPECTION"),
+      v.literal("DEEP_CLEAN"),
+      v.literal("MAINTENANCE")
+    ),
+    scheduledStart: v.number(),
+    scheduledEnd: v.number(),
+    assigneeId: v.optional(v.id("users")),
+    status: v.union(
+      v.literal("SCHEDULED"),
+      v.literal("IN_PROGRESS"),
+      v.literal("COMPLETED"),
+      v.literal("CANCELLED"),
+      v.literal("BLOCKED")
+    ),
+    priority: v.optional(
+      v.union(v.literal("LOW"), v.literal("MEDIUM"), v.literal("HIGH"), v.literal("URGENT"))
+    ),
+    notes: v.optional(v.string()),
+    createdById: v.id("users"),
+    completedAt: v.optional(v.number()),
+    linkedInspectionId: v.optional(v.id("inspections")),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_property_start", ["propertyId", "scheduledStart"])
+    .index("by_service_plan", ["servicePlanId"])
+    .index("by_service_plan_start", ["servicePlanId", "scheduledStart"])
+    .index("by_assignee", ["assigneeId"])
+    .index("by_assignee_status_start", ["assigneeId", "status", "scheduledStart"])
+    .index("by_status_start", ["status", "scheduledStart"])
+    .index("by_scheduled_start", ["scheduledStart"])
+    .index("by_linked_inspection", ["linkedInspectionId"]),
+
+  jobEvents: defineTable({
+    jobId: v.id("jobs"),
+    eventType: v.string(),
+    actorId: v.id("users"),
+    metadata: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_job", ["jobId"])
+    .index("by_created_at", ["createdAt"]),
 
   rooms: defineTable({
     name: v.string(),

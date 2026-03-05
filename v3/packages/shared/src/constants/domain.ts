@@ -15,3 +15,28 @@ export const PHOTO_KINDS = [
   "GENERAL",
 ] as const;
 
+export const SERVICE_PLAN_TYPES = [
+  "CLEANING",
+  "INSPECTION",
+  "DEEP_CLEAN",
+  "MAINTENANCE",
+] as const;
+
+export const SERVICE_PLAN_FREQUENCIES = [
+  "DAILY",
+  "WEEKLY",
+  "BIWEEKLY",
+  "MONTHLY",
+  "CUSTOM_RRULE",
+] as const;
+
+export const JOB_STATUSES = [
+  "SCHEDULED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+  "BLOCKED",
+] as const;
+
+export const JOB_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
+

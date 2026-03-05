@@ -48,6 +48,10 @@ export const listMine = query({
         const property = await ctx.db.get(assignment.propertyId);
         return { ...assignment, property };
       })
+    ).then((items) =>
+      items.filter(
+        (item) => item.property && item.property.isActive && item.property.isArchived !== true
+      )
     );
   },
 });
@@ -60,6 +64,11 @@ export const assign = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+
+    const property = await ctx.db.get(args.propertyId);
+    if (!property || !property.isActive || property.isArchived === true) {
+      throw new Error("Property not found or archived");
+    }
 
     const assignedUser = await ctx.db.get(args.userId);
     if (!assignedUser) {

@@ -1,4 +1,6 @@
 import { query, mutation } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
   requireAuth,
@@ -7,16 +9,65 @@ import {
 } from "./lib/permissions";
 import { propertyTypeValidator } from "./lib/validators";
 
+async function enrichPropertiesForAdmin(
+  ctx: QueryCtx,
+  properties: Array<Doc<"properties">>
+) {
+  return await Promise.all(
+    properties.map(async (property) => {
+      const [assignments, plans] = await Promise.all([
+        ctx.db
+          .query("propertyAssignments")
+          .withIndex("by_property", (q) => q.eq("propertyId", property._id))
+          .collect(),
+        ctx.db
+          .query("servicePlans")
+          .withIndex("by_property", (q) => q.eq("propertyId", property._id))
+          .collect(),
+      ]);
+
+      const activeAssignments = assignments.filter((assignment) => assignment.isActive);
+      const activePlans = plans.filter((plan) => plan.isActive);
+
+      return {
+        ...property,
+        assignmentSummary: {
+          cleaners: activeAssignments.filter(
+            (assignment) => assignment.assignmentRole === "CLEANER"
+          ).length,
+          inspectors: activeAssignments.filter(
+            (assignment) => assignment.assignmentRole === "INSPECTOR"
+          ).length,
+        },
+        scheduleSummary: {
+          activePlans: activePlans.length,
+        },
+      };
+    })
+  );
+}
+
+async function listAdminProperties(ctx: QueryCtx, includeArchived: boolean) {
+  const properties = await ctx.db.query("properties").collect();
+  const filtered = includeArchived
+    ? properties
+    : properties.filter((property) => property.isArchived !== true);
+
+  return await enrichPropertiesForAdmin(ctx, filtered);
+}
+
 export const listForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
 
     if (user.role === "ADMIN") {
-      return await ctx.db
+      const properties = await ctx.db
         .query("properties")
         .withIndex("by_active", (q) => q.eq("isActive", true))
         .collect();
+
+      return properties.filter((property) => property.isArchived !== true);
     }
 
     const assignmentRole: "CLEANER" | "INSPECTOR" = user.role;
@@ -38,16 +89,59 @@ export const listForCurrentUser = query({
     );
 
     return properties.filter((property): property is NonNullable<typeof property> => {
-      return !!property && property.isActive;
+      return !!property && property.isActive && property.isArchived !== true;
     });
   },
 });
 
-export const listAll = query({
-  args: {},
-  handler: async (ctx) => {
+export const listAdmin = query({
+  args: {
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    return await ctx.db.query("properties").collect();
+    return await listAdminProperties(ctx, args.includeArchived === true);
+  },
+});
+
+export const listAll = listAdmin;
+
+export const search = query({
+  args: {
+    term: v.string(),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const term = args.term.trim();
+    if (term.length === 0) {
+      return await listAdminProperties(ctx, args.includeArchived === true);
+    }
+
+    const includeArchived = args.includeArchived === true;
+    const nameMatches =
+      term.length >= 2
+        ? await ctx.db
+            .query("properties")
+            .withSearchIndex("search_name", (q) => q.search("name", term))
+            .take(50)
+        : [];
+
+    const allProperties = await ctx.db.query("properties").collect();
+    const addressMatches = allProperties.filter((property) =>
+      property.address.toLowerCase().includes(term.toLowerCase())
+    );
+
+    const candidatesById = new Map(
+      [...nameMatches, ...addressMatches].map((property) => [property._id, property])
+    );
+
+    const candidates = Array.from(candidatesById.values()).filter((property) =>
+      includeArchived ? true : property.isArchived !== true
+    );
+
+    return await enrichPropertiesForAdmin(ctx, candidates);
   },
 });
 
@@ -89,11 +183,17 @@ export const create = mutation({
     bedrooms: v.optional(v.number()),
     bathrooms: v.optional(v.number()),
     notes: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    accessInstructions: v.optional(v.string()),
+    entryMethod: v.optional(v.string()),
+    serviceNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     return await ctx.db.insert("properties", {
       ...args,
+      timezone: args.timezone ?? "America/New_York",
+      isArchived: false,
       isActive: true,
     });
   },
@@ -109,6 +209,11 @@ export const update = mutation({
     bedrooms: v.optional(v.number()),
     bathrooms: v.optional(v.number()),
     notes: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    accessInstructions: v.optional(v.string()),
+    entryMethod: v.optional(v.string()),
+    serviceNotes: v.optional(v.string()),
+    isArchived: v.optional(v.boolean()),
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -120,6 +225,22 @@ export const update = mutation({
     );
 
     await ctx.db.patch(propertyId, filteredUpdates);
+  },
+});
+
+export const archive = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    isArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const isArchived = args.isArchived ?? true;
+    await ctx.db.patch(args.propertyId, {
+      isArchived,
+      isActive: !isArchived,
+    });
   },
 });
 

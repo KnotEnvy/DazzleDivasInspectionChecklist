@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
@@ -64,6 +65,20 @@ export function AdminPage() {
         <Card label="Active Properties" value={stats?.activeProperties} />
         <Card label="In Progress" value={stats?.activeInspections} />
         <Card label="Completed" value={stats?.completedInspections} />
+      </section>
+
+      <section className="rounded-2xl border border-border bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">Operations Setup</h2>
+            <p className="text-sm text-slate-600">
+              Manage property records and recurring service plans.
+            </p>
+          </div>
+          <Link className="field-button primary px-4 py-2 text-sm" to="/admin/properties">
+            Open Property Management
+          </Link>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-border bg-white p-4">

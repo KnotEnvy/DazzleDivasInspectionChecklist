@@ -10,6 +10,7 @@ import {
 import {
   assignmentRoleForChecklistType,
   checklistTypeValidator,
+  checklistTypeForJobType,
 } from "./lib/validators";
 
 async function ensureAssigneeIsEligible(
@@ -143,16 +144,53 @@ export const create = mutation({
     type: checklistTypeValidator,
     assigneeId: v.optional(v.id("users")),
     sourceInspectionId: v.optional(v.id("inspections")),
+    jobId: v.optional(v.id("jobs")),
   },
   handler: async (ctx, args) => {
     const actor = await requireAuth(ctx);
+    const job = args.jobId ? await ctx.db.get(args.jobId) : null;
+
+    if (args.jobId && !job) {
+      throw new Error("Job not found");
+    }
+
+    if (job) {
+      if (job.propertyId !== args.propertyId) {
+        throw new Error("Job does not belong to the selected property");
+      }
+
+      if (job.status === "CANCELLED" || job.status === "COMPLETED") {
+        throw new Error("This job cannot start a checklist");
+      }
+
+      const expectedType = checklistTypeForJobType(job.jobType);
+      if (!expectedType) {
+        throw new Error("This job type does not support checklist execution");
+      }
+
+      if (expectedType !== args.type) {
+        throw new Error("Checklist type does not match the selected job type");
+      }
+
+      if (job.linkedInspectionId) {
+        const existingInspection = await ctx.db.get(job.linkedInspectionId);
+        if (existingInspection) {
+          return existingInspection._id;
+        }
+      }
+
+      if (actor.role !== "ADMIN" && job.assigneeId && job.assigneeId !== actor._id) {
+        throw new Error("You are not assigned to this job");
+      }
+    }
+
     const property = await ctx.db.get(args.propertyId);
 
-    if (!property || !property.isActive) {
+    if (!property || !property.isActive || property.isArchived === true) {
       throw new Error("Property not found or inactive");
     }
 
-    const assigneeId = args.assigneeId ?? actor._id;
+    const assigneeId = args.assigneeId ?? job?.assigneeId ?? actor._id;
 
     if (actor.role !== "ADMIN" && assigneeId !== actor._id) {
       throw new Error("Only admins can create inspections for other users");
@@ -220,6 +258,25 @@ export const create = mutation({
       }
     }
 
+    if (job) {
+      await ctx.db.patch(job._id, {
+        linkedInspectionId: inspectionId,
+        assigneeId,
+        status: "IN_PROGRESS",
+      });
+
+      await ctx.db.insert("jobEvents", {
+        jobId: job._id,
+        eventType: "CHECKLIST_STARTED",
+        actorId: actor._id,
+        metadata: JSON.stringify({
+          inspectionId,
+          checklistType: args.type,
+        }),
+        createdAt: Date.now(),
+      });
+    }
+
     return inspectionId;
   },
 });
@@ -230,7 +287,7 @@ export const complete = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { inspection } = await requireInspectionAccess(ctx, args.inspectionId);
+    const { inspection, user } = await requireInspectionAccess(ctx, args.inspectionId);
 
     if (inspection.status === "COMPLETED") {
       return;
@@ -245,11 +302,36 @@ export const complete = mutation({
       throw new Error("All room checklists must be completed first");
     }
 
+    const completedAt = Date.now();
     await ctx.db.patch(args.inspectionId, {
       status: "COMPLETED",
-      completedAt: Date.now(),
+      completedAt,
       notes: args.notes,
     });
+
+    const linkedJobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_linked_inspection", (q) =>
+        q.eq("linkedInspectionId", args.inspectionId)
+      )
+      .collect();
+
+    for (const job of linkedJobs) {
+      await ctx.db.patch(job._id, {
+        status: "COMPLETED",
+        completedAt,
+      });
+
+      await ctx.db.insert("jobEvents", {
+        jobId: job._id,
+        eventType: "CHECKLIST_COMPLETED",
+        actorId: user._id,
+        metadata: JSON.stringify({
+          inspectionId: args.inspectionId,
+        }),
+        createdAt: completedAt,
+      });
+    }
   },
 });
 
