@@ -57,6 +57,12 @@ function roomStatusTone(status: RoomSummary["status"]) {
     : "border-slate-200 bg-slate-100 text-slate-600";
 }
 
+function stepTone(completed: boolean) {
+  return completed
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-amber-200 bg-amber-50 text-amber-800";
+}
+
 export function InspectionPage() {
   const navigate = useNavigate();
   const isOnline = useNetworkStatus();
@@ -247,6 +253,12 @@ export function InspectionPage() {
     try {
       await completeRoom({ roomInspectionId: selectedRoom._id });
       toast.success("Room marked complete");
+      const nextPendingRoom = inspection?.roomInspections.find(
+        (room) => room._id !== selectedRoom._id && room.status !== "COMPLETED"
+      );
+      if (nextPendingRoom) {
+        setSelectedRoomId(nextPendingRoom._id);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to complete room");
     } finally {
@@ -299,6 +311,8 @@ export function InspectionPage() {
     selectedRoom.status !== "COMPLETED";
 
   const hasNoRooms = inspection.roomInspections.length === 0;
+  const nextPendingRoom = inspection.roomInspections.find((room) => room.status !== "COMPLETED");
+  const roomsRemaining = totals.rooms - totals.completedRooms;
 
   return (
     <div className="space-y-5">
@@ -321,6 +335,27 @@ export function InspectionPage() {
         <SummaryCard label="Photos" value={String(totals.photos)} />
         <SummaryCard label="Selected Room" value={selectedRoomSummary?.roomName ?? "None"} />
       </section>
+
+      {!hasNoRooms && nextPendingRoom ? (
+        <section className="rounded-2xl border border-border bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">Field Progress</h2>
+              <p className="text-sm text-slate-600">
+                {roomsRemaining} room{roomsRemaining === 1 ? "" : "s"} remaining. Focus on one
+                room at a time and move in order.
+              </p>
+            </div>
+            <button
+              className="field-button secondary px-4"
+              onClick={() => setSelectedRoomId(nextPendingRoom._id)}
+              type="button"
+            >
+              Jump to {nextPendingRoom.roomName}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(280px,0.95fr)_minmax(0,1.6fr)]">
         <aside className="rounded-2xl border border-border bg-white p-4">
@@ -361,6 +396,14 @@ export function InspectionPage() {
                         Tasks {room.completedTasks}/{room.totalTasks} | Photos {room.photoCount}/
                         {room.requiredPhotoMin}
                       </p>
+                      {room.status !== "COMPLETED" ? (
+                        <p className="mt-1 text-xs text-amber-700">
+                          {room.totalTasks - room.completedTasks} tasks left and{" "}
+                          {Math.max(0, room.requiredPhotoMin - room.photoCount)} photos still needed
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-emerald-700">Room completed and ready.</p>
+                      )}
                     </div>
                     <span
                       className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${roomStatusTone(
@@ -404,8 +447,39 @@ export function InspectionPage() {
                   </span>
                 </div>
 
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className={`rounded-2xl border p-3 ${stepTone(roomTasksComplete)}`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 1</p>
+                    <p className="mt-1 font-semibold">Complete tasks</p>
+                    <p className="mt-1 text-sm">
+                      {selectedRoom.taskResults.filter((task) => task.completed).length}/
+                      {selectedRoom.taskResults.length} complete
+                    </p>
+                  </div>
+                  <div className={`rounded-2xl border p-3 ${stepTone(roomHasEnoughPhotos)}`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 2</p>
+                    <p className="mt-1 font-semibold">Upload proof photos</p>
+                    <p className="mt-1 text-sm">
+                      {selectedRoom.photos.length}/{selectedRoom.requiredPhotoMin} required
+                    </p>
+                  </div>
+                  <div
+                    className={`rounded-2xl border p-3 ${stepTone(
+                      selectedRoom.status === "COMPLETED"
+                    )}`}
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 3</p>
+                    <p className="mt-1 font-semibold">Finish room</p>
+                    <p className="mt-1 text-sm">
+                      {selectedRoom.status === "COMPLETED"
+                        ? "Room is complete"
+                        : "Mark complete after tasks and photos"}
+                    </p>
+                  </div>
+                </div>
+
                 <div>
-                  <h3 className="mb-2 font-semibold">Tasks</h3>
+                  <h3 className="mb-2 font-semibold">Step 1: Complete room tasks</h3>
                   <div className="space-y-2">
                     {selectedRoom.taskResults.map((task) => (
                       <label
@@ -430,7 +504,7 @@ export function InspectionPage() {
 
                 <div className="rounded-2xl border border-border bg-slate-50 p-4">
                   <div className="mb-2">
-                    <h3 className="font-semibold">Room Notes</h3>
+                    <h3 className="font-semibold">Step 3A: Room notes</h3>
                     <p className="text-sm text-slate-600">
                       Capture exceptions, follow-up details, or anything the next shift should know.
                     </p>
@@ -453,7 +527,7 @@ export function InspectionPage() {
 
                 <div className="rounded-2xl border border-border bg-slate-50 p-4">
                   <div className="mb-3">
-                    <h3 className="font-semibold">Photos</h3>
+                    <h3 className="font-semibold">Step 2: Upload proof photos</h3>
                     <p className="text-sm text-slate-600">
                       Upload proof photos for this room. Removing a required photo reopens the room.
                     </p>
@@ -527,14 +601,40 @@ export function InspectionPage() {
                   )}
                 </div>
 
-                <button
-                  className="field-button primary w-full px-5"
-                  disabled={!canCompleteSelectedRoom || completingRoomId === selectedRoom._id}
-                  onClick={() => void handleCompleteRoom()}
-                  type="button"
-                >
-                  {completingRoomId === selectedRoom._id ? "Completing Room..." : "Mark Room Complete"}
-                </button>
+                <div className="rounded-2xl border border-border bg-white p-4">
+                  <div className="mb-3">
+                    <h3 className="font-semibold">Step 3B: Finish room</h3>
+                    <p className="text-sm text-slate-600">
+                      A room can only be completed when every task is checked and the photo minimum
+                      is met.
+                    </p>
+                  </div>
+                  {!roomTasksComplete || !roomHasEnoughPhotos ? (
+                    <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      {!roomTasksComplete ? (
+                        <p>Finish all tasks before completing this room.</p>
+                      ) : null}
+                      {!roomHasEnoughPhotos ? (
+                        <p>
+                          Upload at least {selectedRoom.requiredPhotoMin} photo(s) for this room
+                          before completing it.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <button
+                    className="field-button primary w-full px-5"
+                    disabled={!canCompleteSelectedRoom || completingRoomId === selectedRoom._id}
+                    onClick={() => void handleCompleteRoom()}
+                    type="button"
+                  >
+                    {completingRoomId === selectedRoom._id
+                      ? "Completing Room..."
+                      : selectedRoom.status === "COMPLETED"
+                        ? "Room Completed"
+                        : "Mark Room Complete"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
