@@ -74,12 +74,14 @@ export const resetProjectData = mutation({
 const ROOM_TEMPLATES: Array<{
   name: string;
   sortOrder: number;
+  generationMode?: "SINGLE" | "PER_BEDROOM" | "PER_BATHROOM";
   cleaningTasks: string[];
   inspectionTasks: string[];
 }> = [
   {
     name: "Entrance",
     sortOrder: 1,
+    generationMode: "SINGLE",
     cleaningTasks: [
       "Sweep and mop entry floor",
       "Wipe door handles",
@@ -94,6 +96,7 @@ const ROOM_TEMPLATES: Array<{
   {
     name: "Kitchen",
     sortOrder: 2,
+    generationMode: "SINGLE",
     cleaningTasks: [
       "Sanitize countertops",
       "Clean appliance fronts",
@@ -110,6 +113,7 @@ const ROOM_TEMPLATES: Array<{
   {
     name: "Living Room",
     sortOrder: 3,
+    generationMode: "SINGLE",
     cleaningTasks: [
       "Dust surfaces",
       "Vacuum or mop flooring",
@@ -124,6 +128,7 @@ const ROOM_TEMPLATES: Array<{
   {
     name: "Bathroom",
     sortOrder: 4,
+    generationMode: "PER_BATHROOM",
     cleaningTasks: [
       "Disinfect toilet and sink",
       "Clean shower/tub surfaces",
@@ -140,6 +145,7 @@ const ROOM_TEMPLATES: Array<{
   {
     name: "Bedroom",
     sortOrder: 5,
+    generationMode: "PER_BEDROOM",
     cleaningTasks: [
       "Make bed with fresh linens",
       "Dust surfaces and nightstands",
@@ -206,6 +212,7 @@ export const seedStarterData = mutation({
       const roomId = await ctx.db.insert("rooms", {
         name: template.name,
         sortOrder: template.sortOrder,
+        generationMode: template.generationMode ?? "SINGLE",
         isActive: true,
       });
 

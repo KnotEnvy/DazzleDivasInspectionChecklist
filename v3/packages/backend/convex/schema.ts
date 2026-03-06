@@ -154,6 +154,13 @@ const schema = defineSchema({
     name: v.string(),
     description: v.optional(v.string()),
     sortOrder: v.number(),
+    generationMode: v.optional(
+      v.union(
+        v.literal("SINGLE"),
+        v.literal("PER_BEDROOM"),
+        v.literal("PER_BATHROOM")
+      )
+    ),
     isActive: v.boolean(),
   }).index("by_sort_order", ["sortOrder"]),
 

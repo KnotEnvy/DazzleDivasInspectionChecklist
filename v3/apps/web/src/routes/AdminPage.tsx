@@ -116,6 +116,9 @@ export function AdminPage() {
             <Link className="field-button secondary px-4 py-2 text-sm" to="/schedule">
               Open Dispatch Board
             </Link>
+            <Link className="field-button secondary px-4 py-2 text-sm" to="/admin/templates">
+              Open Checklist Templates
+            </Link>
             <Link className="field-button primary px-4 py-2 text-sm" to="/admin/properties">
               Open Property Management
             </Link>

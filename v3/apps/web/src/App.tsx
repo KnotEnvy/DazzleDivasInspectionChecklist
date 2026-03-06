@@ -10,6 +10,7 @@ import { HistoryPage } from "@/routes/HistoryPage";
 import { AdminPage } from "@/routes/AdminPage";
 import { AdminPropertiesPage } from "@/routes/AdminPropertiesPage";
 import { AdminSchedulePage } from "@/routes/AdminSchedulePage";
+import { AdminTemplatesPage } from "@/routes/AdminTemplatesPage";
 import { MySchedulePage } from "@/routes/MySchedulePage";
 import { NotFoundPage } from "@/routes/NotFoundPage";
 
@@ -51,6 +52,14 @@ export default function App() {
           element={
             <RoleGuard role="ADMIN">
               <AdminPropertiesPage />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="admin/templates"
+          element={
+            <RoleGuard role="ADMIN">
+              <AdminTemplatesPage />
             </RoleGuard>
           }
         />

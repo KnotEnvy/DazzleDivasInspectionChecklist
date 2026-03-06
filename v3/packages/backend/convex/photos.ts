@@ -1,7 +1,31 @@
 import { query, mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { requireInspectionAccess, requireRoomInspectionAccess } from "./lib/permissions";
 import { photoKindValidator } from "./lib/validators";
+
+async function reopenRoomInspectionIfInvalid(
+  ctx: MutationCtx,
+  roomInspectionId: Id<"roomInspections">
+) {
+  const roomInspection = await ctx.db.get(roomInspectionId);
+  if (!roomInspection || roomInspection.status !== "COMPLETED") {
+    return;
+  }
+
+  const photos = await ctx.db
+    .query("photos")
+    .withIndex("by_room_inspection", (q) => q.eq("roomInspectionId", roomInspection._id))
+    .collect();
+
+  if (photos.length < roomInspection.requiredPhotoMin) {
+    await ctx.db.patch(roomInspection._id, {
+      status: "PENDING",
+      completedAt: undefined,
+    });
+  }
+}
 
 export const generateUploadUrl = mutation({
   args: { roomInspectionId: v.id("roomInspections") },
@@ -65,10 +89,13 @@ export const remove = mutation({
       throw new Error("Photo not found");
     }
 
+    const roomInspectionId = photo.roomInspectionId;
+
     await requireInspectionAccess(ctx, photo.inspectionId);
 
     await ctx.storage.delete(photo.storageId);
     await ctx.db.delete(args.photoId);
+    await reopenRoomInspectionIfInvalid(ctx, roomInspectionId);
   },
 });
 

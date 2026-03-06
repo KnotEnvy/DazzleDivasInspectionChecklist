@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  ClipboardPenLine,
   Clock3,
   House,
   Shield,
@@ -106,6 +107,16 @@ export function AppShell() {
             }
           >
             <Building2 className="mr-1 inline-block h-4 w-4" /> Properties
+          </NavLink>
+        )}
+        {isAdmin && (
+          <NavLink
+            to="/admin/templates"
+            className={({ isActive }) =>
+              `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
+            }
+          >
+            <ClipboardPenLine className="mr-1 inline-block h-4 w-4" /> Templates
           </NavLink>
         )}
       </nav>

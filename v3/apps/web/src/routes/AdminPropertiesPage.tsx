@@ -6,6 +6,8 @@ import toast from "react-hot-toast";
 import { PROPERTY_TYPES } from "@dazzle/shared";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+type ChecklistType = "CLEANING" | "INSPECTION";
+type RoomGenerationMode = "SINGLE" | "PER_BEDROOM" | "PER_BATHROOM";
 
 type AssignmentSummary = {
   cleaners: number;
@@ -21,6 +23,8 @@ type AdminProperty = {
   name: string;
   address: string;
   propertyType: "RESIDENTIAL" | "COMMERCIAL";
+  bedrooms?: number;
+  bathrooms?: number;
   timezone?: string;
   accessInstructions?: string;
   entryMethod?: string;
@@ -57,10 +61,30 @@ type PropertyFormState = {
   name: string;
   address: string;
   propertyType: "RESIDENTIAL" | "COMMERCIAL";
+  bedrooms: string;
+  bathrooms: string;
   timezone: string;
   accessInstructions: string;
   entryMethod: string;
   serviceNotes: string;
+};
+
+type TemplateTask = {
+  _id: Id<"tasks">;
+  checklistType: ChecklistType;
+  description: string;
+  sortOrder: number;
+  requiredPhotoMin?: number;
+};
+
+type TemplateRoom = {
+  _id: Id<"rooms">;
+  name: string;
+  description?: string;
+  sortOrder: number;
+  generationMode?: RoomGenerationMode;
+  isActive: boolean;
+  tasks: TemplateTask[];
 };
 
 type AssignmentUser = {
@@ -92,6 +116,60 @@ const weekdayLabels: Array<{ value: number; label: string }> = [
   { value: 6, label: "Sat" },
 ];
 
+function parseOptionalCount(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.floor(parsed);
+}
+
+function inferRoomGenerationMode(room: {
+  name: string;
+  generationMode?: RoomGenerationMode;
+}) {
+  if (room.generationMode) {
+    return room.generationMode;
+  }
+
+  const normalizedName = room.name.trim().toLowerCase();
+  if (normalizedName === "bedroom" || normalizedName.startsWith("bedroom ")) {
+    return "PER_BEDROOM" as const;
+  }
+
+  if (normalizedName === "bathroom" || normalizedName.startsWith("bathroom ")) {
+    return "PER_BATHROOM" as const;
+  }
+
+  return "SINGLE" as const;
+}
+
+function deriveRoomNames(params: {
+  room: { name: string; generationMode?: RoomGenerationMode };
+  bedrooms?: number;
+  bathrooms?: number;
+}) {
+  const generationMode = inferRoomGenerationMode(params.room);
+
+  if (generationMode === "PER_BEDROOM") {
+    const count = Math.max(1, params.bedrooms ?? 1);
+    return Array.from({ length: count }, (_, index) => `Bedroom ${index + 1}`);
+  }
+
+  if (generationMode === "PER_BATHROOM") {
+    const count = Math.max(1, params.bathrooms ?? 1);
+    return Array.from({ length: count }, (_, index) => `Bathroom ${index + 1}`);
+  }
+
+  return [params.room.name];
+}
+
 export function AdminPropertiesPage() {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -115,6 +193,7 @@ export function AdminPropertiesPage() {
   const createPlan = useMutation(api.servicePlans.create);
   const setPlanActive = useMutation(api.servicePlans.setActive);
   const setPlanDefaultAssignee = useMutation(api.servicePlans.setDefaultAssignee);
+  const bootstrapStarterTemplates = useMutation(api.templates.bootstrapStarterTemplates);
   const generateJobs = useMutation(api.scheduling.generateJobs);
   const assignProperty = useMutation(api.propertyAssignments.assign);
   const unassignProperty = useMutation(api.propertyAssignments.unassign);
@@ -123,6 +202,8 @@ export function AdminPropertiesPage() {
     name: "",
     address: "",
     propertyType: "RESIDENTIAL" as "RESIDENTIAL" | "COMMERCIAL",
+    bedrooms: "",
+    bathrooms: "",
     timezone: "America/New_York",
     accessInstructions: "",
     entryMethod: "",
@@ -137,6 +218,8 @@ export function AdminPropertiesPage() {
     name: "",
     address: "",
     propertyType: "RESIDENTIAL" as "RESIDENTIAL" | "COMMERCIAL",
+    bedrooms: "",
+    bathrooms: "",
     timezone: "America/New_York",
     accessInstructions: "",
     entryMethod: "",
@@ -152,6 +235,8 @@ export function AdminPropertiesPage() {
       name: selectedProperty.name,
       address: selectedProperty.address,
       propertyType: selectedProperty.propertyType,
+      bedrooms: selectedProperty.bedrooms ? String(selectedProperty.bedrooms) : "",
+      bathrooms: selectedProperty.bathrooms ? String(selectedProperty.bathrooms) : "",
       timezone: selectedProperty.timezone ?? "America/New_York",
       accessInstructions: selectedProperty.accessInstructions ?? "",
       entryMethod: selectedProperty.entryMethod ?? "",
@@ -162,6 +247,8 @@ export function AdminPropertiesPage() {
     selectedProperty?.name,
     selectedProperty?.address,
     selectedProperty?.propertyType,
+    selectedProperty?.bedrooms,
+    selectedProperty?.bathrooms,
     selectedProperty?.timezone,
     selectedProperty?.accessInstructions,
     selectedProperty?.entryMethod,
@@ -189,6 +276,8 @@ export function AdminPropertiesPage() {
         current.name === selectedPropertyFormDefaults.name &&
         current.address === selectedPropertyFormDefaults.address &&
         current.propertyType === selectedPropertyFormDefaults.propertyType &&
+        current.bedrooms === selectedPropertyFormDefaults.bedrooms &&
+        current.bathrooms === selectedPropertyFormDefaults.bathrooms &&
         current.timezone === selectedPropertyFormDefaults.timezone &&
         current.accessInstructions === selectedPropertyFormDefaults.accessInstructions &&
         current.entryMethod === selectedPropertyFormDefaults.entryMethod &&
@@ -224,6 +313,12 @@ export function AdminPropertiesPage() {
         }
       : "skip"
   ) as PropertyJob[] | undefined;
+
+  const templateRooms = useQuery(api.templates.listWithTasks, {
+    includeInactive: true,
+  }) as
+    | TemplateRoom[]
+    | undefined;
 
   const assignments = useQuery(
     api.propertyAssignments.listByProperty,
@@ -293,6 +388,41 @@ export function AdminPropertiesPage() {
     );
   }, [activeAssignments, planForm.defaultAssigneeRole]);
 
+  const previewBedrooms = useMemo(() => {
+    const parsed = parseOptionalCount(editForm.bedrooms);
+    return parsed === null ? selectedProperty?.bedrooms : parsed;
+  }, [editForm.bedrooms, selectedProperty?.bedrooms]);
+
+  const previewBathrooms = useMemo(() => {
+    const parsed = parseOptionalCount(editForm.bathrooms);
+    return parsed === null ? selectedProperty?.bathrooms : parsed;
+  }, [editForm.bathrooms, selectedProperty?.bathrooms]);
+
+  const checklistPreview = useMemo(() => {
+    if (!selectedProperty || !templateRooms) {
+      return null;
+    }
+
+    const activeTemplateRooms = templateRooms.filter((room) => room.isActive);
+    const previewRooms = activeTemplateRooms.flatMap((room) =>
+      deriveRoomNames({
+        room,
+        bedrooms: previewBedrooms,
+        bathrooms: previewBathrooms,
+      }).map((roomName) => ({
+        templateRoomId: room._id,
+        roomName,
+        cleaningTasks: room.tasks.filter((task) => task.checklistType === "CLEANING"),
+        inspectionTasks: room.tasks.filter((task) => task.checklistType === "INSPECTION"),
+      }))
+    );
+
+    return {
+      CLEANING: previewRooms.filter((room) => room.cleaningTasks.length > 0),
+      INSPECTION: previewRooms.filter((room) => room.inspectionTasks.length > 0),
+    };
+  }, [previewBathrooms, previewBedrooms, selectedProperty, templateRooms]);
+
   useEffect(() => {
     setSelectedCleanerId("");
     setSelectedInspectorId("");
@@ -309,6 +439,13 @@ export function AdminPropertiesPage() {
 
   async function handleCreateProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const bedrooms = parseOptionalCount(createForm.bedrooms);
+    const bathrooms = parseOptionalCount(createForm.bathrooms);
+    if (bedrooms === null || bathrooms === null) {
+      toast.error("Bedrooms and bathrooms must be positive numbers when provided");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -316,6 +453,8 @@ export function AdminPropertiesPage() {
         name: createForm.name.trim(),
         address: createForm.address.trim(),
         propertyType: createForm.propertyType,
+        bedrooms,
+        bathrooms,
         timezone: createForm.timezone.trim(),
         accessInstructions: createForm.accessInstructions.trim() || undefined,
         entryMethod: createForm.entryMethod.trim() || undefined,
@@ -327,6 +466,8 @@ export function AdminPropertiesPage() {
         name: "",
         address: "",
         propertyType: "RESIDENTIAL",
+        bedrooms: "",
+        bathrooms: "",
         timezone: "America/New_York",
         accessInstructions: "",
         entryMethod: "",
@@ -345,6 +486,13 @@ export function AdminPropertiesPage() {
       return;
     }
 
+    const bedrooms = parseOptionalCount(editForm.bedrooms);
+    const bathrooms = parseOptionalCount(editForm.bathrooms);
+    if (bedrooms === null || bathrooms === null) {
+      toast.error("Bedrooms and bathrooms must be positive numbers when provided");
+      return;
+    }
+
     setIsSaving(true);
     try {
       await updateProperty({
@@ -352,6 +500,8 @@ export function AdminPropertiesPage() {
         name: editForm.name.trim(),
         address: editForm.address.trim(),
         propertyType: editForm.propertyType,
+        bedrooms,
+        bathrooms,
         timezone: editForm.timezone.trim(),
         accessInstructions: editForm.accessInstructions.trim() || undefined,
         entryMethod: editForm.entryMethod.trim() || undefined,
@@ -497,6 +647,20 @@ export function AdminPropertiesPage() {
     }
   }
 
+  async function handleBootstrapTemplates() {
+    setIsSaving(true);
+    try {
+      const result = await bootstrapStarterTemplates({});
+      toast.success(`Created ${result.roomsCreated} starter room templates`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create starter templates"
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   function toggleDayOfWeek(day: number) {
     setPlanForm((current) => {
       const exists = current.daysOfWeek.includes(day);
@@ -611,6 +775,34 @@ export function AdminPropertiesPage() {
                 />
               </label>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                Bedrooms
+                <input
+                  className="input mt-1"
+                  min="1"
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, bedrooms: event.target.value }))
+                  }
+                  placeholder="Optional"
+                  type="number"
+                  value={createForm.bedrooms}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                Bathrooms
+                <input
+                  className="input mt-1"
+                  min="1"
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, bathrooms: event.target.value }))
+                  }
+                  placeholder="Optional"
+                  type="number"
+                  value={createForm.bathrooms}
+                />
+              </label>
+            </div>
             <label className="block text-sm font-semibold text-slate-700">
               Entry Method
               <input
@@ -691,7 +883,8 @@ export function AdminPropertiesPage() {
                       <p className="font-semibold">{property.name}</p>
                       <p className="text-sm text-slate-600">{property.address}</p>
                       <p className="text-xs font-semibold text-slate-500">
-                        {property.propertyType} | {property.timezone ?? "America/New_York"}
+                        {property.propertyType} | {property.bedrooms ?? 1} bed |{" "}
+                        {property.bathrooms ?? 1} bath | {property.timezone ?? "America/New_York"}
                       </p>
                     </div>
                     <span
@@ -717,7 +910,106 @@ export function AdminPropertiesPage() {
       </section>
 
       {!selectedProperty ? null : (
-        <section className="grid gap-4 xl:grid-cols-2">
+        <>
+          <section className="rounded-2xl border border-border bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">Checklist Preview</h2>
+                <p className="text-sm text-slate-600">
+                  This property will generate one cleaning checklist and one inspection checklist
+                  from the base template. The preview updates from the bedroom and bathroom fields
+                  above, even before you save.
+                </p>
+              </div>
+              <p className="text-xs font-semibold text-slate-500">
+                Using {previewBedrooms ?? 1} bedroom(s) and {previewBathrooms ?? 1} bathroom(s)
+              </p>
+            </div>
+
+            {templateRooms === undefined || checklistPreview === null ? (
+              <p className="text-sm text-slate-500">Loading checklist preview...</p>
+            ) : templateRooms.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-700">
+                  No base checklist templates exist yet.
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Create the starter room library first, then this preview will expand into
+                  bedrooms, bathrooms, entrance, kitchen, general, and the rest.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    className="field-button primary px-4"
+                    disabled={isSaving}
+                    onClick={() => void handleBootstrapTemplates()}
+                    type="button"
+                  >
+                    Create Starter Templates
+                  </button>
+                </div>
+              </div>
+            ) : templateRooms.every((room) => room.isActive !== true) ? (
+              <div className="rounded-xl border border-dashed border-border bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-700">
+                  Your base template rooms exist, but they are all inactive.
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Reactivate rooms in the checklist template manager and this preview will populate.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {(["CLEANING", "INSPECTION"] as ChecklistType[]).map((checklistType) => (
+                  <div
+                    key={checklistType}
+                    className="rounded-xl border border-border bg-slate-50 p-3"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <h3 className="font-semibold">{checklistType} Checklist</h3>
+                      <span className="text-xs font-semibold text-slate-500">
+                        {checklistPreview[checklistType].length} rooms
+                      </span>
+                    </div>
+
+                    {checklistPreview[checklistType].length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        No {checklistType.toLowerCase()} rooms are active in the base template.
+                      </p>
+                    ) : (
+                      <div className="grid gap-2 xl:grid-cols-2">
+                        {checklistPreview[checklistType].map((room) => {
+                          const tasks =
+                            checklistType === "CLEANING"
+                              ? room.cleaningTasks
+                              : room.inspectionTasks;
+
+                          return (
+                            <div
+                              key={`${checklistType}-${room.templateRoomId}-${room.roomName}`}
+                              className="rounded-lg border border-border bg-white p-2"
+                            >
+                              <p className="text-sm font-semibold">{room.roomName}</p>
+                              <p className="text-xs text-slate-500">
+                                {tasks.length} tasks | Photos required:{" "}
+                                {Math.max(2, ...tasks.map((task) => task.requiredPhotoMin ?? 0))}
+                              </p>
+                              <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                                {tasks.map((task) => (
+                                  <li key={task._id}>- {task.description}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-4 rounded-2xl border border-border bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-lg font-bold">Property Detail</h2>
@@ -760,6 +1052,34 @@ export function AdminPropertiesPage() {
                     </option>
                   ))}
                 </select>
+              </label>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                Bedrooms
+                <input
+                  className="input mt-1"
+                  min="1"
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, bedrooms: event.target.value }))
+                  }
+                  placeholder="Optional"
+                  type="number"
+                  value={editForm.bedrooms}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-700">
+                Bathrooms
+                <input
+                  className="input mt-1"
+                  min="1"
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, bathrooms: event.target.value }))
+                  }
+                  placeholder="Optional"
+                  type="number"
+                  value={editForm.bathrooms}
+                />
               </label>
             </div>
             <label className="block text-sm font-semibold text-slate-700">
@@ -1139,7 +1459,8 @@ export function AdminPropertiesPage() {
               )}
             </div>
           </div>
-        </section>
+          </section>
+        </>
       )}
     </div>
   );
