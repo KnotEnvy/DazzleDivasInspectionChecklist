@@ -1,4 +1,6 @@
 import { mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { requireAdmin } from "./lib/permissions";
 
@@ -177,6 +179,43 @@ function planRunsOnDay(params: {
   return fullWeeksFromAnchor % 2 === 0;
 }
 
+async function resolveDefaultAssignee(params: {
+  ctx: MutationCtx;
+  propertyId: Id<"properties">;
+  defaultAssigneeRole: "CLEANER" | "INSPECTOR";
+  defaultAssigneeId?: Id<"users">;
+}) {
+  const assignments = await params.ctx.db
+    .query("propertyAssignments")
+    .withIndex("by_property", (q) => q.eq("propertyId", params.propertyId))
+    .collect();
+
+  const activeAssignments = assignments.filter(
+    (assignment) =>
+      assignment.isActive && assignment.assignmentRole === params.defaultAssigneeRole
+  );
+
+  if (params.defaultAssigneeId) {
+    const matchingAssignment = activeAssignments.find(
+      (assignment) => assignment.userId === params.defaultAssigneeId
+    );
+
+    if (!matchingAssignment) {
+      return undefined;
+    }
+
+    const user = await params.ctx.db.get(matchingAssignment.userId);
+    if (!user || !user.isActive || user.role !== params.defaultAssigneeRole) {
+      return undefined;
+    }
+
+    return user._id;
+  }
+
+  const fallbackAssignment = activeAssignments.sort((a, b) => a.startDate - b.startDate)[0];
+  return fallbackAssignment?.userId;
+}
+
 export const generateJobs = mutation({
   args: {
     from: v.optional(v.number()),
@@ -234,16 +273,12 @@ export const generateJobs = mutation({
         .collect();
       const existingStarts = new Set(existingJobs.map((job) => job.scheduledStart));
 
-      const assignments = await ctx.db
-        .query("propertyAssignments")
-        .withIndex("by_property", (q) => q.eq("propertyId", property._id))
-        .collect();
-      const defaultAssignee = assignments
-        .filter(
-          (assignment) =>
-            assignment.isActive && assignment.assignmentRole === plan.defaultAssigneeRole
-        )
-        .sort((a, b) => a.startDate - b.startDate)[0];
+      const defaultAssigneeId = await resolveDefaultAssignee({
+        ctx,
+        propertyId: property._id,
+        defaultAssigneeRole: plan.defaultAssigneeRole,
+        defaultAssigneeId: plan.defaultAssigneeId,
+      });
 
       const startClock = parseTimeWindow(plan.timeWindowStart);
       const endClock = parseTimeWindow(plan.timeWindowEnd);
@@ -306,7 +341,7 @@ export const generateJobs = mutation({
           jobType: plan.planType,
           scheduledStart,
           scheduledEnd,
-          assigneeId: defaultAssignee?.userId,
+          assigneeId: defaultAssigneeId,
           status: "SCHEDULED",
           priority: plan.priority ?? "MEDIUM",
           notes: plan.notes,
@@ -339,4 +374,3 @@ export const generateJobs = mutation({
     };
   },
 });
-

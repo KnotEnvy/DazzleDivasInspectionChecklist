@@ -89,7 +89,7 @@ export function LoginPage() {
               name="password"
               type="password"
               required
-              minLength={6}
+              minLength={8}
               placeholder="********"
             />
           </label>

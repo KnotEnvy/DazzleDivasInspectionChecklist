@@ -1,4 +1,6 @@
 import { query, mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { requireAdmin } from "./lib/permissions";
 import {
@@ -26,6 +28,48 @@ function normalizeDaysOfWeek(daysOfWeek: number[] | undefined): number[] | undef
   }
 
   return unique;
+}
+
+async function assertDefaultAssigneeEligible(
+  ctx: MutationCtx,
+  params: {
+    propertyId: Id<"properties">;
+    defaultAssigneeRole: "CLEANER" | "INSPECTOR";
+    defaultAssigneeId?: Id<"users"> | null;
+  }
+) {
+  if (!params.defaultAssigneeId) {
+    return;
+  }
+
+  const defaultAssigneeId = params.defaultAssigneeId;
+  const user = await ctx.db.get(defaultAssigneeId);
+  if (!user) {
+    throw new Error("Default assignee not found");
+  }
+
+  if (!user.isActive) {
+    throw new Error("Default assignee is inactive");
+  }
+
+  if (user.role !== params.defaultAssigneeRole) {
+    throw new Error(`Default assignee must have role ${params.defaultAssigneeRole}`);
+  }
+
+  const assignment = await ctx.db
+    .query("propertyAssignments")
+    .withIndex("by_property_user_role_active", (q) =>
+      q
+        .eq("propertyId", params.propertyId)
+        .eq("userId", defaultAssigneeId)
+        .eq("assignmentRole", params.defaultAssigneeRole)
+        .eq("isActive", true)
+    )
+    .unique();
+
+  if (!assignment) {
+    throw new Error("Default assignee must be actively assigned to this property");
+  }
 }
 
 export const listByProperty = query({
@@ -57,6 +101,7 @@ export const create = mutation({
     timeWindowEnd: v.string(),
     defaultDurationMinutes: v.number(),
     defaultAssigneeRole: assignmentRoleValidator,
+    defaultAssigneeId: v.optional(v.id("users")),
     priority: v.optional(jobPriorityValidator),
     notes: v.optional(v.string()),
     customRrule: v.optional(v.string()),
@@ -85,6 +130,12 @@ export const create = mutation({
       throw new Error("defaultDurationMinutes must be greater than 0");
     }
 
+    await assertDefaultAssigneeEligible(ctx, {
+      propertyId: args.propertyId,
+      defaultAssigneeRole: args.defaultAssigneeRole,
+      defaultAssigneeId: args.defaultAssigneeId,
+    });
+
     return await ctx.db.insert("servicePlans", {
       propertyId: args.propertyId,
       planType: args.planType,
@@ -94,6 +145,7 @@ export const create = mutation({
       timeWindowEnd: args.timeWindowEnd,
       defaultDurationMinutes: args.defaultDurationMinutes,
       defaultAssigneeRole: args.defaultAssigneeRole,
+      defaultAssigneeId: args.defaultAssigneeId,
       priority: args.priority ?? "MEDIUM",
       notes: args.notes,
       customRrule: args.customRrule,
@@ -113,6 +165,7 @@ export const update = mutation({
     timeWindowEnd: v.optional(v.string()),
     defaultDurationMinutes: v.optional(v.number()),
     defaultAssigneeRole: v.optional(assignmentRoleValidator),
+    defaultAssigneeId: v.optional(v.id("users")),
     priority: v.optional(jobPriorityValidator),
     notes: v.optional(v.string()),
     customRrule: v.optional(v.string()),
@@ -143,6 +196,8 @@ export const update = mutation({
       args.daysOfWeek === undefined ? undefined : normalizeDaysOfWeek(args.daysOfWeek);
     const nextFrequency = args.frequency ?? existing.frequency;
     const effectiveDaysOfWeek = normalizedDaysOfWeek ?? existing.daysOfWeek;
+    const nextDefaultAssigneeRole = args.defaultAssigneeRole ?? existing.defaultAssigneeRole;
+    const nextDefaultAssigneeId = args.defaultAssigneeId ?? existing.defaultAssigneeId;
 
     if (
       (nextFrequency === "WEEKLY" || nextFrequency === "BIWEEKLY") &&
@@ -150,6 +205,12 @@ export const update = mutation({
     ) {
       throw new Error("Weekly and biweekly plans require at least one dayOfWeek");
     }
+
+    await assertDefaultAssigneeEligible(ctx, {
+      propertyId: existing.propertyId,
+      defaultAssigneeRole: nextDefaultAssigneeRole,
+      defaultAssigneeId: nextDefaultAssigneeId,
+    });
 
     const { servicePlanId, daysOfWeek, ...updates } = args;
     const filteredUpdates = Object.fromEntries(
@@ -163,6 +224,31 @@ export const update = mutation({
   },
 });
 
+export const setDefaultAssignee = mutation({
+  args: {
+    servicePlanId: v.id("servicePlans"),
+    defaultAssigneeId: v.union(v.id("users"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const plan = await ctx.db.get(args.servicePlanId);
+    if (!plan) {
+      throw new Error("Service plan not found");
+    }
+
+    await assertDefaultAssigneeEligible(ctx, {
+      propertyId: plan.propertyId,
+      defaultAssigneeRole: plan.defaultAssigneeRole,
+      defaultAssigneeId: args.defaultAssigneeId,
+    });
+
+    await ctx.db.patch(args.servicePlanId, {
+      defaultAssigneeId: args.defaultAssigneeId ?? undefined,
+    });
+  },
+});
+
 export const setActive = mutation({
   args: {
     servicePlanId: v.id("servicePlans"),
@@ -173,4 +259,3 @@ export const setActive = mutation({
     await ctx.db.patch(args.servicePlanId, { isActive: args.isActive });
   },
 });
-

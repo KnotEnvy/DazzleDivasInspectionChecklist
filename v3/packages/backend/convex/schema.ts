@@ -13,9 +13,25 @@ const schema = defineSchema({
     isAnonymous: v.optional(v.boolean()),
     role: v.union(v.literal("ADMIN"), v.literal("CLEANER"), v.literal("INSPECTOR")),
     isActive: v.boolean(),
+    createdAt: v.optional(v.number()),
+    createdById: v.optional(v.id("users")),
+    provisionedByAdmin: v.optional(v.boolean()),
+    passwordSetupStatus: v.optional(
+      v.union(v.literal("SELF_SIGNUP"), v.literal("ADMIN_BOOTSTRAP"))
+    ),
   })
     .index("by_email", ["email"])
     .index("by_role", ["role"]),
+
+  userAdminEvents: defineTable({
+    actorId: v.id("users"),
+    targetUserId: v.id("users"),
+    eventType: v.string(),
+    metadata: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_target_user", ["targetUserId", "createdAt"])
+    .index("by_created_at", ["createdAt"]),
 
   properties: defineTable({
     name: v.string(),
@@ -74,6 +90,7 @@ const schema = defineSchema({
     timeWindowEnd: v.string(),
     defaultDurationMinutes: v.number(),
     defaultAssigneeRole: v.union(v.literal("CLEANER"), v.literal("INSPECTOR")),
+    defaultAssigneeId: v.optional(v.id("users")),
     priority: v.optional(
       v.union(v.literal("LOW"), v.literal("MEDIUM"), v.literal("HIGH"), v.literal("URGENT"))
     ),

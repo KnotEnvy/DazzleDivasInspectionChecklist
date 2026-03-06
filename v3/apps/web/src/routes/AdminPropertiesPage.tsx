@@ -39,6 +39,7 @@ type ServicePlan = {
   timeWindowEnd: string;
   defaultDurationMinutes: number;
   defaultAssigneeRole: "CLEANER" | "INSPECTOR";
+  defaultAssigneeId?: Id<"users">;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   notes?: string;
   isActive: boolean;
@@ -113,6 +114,7 @@ export function AdminPropertiesPage() {
   const archiveProperty = useMutation(api.properties.archive);
   const createPlan = useMutation(api.servicePlans.create);
   const setPlanActive = useMutation(api.servicePlans.setActive);
+  const setPlanDefaultAssignee = useMutation(api.servicePlans.setDefaultAssignee);
   const generateJobs = useMutation(api.scheduling.generateJobs);
   const assignProperty = useMutation(api.propertyAssignments.assign);
   const unassignProperty = useMutation(api.propertyAssignments.unassign);
@@ -243,6 +245,7 @@ export function AdminPropertiesPage() {
     timeWindowEnd: "11:00",
     defaultDurationMinutes: "120",
     defaultAssigneeRole: "CLEANER" as "CLEANER" | "INSPECTOR",
+    defaultAssigneeId: "",
     priority: "MEDIUM" as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
     notes: "",
   });
@@ -254,6 +257,13 @@ export function AdminPropertiesPage() {
       .filter((assignment) => assignment.isActive)
       .sort((left, right) => (left.user?.name ?? "").localeCompare(right.user?.name ?? ""));
   }, [assignments]);
+  const assignmentUserById = useMemo(() => {
+    return new Map(
+      activeAssignments
+        .filter((assignment) => assignment.user)
+        .map((assignment) => [assignment.userId, assignment.user as AssignmentUser])
+    );
+  }, [activeAssignments]);
 
   const cleanerAssignments = useMemo(() => {
     return activeAssignments.filter((assignment) => assignment.assignmentRole === "CLEANER");
@@ -276,11 +286,26 @@ export function AdminPropertiesPage() {
       .filter((user) => user.isActive && !assignedIds.has(user._id))
       .sort((left, right) => left.name.localeCompare(right.name));
   }, [inspectorAssignments, inspectorUsers]);
+  const eligiblePlanAssignees = useMemo(() => {
+    return activeAssignments.filter(
+      (assignment) =>
+        assignment.assignmentRole === planForm.defaultAssigneeRole && assignment.user?.isActive
+    );
+  }, [activeAssignments, planForm.defaultAssigneeRole]);
 
   useEffect(() => {
     setSelectedCleanerId("");
     setSelectedInspectorId("");
   }, [selectedPropertyId]);
+
+  useEffect(() => {
+    if (
+      planForm.defaultAssigneeId.length > 0 &&
+      !eligiblePlanAssignees.some((assignment) => assignment.userId === planForm.defaultAssigneeId)
+    ) {
+      setPlanForm((current) => ({ ...current, defaultAssigneeId: "" }));
+    }
+  }, [eligiblePlanAssignees, planForm.defaultAssigneeId]);
 
   async function handleCreateProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -425,6 +450,10 @@ export function AdminPropertiesPage() {
         timeWindowEnd: planForm.timeWindowEnd,
         defaultDurationMinutes: duration,
         defaultAssigneeRole: planForm.defaultAssigneeRole,
+        defaultAssigneeId:
+          planForm.defaultAssigneeId.length > 0
+            ? (planForm.defaultAssigneeId as Id<"users">)
+            : undefined,
         priority: planForm.priority,
         notes: planForm.notes.trim() || undefined,
       });
@@ -478,6 +507,31 @@ export function AdminPropertiesPage() {
           : [...current.daysOfWeek, day].sort((a, b) => a - b),
       };
     });
+  }
+
+  function getEligibleAssignmentsForRole(role: "CLEANER" | "INSPECTOR") {
+    return activeAssignments.filter(
+      (assignment) => assignment.assignmentRole === role && assignment.user?.isActive
+    );
+  }
+
+  async function handleSetPlanDefaultAssignee(
+    servicePlanId: Id<"servicePlans">,
+    defaultAssigneeId: string
+  ) {
+    setIsSaving(true);
+    try {
+      await setPlanDefaultAssignee({
+        servicePlanId,
+        defaultAssigneeId:
+          defaultAssigneeId.length > 0 ? (defaultAssigneeId as Id<"users">) : null,
+      });
+      toast.success("Plan assignment updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update plan assignment");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -913,7 +967,7 @@ export function AdminPropertiesPage() {
                   />
                 </label>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="block text-sm font-semibold text-slate-700">
                   Duration (min)
                   <input
@@ -936,12 +990,33 @@ export function AdminPropertiesPage() {
                       setPlanForm((current) => ({
                         ...current,
                         defaultAssigneeRole: event.target.value as "CLEANER" | "INSPECTOR",
+                        defaultAssigneeId: "",
                       }))
                     }
                     value={planForm.defaultAssigneeRole}
                   >
                     <option value="CLEANER">CLEANER</option>
                     <option value="INSPECTOR">INSPECTOR</option>
+                  </select>
+                </label>
+                <label className="block text-sm font-semibold text-slate-700">
+                  Default Worker
+                  <select
+                    className="input mt-1"
+                    onChange={(event) =>
+                      setPlanForm((current) => ({
+                        ...current,
+                        defaultAssigneeId: event.target.value,
+                      }))
+                    }
+                    value={planForm.defaultAssigneeId}
+                  >
+                    <option value="">Auto-assign from property roster</option>
+                    {eligiblePlanAssignees.map((assignment) => (
+                      <option key={assignment._id} value={assignment.userId}>
+                        {assignment.user?.name ?? "Unknown user"}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="block text-sm font-semibold text-slate-700">
@@ -997,19 +1072,45 @@ export function AdminPropertiesPage() {
                         <p className="text-xs text-slate-500">
                           Role: {plan.defaultAssigneeRole} | Priority: {plan.priority ?? "MEDIUM"}
                         </p>
+                        <p className="text-xs text-slate-500">
+                          Default worker:{" "}
+                          {plan.defaultAssigneeId
+                            ? assignmentUserById.get(plan.defaultAssigneeId)?.name ?? "Unavailable"
+                            : "Auto-assign from property roster"}
+                        </p>
                         {plan.daysOfWeek && plan.daysOfWeek.length > 0 && (
                           <p className="text-xs text-slate-500">
                             Days: {plan.daysOfWeek.join(", ")}
                           </p>
                         )}
                       </div>
-                      <button
-                        className="field-button secondary px-3"
-                        onClick={() => void handleTogglePlan(plan)}
-                        type="button"
-                      >
-                        {plan.isActive ? "Pause" : "Activate"}
-                      </button>
+                      <div className="space-y-2">
+                        <label className="block text-xs font-semibold text-slate-700">
+                          Default worker
+                          <select
+                            className="input mt-1 min-w-56"
+                            disabled={isSaving}
+                            onChange={(event) =>
+                              void handleSetPlanDefaultAssignee(plan._id, event.target.value)
+                            }
+                            value={plan.defaultAssigneeId ?? ""}
+                          >
+                            <option value="">Auto-assign from property roster</option>
+                            {getEligibleAssignmentsForRole(plan.defaultAssigneeRole).map((assignment) => (
+                              <option key={assignment._id} value={assignment.userId}>
+                                {assignment.user?.name ?? "Unknown user"}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          className="field-button secondary w-full px-3"
+                          onClick={() => void handleTogglePlan(plan)}
+                          type="button"
+                        >
+                          {plan.isActive ? "Pause" : "Activate"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
