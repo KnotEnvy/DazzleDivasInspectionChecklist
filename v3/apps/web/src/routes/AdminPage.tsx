@@ -72,12 +72,17 @@ export function AdminPage() {
           <div>
             <h2 className="text-lg font-bold">Operations Setup</h2>
             <p className="text-sm text-slate-600">
-              Manage property records and recurring service plans.
+              Manage property records, recurring service plans, and live dispatch.
             </p>
           </div>
-          <Link className="field-button primary px-4 py-2 text-sm" to="/admin/properties">
-            Open Property Management
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link className="field-button secondary px-4 py-2 text-sm" to="/schedule">
+              Open Dispatch Board
+            </Link>
+            <Link className="field-button primary px-4 py-2 text-sm" to="/admin/properties">
+              Open Property Management
+            </Link>
+          </div>
         </div>
       </section>
 

@@ -64,10 +64,11 @@ export function MySchedulePage() {
   const { user } = useCurrentUser();
   const [selectedJobId, setSelectedJobId] = useState<Id<"jobs"> | null>(null);
   const [startingChecklist, setStartingChecklist] = useState(false);
-
-  const now = Date.now();
-  const windowStart = startOfWeekLocal(new Date(now));
-  const windowEnd = new Date(windowStart.getTime() + 13 * DAY_MS + (23 * 60 + 59) * 60 * 1000);
+  const [scheduleAnchor] = useState(() => Date.now());
+  const windowStart = useMemo(() => startOfWeekLocal(new Date(scheduleAnchor)), [scheduleAnchor]);
+  const windowEnd = useMemo(() => {
+    return new Date(windowStart.getTime() + 13 * DAY_MS + (23 * 60 + 59) * 60 * 1000);
+  }, [windowStart]);
 
   const jobs = useQuery(api.jobs.listMyUpcoming, {
     from: windowStart.getTime(),
@@ -276,4 +277,3 @@ export function MySchedulePage() {
     </div>
   );
 }
-

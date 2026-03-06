@@ -52,6 +52,35 @@ type PropertyJob = {
   assigneeName?: string | null;
 };
 
+type PropertyFormState = {
+  name: string;
+  address: string;
+  propertyType: "RESIDENTIAL" | "COMMERCIAL";
+  timezone: string;
+  accessInstructions: string;
+  entryMethod: string;
+  serviceNotes: string;
+};
+
+type AssignmentUser = {
+  _id: Id<"users">;
+  name: string;
+  email: string;
+  role: "CLEANER" | "INSPECTOR";
+  isActive: boolean;
+};
+
+type PropertyAssignment = {
+  _id: Id<"propertyAssignments">;
+  propertyId: Id<"properties">;
+  userId: Id<"users">;
+  assignmentRole: "CLEANER" | "INSPECTOR";
+  startDate: number;
+  endDate?: number;
+  isActive: boolean;
+  user?: AssignmentUser | null;
+};
+
 const weekdayLabels: Array<{ value: number; label: string }> = [
   { value: 0, label: "Sun" },
   { value: 1, label: "Mon" },
@@ -85,6 +114,8 @@ export function AdminPropertiesPage() {
   const createPlan = useMutation(api.servicePlans.create);
   const setPlanActive = useMutation(api.servicePlans.setActive);
   const generateJobs = useMutation(api.scheduling.generateJobs);
+  const assignProperty = useMutation(api.propertyAssignments.assign);
+  const unassignProperty = useMutation(api.propertyAssignments.unassign);
 
   const [createForm, setCreateForm] = useState({
     name: "",
@@ -100,7 +131,7 @@ export function AdminPropertiesPage() {
     return (activeList ?? []).find((property) => property._id === selectedPropertyId) ?? null;
   }, [activeList, selectedPropertyId]);
 
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<PropertyFormState>({
     name: "",
     address: "",
     propertyType: "RESIDENTIAL" as "RESIDENTIAL" | "COMMERCIAL",
@@ -109,6 +140,31 @@ export function AdminPropertiesPage() {
     entryMethod: "",
     serviceNotes: "",
   });
+
+  const selectedPropertyFormDefaults = useMemo<PropertyFormState | null>(() => {
+    if (!selectedProperty) {
+      return null;
+    }
+
+    return {
+      name: selectedProperty.name,
+      address: selectedProperty.address,
+      propertyType: selectedProperty.propertyType,
+      timezone: selectedProperty.timezone ?? "America/New_York",
+      accessInstructions: selectedProperty.accessInstructions ?? "",
+      entryMethod: selectedProperty.entryMethod ?? "",
+      serviceNotes: selectedProperty.serviceNotes ?? "",
+    };
+  }, [
+    selectedPropertyId,
+    selectedProperty?.name,
+    selectedProperty?.address,
+    selectedProperty?.propertyType,
+    selectedProperty?.timezone,
+    selectedProperty?.accessInstructions,
+    selectedProperty?.entryMethod,
+    selectedProperty?.serviceNotes,
+  ]);
 
   useEffect(() => {
     if (!activeList || activeList.length === 0) {
@@ -122,20 +178,34 @@ export function AdminPropertiesPage() {
   }, [activeList, selectedPropertyId]);
 
   useEffect(() => {
-    if (!selectedProperty) {
+    if (!selectedPropertyFormDefaults) {
       return;
     }
 
-    setEditForm({
-      name: selectedProperty.name,
-      address: selectedProperty.address,
-      propertyType: selectedProperty.propertyType,
-      timezone: selectedProperty.timezone ?? "America/New_York",
-      accessInstructions: selectedProperty.accessInstructions ?? "",
-      entryMethod: selectedProperty.entryMethod ?? "",
-      serviceNotes: selectedProperty.serviceNotes ?? "",
+    setEditForm((current) => {
+      if (
+        current.name === selectedPropertyFormDefaults.name &&
+        current.address === selectedPropertyFormDefaults.address &&
+        current.propertyType === selectedPropertyFormDefaults.propertyType &&
+        current.timezone === selectedPropertyFormDefaults.timezone &&
+        current.accessInstructions === selectedPropertyFormDefaults.accessInstructions &&
+        current.entryMethod === selectedPropertyFormDefaults.entryMethod &&
+        current.serviceNotes === selectedPropertyFormDefaults.serviceNotes
+      ) {
+        return current;
+      }
+
+      return selectedPropertyFormDefaults;
     });
-  }, [selectedProperty]);
+  }, [selectedPropertyFormDefaults]);
+
+  const jobsWindow = useMemo(() => {
+    const now = Date.now();
+    return {
+      from: now - DAY_MS,
+      to: now + 14 * DAY_MS,
+    };
+  }, [selectedPropertyId]);
 
   const plans = useQuery(
     api.servicePlans.listByProperty,
@@ -147,11 +217,23 @@ export function AdminPropertiesPage() {
     selectedPropertyId
       ? {
           propertyId: selectedPropertyId,
-          from: Date.now() - DAY_MS,
-          to: Date.now() + 14 * DAY_MS,
+          from: jobsWindow.from,
+          to: jobsWindow.to,
         }
       : "skip"
   ) as PropertyJob[] | undefined;
+
+  const assignments = useQuery(
+    api.propertyAssignments.listByProperty,
+    selectedPropertyId ? { propertyId: selectedPropertyId } : "skip"
+  ) as PropertyAssignment[] | undefined;
+
+  const cleanerUsers = useQuery(api.users.listByRole, { role: "CLEANER" }) as
+    | AssignmentUser[]
+    | undefined;
+  const inspectorUsers = useQuery(api.users.listByRole, { role: "INSPECTOR" }) as
+    | AssignmentUser[]
+    | undefined;
 
   const [planForm, setPlanForm] = useState({
     planType: "CLEANING" as "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE",
@@ -164,6 +246,41 @@ export function AdminPropertiesPage() {
     priority: "MEDIUM" as "LOW" | "MEDIUM" | "HIGH" | "URGENT",
     notes: "",
   });
+  const [selectedCleanerId, setSelectedCleanerId] = useState("");
+  const [selectedInspectorId, setSelectedInspectorId] = useState("");
+
+  const activeAssignments = useMemo(() => {
+    return (assignments ?? [])
+      .filter((assignment) => assignment.isActive)
+      .sort((left, right) => (left.user?.name ?? "").localeCompare(right.user?.name ?? ""));
+  }, [assignments]);
+
+  const cleanerAssignments = useMemo(() => {
+    return activeAssignments.filter((assignment) => assignment.assignmentRole === "CLEANER");
+  }, [activeAssignments]);
+
+  const inspectorAssignments = useMemo(() => {
+    return activeAssignments.filter((assignment) => assignment.assignmentRole === "INSPECTOR");
+  }, [activeAssignments]);
+
+  const availableCleaners = useMemo(() => {
+    const assignedIds = new Set(cleanerAssignments.map((assignment) => assignment.userId));
+    return (cleanerUsers ?? [])
+      .filter((user) => user.isActive && !assignedIds.has(user._id))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [cleanerAssignments, cleanerUsers]);
+
+  const availableInspectors = useMemo(() => {
+    const assignedIds = new Set(inspectorAssignments.map((assignment) => assignment.userId));
+    return (inspectorUsers ?? [])
+      .filter((user) => user.isActive && !assignedIds.has(user._id))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [inspectorAssignments, inspectorUsers]);
+
+  useEffect(() => {
+    setSelectedCleanerId("");
+    setSelectedInspectorId("");
+  }, [selectedPropertyId]);
 
   async function handleCreateProperty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -234,6 +351,49 @@ export function AdminPropertiesPage() {
       toast.success(property.isArchived ? "Property restored" : "Property archived");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to update archive state");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleAssignUser(
+    assignmentRole: "CLEANER" | "INSPECTOR",
+    userId: string
+  ) {
+    if (!selectedPropertyId || userId.length === 0) {
+      toast.error("Choose a user to assign");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await assignProperty({
+        propertyId: selectedPropertyId,
+        userId: userId as Id<"users">,
+        assignmentRole,
+      });
+
+      if (assignmentRole === "CLEANER") {
+        setSelectedCleanerId("");
+      } else {
+        setSelectedInspectorId("");
+      }
+
+      toast.success(`${assignmentRole === "CLEANER" ? "Cleaner" : "Inspector"} assigned`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign user");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleUnassignUser(assignmentId: Id<"propertyAssignments">) {
+    setIsSaving(true);
+    try {
+      await unassignProperty({ assignmentId });
+      toast.success("Assignment removed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to remove assignment");
     } finally {
       setIsSaving(false);
     }
@@ -609,6 +769,45 @@ export function AdminPropertiesPage() {
             >
               Save Property Changes
             </button>
+
+            <div className="border-t border-border pt-4">
+              <div className="mb-3">
+                <h3 className="text-base font-bold">Assignments</h3>
+                <p className="text-sm text-slate-600">
+                  Active assignments control who is available for this property in dispatch.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <AssignmentRoleSection
+                  availableUsers={availableCleaners}
+                  assignments={cleanerAssignments}
+                  buttonLabel="Assign Cleaner"
+                  disabled={isSaving || selectedProperty.isArchived === true}
+                  emptyLabel="No active cleaners assigned."
+                  loading={assignments === undefined || cleanerUsers === undefined}
+                  roleLabel="Cleaners"
+                  selectedUserId={selectedCleanerId}
+                  setSelectedUserId={setSelectedCleanerId}
+                  onAssign={() => void handleAssignUser("CLEANER", selectedCleanerId)}
+                  onUnassign={(assignmentId) => void handleUnassignUser(assignmentId)}
+                />
+
+                <AssignmentRoleSection
+                  availableUsers={availableInspectors}
+                  assignments={inspectorAssignments}
+                  buttonLabel="Assign Inspector"
+                  disabled={isSaving || selectedProperty.isArchived === true}
+                  emptyLabel="No active inspectors assigned."
+                  loading={assignments === undefined || inspectorUsers === undefined}
+                  roleLabel="Inspectors"
+                  selectedUserId={selectedInspectorId}
+                  setSelectedUserId={setSelectedInspectorId}
+                  onAssign={() => void handleAssignUser("INSPECTOR", selectedInspectorId)}
+                  onUnassign={(assignmentId) => void handleUnassignUser(assignmentId)}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="space-y-4 rounded-2xl border border-border bg-white p-4">
@@ -841,6 +1040,97 @@ export function AdminPropertiesPage() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function AssignmentRoleSection(props: {
+  roleLabel: string;
+  assignments: PropertyAssignment[];
+  availableUsers: AssignmentUser[];
+  selectedUserId: string;
+  setSelectedUserId: (value: string) => void;
+  onAssign: () => void;
+  onUnassign: (assignmentId: Id<"propertyAssignments">) => void;
+  buttonLabel: string;
+  emptyLabel: string;
+  loading: boolean;
+  disabled: boolean;
+}) {
+  const {
+    roleLabel,
+    assignments,
+    availableUsers,
+    selectedUserId,
+    setSelectedUserId,
+    onAssign,
+    onUnassign,
+    buttonLabel,
+    emptyLabel,
+    loading,
+    disabled,
+  } = props;
+
+  return (
+    <div className="rounded-xl border border-border bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h4 className="font-semibold">{roleLabel}</h4>
+        <span className="text-xs font-semibold text-slate-500">{assignments.length} active</span>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-slate-500">Loading assignments...</p>
+      ) : assignments.length === 0 ? (
+        <p className="text-sm text-slate-500">{emptyLabel}</p>
+      ) : (
+        <div className="space-y-2">
+          {assignments.map((assignment) => (
+            <div
+              key={assignment._id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white p-2"
+            >
+              <div>
+                <p className="text-sm font-semibold">{assignment.user?.name ?? "Unknown user"}</p>
+                <p className="text-xs text-slate-500">{assignment.user?.email ?? "No email"}</p>
+              </div>
+              <button
+                className="field-button secondary px-3"
+                disabled={disabled}
+                onClick={() => onUnassign(assignment._id)}
+                type="button"
+              >
+                Unassign
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <select
+          className="input"
+          disabled={disabled || loading || availableUsers.length === 0}
+          onChange={(event) => setSelectedUserId(event.target.value)}
+          value={selectedUserId}
+        >
+          <option value="">
+            {availableUsers.length === 0 ? "No available users" : "Select a user..."}
+          </option>
+          {availableUsers.map((user) => (
+            <option key={user._id} value={user._id}>
+              {user.name} | {user.email}
+            </option>
+          ))}
+        </select>
+        <button
+          className="field-button secondary px-4"
+          disabled={disabled || loading || selectedUserId.length === 0}
+          onClick={onAssign}
+          type="button"
+        >
+          {buttonLabel}
+        </button>
+      </div>
     </div>
   );
 }

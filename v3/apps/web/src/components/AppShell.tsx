@@ -1,6 +1,14 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { Building2, CalendarDays, ClipboardList, Clock3, House, Shield } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  ClipboardList,
+  Clock3,
+  House,
+  Shield,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxCount } from "@/hooks/useOutboxCount";
@@ -70,6 +78,16 @@ export function AppShell() {
         >
           <Clock3 className="mr-1 inline-block h-4 w-4" /> History
         </NavLink>
+        {isAdmin && (
+          <NavLink
+            to="/schedule"
+            className={({ isActive }) =>
+              `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
+            }
+          >
+            <SlidersHorizontal className="mr-1 inline-block h-4 w-4" /> Dispatch
+          </NavLink>
+        )}
         {isAdmin && (
           <NavLink
             to="/admin"

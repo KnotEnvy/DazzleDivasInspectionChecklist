@@ -5,17 +5,19 @@ Hand this to the next engineering team so they can finish the v3 rebuild into a 
 
 This is not a QA-only handoff. It is a delivery blueprint for missing core product capabilities:
 - Property management (admin CRUD)
+- User administration (admin-managed staffing)
 - Cleaning schedules per property
 - Calendar planning for cleaners + inspectors
 - Competitive capability benchmarking (Breezeway-level baseline)
 
-## Current State (As Of March 5, 2026 - End Of Day Update)
+## Current State (As Of March 6, 2026 - Session Update)
 
 ### What v3 already has
 - Bun monorepo with React + Vite web app and Convex backend.
 - Convex Auth with 3 roles: `ADMIN`, `CLEANER`, `INSPECTOR`.
 - New signup defaults to `CLEANER`.
 - Admin role can change user roles in Admin Console.
+- Admin still cannot create users from the app yet.
 - Checklist execution core:
   - Create checklist
   - Room/task/photo tracking
@@ -26,6 +28,7 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
   - create/edit/search/archive-unarchive
   - operations metadata fields (`timezone`, `accessInstructions`, `entryMethod`, `serviceNotes`)
   - schedule summary + assignment summary visibility
+  - cleaner/inspector assignment management
 - Scheduling/job data model shipped:
   - `servicePlans`
   - `jobs`
@@ -35,6 +38,16 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
   - currently used for 14-day generation windows
 - Field schedule route shipped:
   - `/my-schedule` list + simple week calendar + job detail drawer
+- Admin dispatch route shipped:
+  - `/schedule` with week/day view
+  - filters (`assignee`, `property`, `status`, `job type`)
+  - job detail drawer
+  - checklist start/open action from job drawer
+- Admin dispatch controls shipped:
+  - reassign assignee
+  - reschedule start/end
+  - status transitions (`SCHEDULED`/`IN_PROGRESS`/`BLOCKED`/`CANCELLED`)
+  - overlap guardrails + archived/inactive property guardrails
 - Job/checklist convergence shipped (core linkage):
   - start checklist from job via `jobId`
   - `jobs.linkedInspectionId` set on start
@@ -44,8 +57,9 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
   - `v3/BENCHMARK_MATRIX.md`
 
 ### What is still missing
-- No admin global dispatch route (`/schedule`) yet.
-- No admin reassign/reschedule/conflict-check UX yet.
+- No admin user creation flow yet (staff creation still depends on external signup/manual setup).
+- No admin month view or richer dispatch polish yet.
+- Inspection execution UI is still summary-only (room/task/photo interaction surface not shipped).
 - Offline outbox is still limited (mostly checklist creation only).
 - No full offline replay/conflict-resolution policy implementation yet.
 - No notification/messaging layer yet.
@@ -55,9 +69,9 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
   - job/checklist lifecycle regression checks
   - offline replay/conflict correctness
 
-## Handoff Update - What Was Completed In This Batch (March 5, 2026)
+## Handoff Update - Recent Batch Progress
 
-### Completed from prior "First 72-Hour Task List"
+### Completed from prior "First 72-Hour Task List" (March 5, 2026)
 1. `/admin/properties` implemented end-to-end.
 2. `servicePlans` + `jobs` (+ `jobEvents`) schema and indexes added.
 3. `scheduling.generateJobs` implemented for selected date windows (14-day flow supported).
@@ -65,9 +79,27 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
 5. "Start Checklist" from job details shipped and linked to `jobs.linkedInspectionId`.
 6. Benchmark matrix published with gap severity mapping.
 
+### Completed in current session (March 6, 2026)
+1. `/schedule` admin dispatch board implemented with week/day views, filters, and job drawer.
+2. Admin dispatch actions shipped:
+   - reassign assignee
+   - reschedule start/end
+   - status transitions (`SCHEDULED`/`IN_PROGRESS`/`BLOCKED`/`CANCELLED`)
+3. Dispatch conflict guardrails shipped:
+   - overlapping assignments
+   - archived/inactive property guardrails
+4. Property assignment management hardened inside `/admin/properties`:
+   - assign cleaner
+   - assign inspector
+   - unassign active staff
+5. Admin properties render-loop/query stability fixes shipped.
+
 ### Important implementation notes for next team
 - `CUSTOM_RRULE` is represented in schema but not yet executed by generator logic (currently skipped).
-- Assignment visibility exists on property detail, but dedicated assignment management UX inside `/admin/properties` still needs hardening.
+- `/schedule` is now usable for week/day dispatch, but month view and deeper dispatch polish remain open.
+- Dispatch reassignment depends on active property assignments; those can now be managed in `/admin/properties`.
+- Admin can change roles, but still cannot create staff users in-app.
+- Inspection UI is still summary-only, and offline outbox support is still create-checklist-first.
 - Job status flow is now linked to checklist completion, but admin override flow for incomplete checklists is not implemented.
 
 ## Product Target
@@ -120,6 +152,32 @@ Admin can create, edit, search, archive, and assign properties from the app.
 ### Done criteria
 - Admin can create property and it appears immediately for assignment/scheduling flows.
 - Archived properties are hidden from active job creation.
+
+## Workstream A1 - User Administration (Admin)
+
+### Outcome
+Admin can create staff users and set initial role/status without CLI or external signup workarounds.
+
+### Backend tasks
+- Add admin-only user creation flow compatible with Convex Auth.
+- Enforce unique email constraints and valid role assignment.
+- Decide creation path explicitly:
+  - invite email flow, or
+  - temporary password/manual credential bootstrap
+- Keep user creation auditable.
+
+### Web tasks
+- Extend Admin Console with create-user form.
+- Capture at minimum:
+  - name
+  - email
+  - initial role
+  - activation/invite state
+- New users should appear immediately in assignment/dispatch flows.
+
+### Done criteria
+- Admin can create `CLEANER`, `INSPECTOR`, and `ADMIN` users from the app.
+- No CLI/manual auth-table workaround is required for normal staffing operations.
 
 ## Workstream B - Scheduling Engine (Per Property)
 
@@ -277,13 +335,15 @@ Define explicit capability targets and close gaps intentionally, not by guesswor
 
 ### M1 (2-3 weeks): Operational Baseline
 - Workstream A complete
+- Workstream A1 basic
 - Workstream B (basic)
 - Workstream C (week/day view)
 - Workstream D (link job -> inspection)
-Status update (March 5, 2026):
-- A: largely complete (assignment UX hardening still open)
+Status update (March 6, 2026):
+- A: complete
+- A1: not started
 - B: basic complete (`CUSTOM_RRULE` still pending)
-- C: assignee view complete (`/my-schedule`), admin global dispatch still open
+- C: assignee view complete (`/my-schedule`), admin week/day dispatch complete, month view still open
 - D: core link complete; admin override path still open
 
 ### M2 (2 weeks): Field-Ready Reliability
@@ -310,19 +370,22 @@ Status update (March 5, 2026):
   - offline replay correctness
 
 ## Next 72-Hour Task List For Incoming Team
-1. Build `/schedule` admin dispatch board (week/day first) with filters: assignee, property, status, job type.
-2. Add admin job actions in dispatch UI:
-   - reassign assignee
-   - reschedule start/end
-   - status transition controls (`SCHEDULED`/`IN_PROGRESS`/`BLOCKED`/`CANCELLED`)
-3. Add conflict checks for dispatch updates:
-   - overlapping assignments
-   - archived/inactive property guardrails
-4. Expand offline outbox beyond checklist creation:
+1. Add admin user creation to Admin Console so staff accounts can be created without CLI/manual signup.
+   - choose invite flow vs temporary credential bootstrap
+   - ensure new users appear immediately in assignment/dispatch flows
+2. Expand inspection execution UI beyond summary cards:
+   - room detail panel or route
+   - task toggles
+   - room notes
+   - photo metadata capture
+3. Expand offline outbox beyond checklist creation:
    - task completion toggles
    - room notes
    - photo metadata capture
    - job status transitions
+4. Add field-safe job status mutation + UI path for cleaners/inspectors:
+   - allow `IN_PROGRESS` / `BLOCKED` transitions for assignee-owned jobs
+   - keep `COMPLETED` tied to checklist completion
 5. Implement replay conflict policy + diagnostics UI:
    - server wins for schedule ownership fields
    - client wins for newer local evidence fields
@@ -333,7 +396,7 @@ Status update (March 5, 2026):
 
 ## Ready-For-User-Testing Gate
 Proceed to broad user testing only when:
-- Admin can operate properties + schedules without CLI.
+- Admin can operate properties + schedules + staffing without CLI.
 - Cleaner and inspector have usable upcoming-jobs calendar.
 - Scheduled job lifecycle works through checklist completion.
 - Offline mode covers real field actions, not just checklist creation.
