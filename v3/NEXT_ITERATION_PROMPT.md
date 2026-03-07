@@ -25,24 +25,29 @@ Then inspect the current implementation before changing anything, especially:
 - Property management is shipped.
 - Service plans and generated jobs are shipped.
 - Default assignee per service plan is shipped.
+- Manual turnover job creation is shipped on `/schedule`.
+- Unassigned-job dispatch flow is shipped.
+- Dispatch can assign any active cleaner/inspector with the required role.
 - Checklist template management is shipped at `/admin/templates`.
 - Property-derived checklist generation from bedroom/bathroom counts is shipped.
 - Property checklist preview is shipped.
 - Room-by-room checklist execution is shipped with tasks, photos, notes, room completion, and checklist completion.
+- `/my-schedule` is shipped as the primary worker operating screen with start/resume checklist as the default action.
+- Assignee-safe worker job status controls (`IN_PROGRESS`, `BLOCKED`) are shipped.
 - Open self-signup still exists and should be treated as a production blocker.
 - Per-property checklist overrides are not shipped yet.
 - Offline replay is not shipped yet.
-- `/my-schedule` still needs stronger worker execution flow.
+- Turnover-intake metadata is not shipped yet.
 
 ## Priority For This Iteration
 
-1. Strengthen `/my-schedule` as the primary worker operating screen.
-2. Add assignee-safe worker job status controls (`IN_PROGRESS`, `BLOCKED`) for the assigned user only.
-3. Make start/resume checklist the default action for workers from schedule/job UI.
-4. Preserve the existing rule that `COMPLETED` should stay tied to checklist completion.
-5. Keep the UX mobile-first and room-first, using `old_pics/` as visual reference for field workflow quality.
+1. Disable or restrict open self-signup on `/login`.
+2. Add turnover-intake metadata to manual jobs and dispatch UI.
+3. Add per-property checklist overrides.
+4. Expand offline outbox + replay for field execution.
+5. Preserve the existing rule that `COMPLETED` should stay tied to checklist completion.
 
-Do not jump to Breezeway-style expansion yet unless the worker assignment/execution flow is solid first.
+Do not jump to broader Breezeway-style expansion yet unless production access control, turnover intake, and offline reliability are solid first.
 
 ## Implementation Expectations
 
@@ -54,9 +59,4 @@ Do not jump to Breezeway-style expansion yet unless the worker assignment/execut
 
 If you find a blocker or ambiguity, resolve it from the codebase and handoff docs rather than asking unless absolutely necessary.
 
-## End Deliverable
 
-End with:
-- what changed
-- what was verified
-- the next highest-value task after this slice

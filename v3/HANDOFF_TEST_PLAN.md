@@ -10,7 +10,7 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
 - Calendar planning for cleaners + inspectors
 - Competitive capability benchmarking (Breezeway-level baseline)
 
-## Current State (As Of March 6, 2026 - Session Update)
+## Current State (As Of March 7, 2026 - Session Update)
 
 ### What v3 already has
 - Bun monorepo with React + Vite web app and Convex backend.
@@ -56,17 +56,28 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
   - `scheduling.generateJobs({ from, to })`
   - currently used for 14-day generation windows
 - Field schedule route shipped:
-  - `/my-schedule` list + simple week calendar + job detail drawer
+  - `/my-schedule` worker-focused operating screen
+  - current-job focus card
+  - explicit start/resume checklist CTA
+  - assignee-safe worker status controls (`IN_PROGRESS`, `BLOCKED`)
+  - upcoming list + week calendar
 - Admin dispatch route shipped:
   - `/schedule` with week/day view
   - filters (`assignee`, `property`, `status`, `job type`)
+  - manual turnover job creation
+  - unassigned-job queue
   - job detail drawer
   - checklist start/open action from job drawer
 - Admin dispatch controls shipped:
   - reassign assignee
+  - clear assignee / leave unassigned
   - reschedule start/end
   - status transitions (`SCHEDULED`/`IN_PROGRESS`/`BLOCKED`/`CANCELLED`)
   - overlap guardrails + archived/inactive property guardrails
+- Dispatch assignment flow now supports flexible daily staffing:
+  - manual jobs can be created with or without an assignee
+  - dispatch can assign any active cleaner/inspector with the required role
+  - property assignments remain useful as roster/preference data, not a hard dispatch gate
 - Job/checklist convergence shipped (core linkage):
   - start checklist from job via `jobId`
   - `jobs.linkedInspectionId` set on start
@@ -79,14 +90,15 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
 - No admin month view or richer dispatch polish yet.
 - Open self-signup still exists on `/login`; this should be disabled or restricted before production use.
 - No password reset / invite-email flow yet for admin-created staff.
+- No turnover-intake metadata layer yet.
+  - Jobs can now be created manually, but there is still no first-class `source`, `client`, or arrival/check-in deadline model for email/text-driven intake.
 - No property-specific checklist override layer yet.
   - Today the model is: global base template + room generation rules + property bedroom/bathroom counts.
   - Admin cannot yet customize tasks/room order per property without editing the shared base template.
 - Offline outbox is still limited (mostly checklist creation only).
 - No full offline replay/conflict-resolution policy implementation yet.
-- Cleaner/inspector job execution controls still need hardening on `/my-schedule`.
-  - Assignee-safe `IN_PROGRESS` / `BLOCKED` transitions are still not the primary worker flow.
-  - Resume/open-current-checklist flow can be tightened further.
+- Worker mobile execution polish is still open beyond the core flow.
+  - `/my-schedule` is now usable as the primary worker screen, but room-navigation speed and issue-capture ergonomics can still improve.
 - No notification/messaging layer yet.
 - No reporting primitives yet (completion rate, SLA misses, photo compliance).
 - M1/M2 test coverage is still thin for:
@@ -125,10 +137,28 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
 10. Property page now includes live checklist preview and starter-template bootstrap.
 11. Field checklist execution UI is no longer summary-only; workers can execute room-by-room with tasks, photos, notes, room completion, and checklist completion.
 
+### Completed in follow-up session (March 7, 2026)
+1. `/my-schedule` upgraded into the primary worker operating screen.
+2. Worker-safe job status controls shipped:
+   - assigned user can move job to `IN_PROGRESS`
+   - assigned user can move job to `BLOCKED`
+   - `COMPLETED` remains tied to checklist completion
+3. Start/resume checklist is now the primary worker CTA from schedule UI.
+4. `/schedule` now supports manual turnover dispatch:
+   - create manual jobs without a service plan
+   - create jobs unassigned or assigned
+   - visible unassigned queue
+5. Dispatch staffing is no longer hard-coupled to property assignments.
+   - any active user with the required role can be assigned
+   - property assignments remain useful for staffing visibility/preferences
+6. Assigned workers can start linked checklist execution even when dispatch assignment was made outside the property-assignment roster model.
+
 ### Important implementation notes for next team
 - `CUSTOM_RRULE` is represented in schema but not yet executed by generator logic (currently skipped).
-- `/schedule` is now usable for week/day dispatch, but month view and deeper dispatch polish remain open.
-- Dispatch reassignment depends on active property assignments; those can now be managed in `/admin/properties`.
+- `/schedule` is now usable for both recurring-plan jobs and manual turnover dispatch, but month view and deeper dispatch polish remain open.
+- Dispatch reassignment no longer depends on property assignments.
+  - Role compatibility and overlap checks still apply.
+  - Property assignments should now be treated as roster/preference data, not as the only eligible-assignee source.
 - Admin user creation exists, but it is still a manual bootstrap flow rather than invite/reset-email flow.
 - Template library is now a global base checklist model.
   - `rooms.generationMode` controls whether a room appears once, once per bedroom, or once per bathroom.
@@ -138,6 +168,9 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
   - Use those screenshots as guidance for room-first field UX, not as a strict architecture reference.
 - Inspection UI now supports room/task/photo interaction, but offline outbox support is still create-checklist-first.
 - Job status flow is now linked to checklist completion, but admin override flow for incomplete checklists is not implemented.
+- The product now supports two job-input models:
+  - recurring service plans for predictable work
+  - manual admin-created jobs for turnover work arriving by email/text
 
 ## Product Target
 Deliver a field-first operations app where:
@@ -339,8 +372,6 @@ Match and exceed the practical field workflow of the old Dazzle Divas app before
   - room completion
 
 ### What is still needed to feel fully aligned with the old app
-- Make worker start/resume flow faster from `/my-schedule`.
-  - One obvious "Start work" / "Resume checklist" action should be the default assignee path.
 - Improve mobile room navigation polish.
   - The old app was very list-driven and quick to scan.
   - v3 should keep its stronger data model but tighten the tap path and visual hierarchy for field users.
@@ -402,25 +433,30 @@ Define explicit capability targets and close gaps intentionally, not by guesswor
 ## Recommended Next Build Focus After Legacy Alignment
 
 ### Priority theme
-Move from "jobs exist" to "dispatch is operationally strong."
+Move from "dispatch works" to "turnover intake and field reliability are production-safe."
 
 ### Recommended next slice
-Strengthen job assignment and worker execution flows before adding wider Breezeway-style surface area.
+Lock down production access and finish the gaps that still block real operational rollout.
 
 ### Concrete next tasks
-1. Make `/my-schedule` the default worker operating screen.
-   - clearer current job card
-   - explicit start/resume checklist CTA
-   - assignee-safe status changes (`IN_PROGRESS`, `BLOCKED`)
-2. Add manual job creation for admins.
-   - not every assignment will come from a recurring plan
-3. Add dispatch ergonomics on `/schedule`.
-   - month view
-   - drag/drop or faster reassignment/reschedule actions
-   - stronger unassigned-job workflow
-4. Add per-property checklist overrides.
+1. Disable or restrict open self-signup on `/login`.
+   - admin-created staff should be the normal production staffing path
+2. Add turnover-intake metadata to manual jobs.
+   - source (`EMAIL`, `TEXT`, `PHONE`, `MANUAL`)
+   - client/account label
+   - arrival/check-in deadline
+3. Add per-property checklist overrides.
    - this closes remaining old-app operational gaps and supports property-specific standards
-5. Then evaluate Breezeway-style additions in this order:
+4. Expand offline outbox + replay for field execution.
+   - task toggles
+   - room notes
+   - photo metadata
+   - worker job status changes
+5. Add dispatch ergonomics on `/schedule`.
+   - month view
+   - faster reassignment/reschedule actions
+   - stronger daily staffing flow
+6. Then evaluate Breezeway-style additions in this order:
    - messaging/notifications
    - issue escalation/follow-up tasks
    - reporting/SLA dashboards
@@ -438,7 +474,7 @@ Status update (March 6, 2026):
 - A: complete
 - A1: basic complete (manual bootstrap flow shipped; invite/reset flow still open)
 - B: basic complete (`CUSTOM_RRULE` still pending)
-- C: assignee view complete (`/my-schedule`), admin week/day dispatch complete, month view still open
+- C: assignee view complete (`/my-schedule`), admin week/day dispatch complete, manual turnover dispatch complete, month view still open
 - D: core link complete; admin override path still open
 
 ### M2 (2 weeks): Field-Ready Reliability
@@ -449,7 +485,8 @@ Status update (March 6, 2026):
 - partially started
 - room-by-room field execution shipped
 - offline replay/conflict handling still not started
-- worker schedule/status polish still open
+- worker schedule/status core flow shipped
+- offline replay/conflict handling still open
 
 ### M3 (1-2 weeks): Competitive Hardening
 - Workstream F matrix closed for P0/P1 gaps
@@ -471,9 +508,10 @@ Status update (March 6, 2026):
 1. Disable or restrict open self-signup on `/login` before production use.
    - decide whether sign-in becomes staff-only
    - keep admin-created user flow as the normal staffing path
-2. Add assignee-safe worker execution controls on `/my-schedule`.
-   - allow `IN_PROGRESS` / `BLOCKED` transitions for assignee-owned jobs
-   - make start/resume checklist the primary worker action
+2. Add turnover-intake metadata to jobs and dispatch UI.
+   - capture source (`EMAIL`, `TEXT`, `PHONE`, `MANUAL`)
+   - capture client/account label
+   - capture arrival/check-in deadline
 3. Add per-property checklist override support.
    - admin should be able to adjust checklist content for one property without changing the global base template
 4. Expand offline outbox beyond checklist creation:
@@ -486,8 +524,8 @@ Status update (March 6, 2026):
    - client wins for newer local evidence fields
 6. Add dispatch polish for admins:
    - month view
-   - stronger unassigned-job workflow
    - faster reassignment/reschedule interactions
+   - stronger daily staffing workflow
 7. Add test coverage for:
    - schedule generation edge cases (timezone, biweekly/monthly boundaries)
    - property-derived checklist generation (`PER_BEDROOM`, `PER_BATHROOM`)
