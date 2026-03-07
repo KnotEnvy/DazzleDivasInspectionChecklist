@@ -6,7 +6,7 @@ Start by reading:
 - `D:\Javascript Webapps\DazzleDivasInspectionChecklist\v3\HANDOFF_TEST_PLAN.md`
 - `D:\Javascript Webapps\DazzleDivasInspectionChecklist\v3\BENCHMARK_MATRIX.md`
 
-Then inspect the current implementation before changing anything, especially:
+These are some of the more important modules we are working with:
 - `v3/apps/web/src/routes/AdminPropertiesPage.tsx`
 - `v3/apps/web/src/routes/AdminTemplatesPage.tsx`
 - `v3/apps/web/src/routes/InspectionPage.tsx`
@@ -57,6 +57,6 @@ Do not jump to broader Breezeway-style expansion yet unless production access co
 - Keep role/permission checks enforced in backend mutations.
 - Do not revert unrelated user changes.
 
-If you find a blocker or ambiguity, resolve it from the codebase and handoff docs rather than asking unless absolutely necessary.
+- If you find a blocker or ambiguity, resolve it from the codebase and handoff docs rather than asking unless absolutely necessary.
 
 
