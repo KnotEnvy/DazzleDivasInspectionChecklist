@@ -17,15 +17,34 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
 - Convex Auth with 3 roles: `ADMIN`, `CLEANER`, `INSPECTOR`.
 - New signup defaults to `CLEANER`.
 - Admin role can change user roles in Admin Console.
-- Admin still cannot create users from the app yet.
+- Admin can create users from the app with initial password, role, and activation state.
 - Checklist execution core:
   - Create checklist
   - Room/task/photo tracking
   - Complete checklist
   - History view
+- Field checklist execution is now room-driven:
+  - select room
+  - complete room tasks
+  - upload/remove proof photos
+  - save room notes
+  - mark room complete
+  - finalize overall checklist
+- Checklist template admin route shipped: `/admin/templates` with:
+  - room CRUD
+  - task CRUD
+  - active/inactive room management
+  - room generation mode (`SINGLE`, `PER_BEDROOM`, `PER_BATHROOM`)
+  - starter template bootstrap from the app
+- Property-specific checklist generation shipped:
+  - property `bedrooms` / `bathrooms` fields exposed in admin UI
+  - checklist preview on `/admin/properties`
+  - new checklists derive room instances from base templates + property counts
 - Offline queue for checklist creation.
 - Admin property management route shipped: `/admin/properties` with:
   - create/edit/search/archive-unarchive
+  - bedroom/bathroom counts
+  - checklist preview from active templates
   - operations metadata fields (`timezone`, `accessInstructions`, `entryMethod`, `serviceNotes`)
   - schedule summary + assignment summary visibility
   - cleaner/inspector assignment management
@@ -57,11 +76,17 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
   - `v3/BENCHMARK_MATRIX.md`
 
 ### What is still missing
-- No admin user creation flow yet (staff creation still depends on external signup/manual setup).
 - No admin month view or richer dispatch polish yet.
-- Inspection execution UI is still summary-only (room/task/photo interaction surface not shipped).
+- Open self-signup still exists on `/login`; this should be disabled or restricted before production use.
+- No password reset / invite-email flow yet for admin-created staff.
+- No property-specific checklist override layer yet.
+  - Today the model is: global base template + room generation rules + property bedroom/bathroom counts.
+  - Admin cannot yet customize tasks/room order per property without editing the shared base template.
 - Offline outbox is still limited (mostly checklist creation only).
 - No full offline replay/conflict-resolution policy implementation yet.
+- Cleaner/inspector job execution controls still need hardening on `/my-schedule`.
+  - Assignee-safe `IN_PROGRESS` / `BLOCKED` transitions are still not the primary worker flow.
+  - Resume/open-current-checklist flow can be tightened further.
 - No notification/messaging layer yet.
 - No reporting primitives yet (completion rate, SLA misses, photo compliance).
 - M1/M2 test coverage is still thin for:
@@ -93,13 +118,25 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
    - assign inspector
    - unassign active staff
 5. Admin properties render-loop/query stability fixes shipped.
+6. Admin user creation shipped in-app with auditable bootstrap flow.
+7. Default worker assignment shipped on service plans so generated jobs route to the right worker.
+8. Checklist template manager shipped at `/admin/templates`.
+9. Checklist generation now derives repeated bedrooms/bathrooms from property counts.
+10. Property page now includes live checklist preview and starter-template bootstrap.
+11. Field checklist execution UI is no longer summary-only; workers can execute room-by-room with tasks, photos, notes, room completion, and checklist completion.
 
 ### Important implementation notes for next team
 - `CUSTOM_RRULE` is represented in schema but not yet executed by generator logic (currently skipped).
 - `/schedule` is now usable for week/day dispatch, but month view and deeper dispatch polish remain open.
 - Dispatch reassignment depends on active property assignments; those can now be managed in `/admin/properties`.
-- Admin can change roles, but still cannot create staff users in-app.
-- Inspection UI is still summary-only, and offline outbox support is still create-checklist-first.
+- Admin user creation exists, but it is still a manual bootstrap flow rather than invite/reset-email flow.
+- Template library is now a global base checklist model.
+  - `rooms.generationMode` controls whether a room appears once, once per bedroom, or once per bathroom.
+  - Property checklists are derived from active room templates plus property `bedrooms` / `bathrooms`.
+  - This is intentionally better than the old app's fixed room cloning, but there is still no per-property override layer.
+- Old-app visual references provided by product owner are in `old_pics/` at repo root.
+  - Use those screenshots as guidance for room-first field UX, not as a strict architecture reference.
+- Inspection UI now supports room/task/photo interaction, but offline outbox support is still create-checklist-first.
 - Job status flow is now linked to checklist completion, but admin override flow for incomplete checklists is not implemented.
 
 ## Product Target
@@ -286,6 +323,37 @@ Field execution works reliably with poor connectivity.
 ### Done criteria
 - A full room completion can be performed offline and eventually synced.
 
+## Legacy-App Alignment Remaining
+
+### Goal
+Match and exceed the practical field workflow of the old Dazzle Divas app before chasing broader platform expansion.
+
+### What is already at parity or better
+- Generated room-by-room checklist flow now exists in v3.
+- Bedroom and bathroom counts now actually affect checklist shape in v3.
+  - This did not exist in the old app.
+- Room execution now includes:
+  - task completion
+  - proof photo capture
+  - room notes
+  - room completion
+
+### What is still needed to feel fully aligned with the old app
+- Make worker start/resume flow faster from `/my-schedule`.
+  - One obvious "Start work" / "Resume checklist" action should be the default assignee path.
+- Improve mobile room navigation polish.
+  - The old app was very list-driven and quick to scan.
+  - v3 should keep its stronger data model but tighten the tap path and visual hierarchy for field users.
+- Add property-specific checklist overrides.
+  - Admin should be able to adjust a property's cleaning/inspection checklist without changing the shared base template for every property.
+- Add stronger issue capture for failed inspection items.
+  - Example: flag a room/task issue and preserve it in reporting/history.
+- Tighten test coverage around checklist generation and room completion guardrails.
+
+### Product reference files
+- Old screenshots: `old_pics/`
+- Old legacy app: `dazzle-divas-inspection/`
+
 ## Workstream F - Competitive Benchmark (Breezeway + Peers)
 
 ### Goal
@@ -331,6 +399,33 @@ Define explicit capability targets and close gaps intentionally, not by guesswor
 - Inspection evidence capture
 - Audit history for operational accountability
 
+## Recommended Next Build Focus After Legacy Alignment
+
+### Priority theme
+Move from "jobs exist" to "dispatch is operationally strong."
+
+### Recommended next slice
+Strengthen job assignment and worker execution flows before adding wider Breezeway-style surface area.
+
+### Concrete next tasks
+1. Make `/my-schedule` the default worker operating screen.
+   - clearer current job card
+   - explicit start/resume checklist CTA
+   - assignee-safe status changes (`IN_PROGRESS`, `BLOCKED`)
+2. Add manual job creation for admins.
+   - not every assignment will come from a recurring plan
+3. Add dispatch ergonomics on `/schedule`.
+   - month view
+   - drag/drop or faster reassignment/reschedule actions
+   - stronger unassigned-job workflow
+4. Add per-property checklist overrides.
+   - this closes remaining old-app operational gaps and supports property-specific standards
+5. Then evaluate Breezeway-style additions in this order:
+   - messaging/notifications
+   - issue escalation/follow-up tasks
+   - reporting/SLA dashboards
+   - differentiated workflows beyond baseline cleaning + inspection
+
 ## Suggested Milestones
 
 ### M1 (2-3 weeks): Operational Baseline
@@ -341,7 +436,7 @@ Define explicit capability targets and close gaps intentionally, not by guesswor
 - Workstream D (link job -> inspection)
 Status update (March 6, 2026):
 - A: complete
-- A1: not started
+- A1: basic complete (manual bootstrap flow shipped; invite/reset flow still open)
 - B: basic complete (`CUSTOM_RRULE` still pending)
 - C: assignee view complete (`/my-schedule`), admin week/day dispatch complete, month view still open
 - D: core link complete; admin override path still open
@@ -350,13 +445,16 @@ Status update (March 6, 2026):
 - Workstream E complete
 - Conflict handling + replay diagnostics
 - Role-based schedule UX polish
-Status update (March 5, 2026):
-- not started
+Status update (March 6, 2026):
+- partially started
+- room-by-room field execution shipped
+- offline replay/conflict handling still not started
+- worker schedule/status polish still open
 
 ### M3 (1-2 weeks): Competitive Hardening
 - Workstream F matrix closed for P0/P1 gaps
 - Reporting primitives (job completion rate, SLA misses, photo compliance)
-Status update (March 5, 2026):
+Status update (March 6, 2026):
 - matrix published; P0/P1 closure and reporting still open
 
 ## Technical Guardrails
@@ -370,27 +468,29 @@ Status update (March 5, 2026):
   - offline replay correctness
 
 ## Next 72-Hour Task List For Incoming Team
-1. Add admin user creation to Admin Console so staff accounts can be created without CLI/manual signup.
-   - choose invite flow vs temporary credential bootstrap
-   - ensure new users appear immediately in assignment/dispatch flows
-2. Expand inspection execution UI beyond summary cards:
-   - room detail panel or route
-   - task toggles
-   - room notes
-   - photo metadata capture
-3. Expand offline outbox beyond checklist creation:
+1. Disable or restrict open self-signup on `/login` before production use.
+   - decide whether sign-in becomes staff-only
+   - keep admin-created user flow as the normal staffing path
+2. Add assignee-safe worker execution controls on `/my-schedule`.
+   - allow `IN_PROGRESS` / `BLOCKED` transitions for assignee-owned jobs
+   - make start/resume checklist the primary worker action
+3. Add per-property checklist override support.
+   - admin should be able to adjust checklist content for one property without changing the global base template
+4. Expand offline outbox beyond checklist creation:
    - task completion toggles
    - room notes
    - photo metadata capture
    - job status transitions
-4. Add field-safe job status mutation + UI path for cleaners/inspectors:
-   - allow `IN_PROGRESS` / `BLOCKED` transitions for assignee-owned jobs
-   - keep `COMPLETED` tied to checklist completion
 5. Implement replay conflict policy + diagnostics UI:
    - server wins for schedule ownership fields
    - client wins for newer local evidence fields
-6. Add test coverage for:
+6. Add dispatch polish for admins:
+   - month view
+   - stronger unassigned-job workflow
+   - faster reassignment/reschedule interactions
+7. Add test coverage for:
    - schedule generation edge cases (timezone, biweekly/monthly boundaries)
+   - property-derived checklist generation (`PER_BEDROOM`, `PER_BATHROOM`)
    - job/checklist linkage lifecycle
    - offline replay conflict resolution
 

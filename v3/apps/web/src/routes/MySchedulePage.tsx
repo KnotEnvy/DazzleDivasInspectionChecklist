@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "react-router-dom";
 import type { Id } from "convex/_generated/dataModel";
@@ -8,16 +8,22 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
+type JobType = "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
+type WorkerEditableStatus = "IN_PROGRESS" | "BLOCKED";
+
 type ScheduleJob = {
   _id: Id<"jobs">;
   propertyId: Id<"properties">;
+  scheduledStart: number;
+  scheduledEnd: number;
+  assigneeId?: Id<"users">;
+  linkedInspectionId?: Id<"inspections">;
   propertyName: string;
   propertyAddress: string;
   propertyServiceNotes?: string;
-  scheduledStart: number;
-  scheduledEnd: number;
-  status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
-  jobType: "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
+  status: JobStatus;
+  jobType: JobType;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   assigneeName?: string | null;
   notes?: string;
@@ -28,8 +34,12 @@ type ScheduleJob = {
 type JobDetail = {
   _id: Id<"jobs">;
   propertyId: Id<"properties">;
-  status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
-  jobType: "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
+  assigneeId?: Id<"users">;
+  scheduledStart: number;
+  scheduledEnd: number;
+  status: JobStatus;
+  jobType: JobType;
+  priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   notes?: string;
   linkedInspectionId?: Id<"inspections">;
   checklistType: "CLEANING" | "INSPECTION" | null;
@@ -38,6 +48,14 @@ type JobDetail = {
     address: string;
     timezone?: string;
     serviceNotes?: string;
+    accessInstructions?: string;
+    entryMethod?: string;
+  } | null;
+  assignee?: {
+    _id: Id<"users">;
+    name: string;
+    role: "ADMIN" | "CLEANER" | "INSPECTOR";
+    isActive: boolean;
   } | null;
 };
 
@@ -59,12 +77,81 @@ function sameLocalDate(timestamp: number, date: Date) {
   );
 }
 
+function formatJobWindow(job: Pick<ScheduleJob, "scheduledStart" | "scheduledEnd">) {
+  return `${new Date(job.scheduledStart).toLocaleString()} - ${new Date(job.scheduledEnd).toLocaleTimeString(
+    [],
+    {
+      hour: "2-digit",
+      minute: "2-digit",
+    }
+  )}`;
+}
+
+function formatScheduleWindow(start: Date, end: Date) {
+  return `${start.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })} - ${end.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })}`;
+}
+
+function statusTone(status: JobStatus) {
+  switch (status) {
+    case "SCHEDULED":
+      return "border-sky-200 bg-sky-50 text-sky-700";
+    case "IN_PROGRESS":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "BLOCKED":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "CANCELLED":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    case "COMPLETED":
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
+function checklistActionLabel(job: Pick<ScheduleJob, "linkedInspectionId">) {
+  return job.linkedInspectionId ? "Resume Checklist" : "Start Checklist";
+}
+
+function workerFocusRank(job: ScheduleJob, now: number) {
+  if (job.linkedInspectionId && job.status === "IN_PROGRESS") {
+    return 0;
+  }
+
+  if (job.status === "IN_PROGRESS") {
+    return 1;
+  }
+
+  if (job.linkedInspectionId && job.status === "BLOCKED") {
+    return 2;
+  }
+
+  if (job.status === "BLOCKED") {
+    return 3;
+  }
+
+  if (job.linkedInspectionId) {
+    return 4;
+  }
+
+  if (job.scheduledStart <= now) {
+    return 5;
+  }
+
+  return 6;
+}
+
 export function MySchedulePage() {
   const navigate = useNavigate();
   const { user } = useCurrentUser();
   const [selectedJobId, setSelectedJobId] = useState<Id<"jobs"> | null>(null);
   const [startingChecklist, setStartingChecklist] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState<WorkerEditableStatus | null>(null);
   const [scheduleAnchor] = useState(() => Date.now());
+
   const windowStart = useMemo(() => startOfWeekLocal(new Date(scheduleAnchor)), [scheduleAnchor]);
   const windowEnd = useMemo(() => {
     return new Date(windowStart.getTime() + 13 * DAY_MS + (23 * 60 + 59) * 60 * 1000);
@@ -81,6 +168,7 @@ export function MySchedulePage() {
   ) as JobDetail | null | undefined;
 
   const createInspection = useMutation(api.inspections.create);
+  const updateMyStatus = useMutation(api.jobs.updateMyStatus);
 
   const weekDays = useMemo(() => {
     return Array.from({ length: 7 }).map((_, index) => {
@@ -92,60 +180,424 @@ export function MySchedulePage() {
     return weekDays.map((day) =>
       (jobs ?? [])
         .filter((job) => sameLocalDate(job.scheduledStart, day))
-        .sort((a, b) => a.scheduledStart - b.scheduledStart)
+        .sort((left, right) => left.scheduledStart - right.scheduledStart)
     );
   }, [jobs, weekDays]);
 
-  async function handleStartChecklist() {
-    if (!selectedJob) {
+  const prioritizedJob = useMemo(() => {
+    const now = Date.now();
+    return (jobs ?? [])
+      .slice()
+      .sort((left, right) => {
+        const rankDelta = workerFocusRank(left, now) - workerFocusRank(right, now);
+        if (rankDelta !== 0) {
+          return rankDelta;
+        }
+
+        return left.scheduledStart - right.scheduledStart;
+      })[0] ?? null;
+  }, [jobs]);
+
+  const upcomingJobs = useMemo(() => {
+    return (jobs ?? []).slice().sort((left, right) => left.scheduledStart - right.scheduledStart);
+  }, [jobs]);
+
+  const summary = useMemo(() => {
+    const activeJobs = jobs ?? [];
+    return {
+      total: activeJobs.length,
+      inProgress: activeJobs.filter((job) => job.status === "IN_PROGRESS").length,
+      blocked: activeJobs.filter((job) => job.status === "BLOCKED").length,
+      readyToResume: activeJobs.filter((job) => job.linkedInspectionId).length,
+    };
+  }, [jobs]);
+
+  useEffect(() => {
+    if (!jobs || jobs.length === 0) {
+      setSelectedJobId(null);
       return;
     }
 
-    if (selectedJob.linkedInspectionId) {
-      navigate(`/checklists/${selectedJob.linkedInspectionId}`);
+    if (!selectedJobId || !jobs.some((job) => job._id === selectedJobId)) {
+      setSelectedJobId(prioritizedJob?._id ?? jobs[0]._id);
+    }
+  }, [jobs, prioritizedJob, selectedJobId]);
+
+  async function handleOpenChecklist(
+    job: Pick<
+      ScheduleJob,
+      "_id" | "propertyId" | "assigneeId" | "linkedInspectionId" | "checklistType"
+    >
+  ) {
+    if (job.linkedInspectionId) {
+      navigate(`/checklists/${job.linkedInspectionId}`);
       return;
     }
 
-    if (!selectedJob.checklistType) {
+    if (!job.checklistType) {
       toast.error("This job type does not support checklist execution");
+      return;
+    }
+
+    if (!job.assigneeId) {
+      toast.error("This job must be assigned before a checklist can be started");
       return;
     }
 
     setStartingChecklist(true);
     try {
       const inspectionId = await createInspection({
-        propertyId: selectedJob.propertyId,
-        type: selectedJob.checklistType,
-        jobId: selectedJob._id,
+        propertyId: job.propertyId,
+        type: job.checklistType,
+        jobId: job._id,
       });
 
-      toast.success("Checklist started from job");
+      toast.success("Checklist opened from your schedule");
       navigate(`/checklists/${inspectionId}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to start checklist");
+      toast.error(error instanceof Error ? error.message : "Failed to open checklist");
     } finally {
       setStartingChecklist(false);
     }
   }
 
+  async function handleStatusChange(status: WorkerEditableStatus) {
+    if (!selectedJob) {
+      return;
+    }
+
+    setUpdatingStatus(status);
+    try {
+      await updateMyStatus({
+        jobId: selectedJob._id,
+        status,
+      });
+      toast.success(status === "IN_PROGRESS" ? "Job marked in progress" : "Job marked blocked");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update job status");
+    } finally {
+      setUpdatingStatus(null);
+    }
+  }
+
+  const selectedListJob = upcomingJobs.find((job) => job._id === selectedJobId) ?? prioritizedJob;
+  const selectedJobIsMine =
+    !!selectedJob?.assigneeId && !!user?._id && selectedJob.assigneeId === user._id;
+  const statusControlsLocked =
+    !selectedJob ||
+    !selectedJobIsMine ||
+    selectedJob.status === "COMPLETED" ||
+    selectedJob.status === "CANCELLED";
+
   return (
     <div className="space-y-5">
-      <div>
+      <div className="space-y-2">
         <h1 className="text-2xl font-bold">My Schedule</h1>
-        <p className="text-sm text-slate-600">
-          Upcoming jobs for {user?.role ?? "your role"} with one-tap checklist start.
+        <p className="max-w-2xl text-sm text-slate-600">
+          Start or resume checklist work directly from your schedule. Job completion still comes
+          from finishing the linked checklist.
         </p>
       </div>
 
-      <section className="rounded-2xl border border-border bg-white p-4">
-        <h2 className="mb-3 text-lg font-bold">Week View</h2>
+      <section className="grid gap-3 md:grid-cols-4">
+        <SummaryCard label="Jobs In Window" value={summary.total} />
+        <SummaryCard label="In Progress" value={summary.inProgress} />
+        <SummaryCard label="Blocked" value={summary.blocked} />
+        <SummaryCard label="Checklists Started" value={summary.readyToResume} />
+      </section>
+
+      <section className="rounded-3xl border border-border bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
+              Worker Focus
+            </p>
+            <h2 className="text-xl font-bold">
+              {selectedListJob ? selectedListJob.propertyName : "No job selected"}
+            </h2>
+            <p className="text-sm text-slate-600">
+              {selectedListJob
+                ? `${selectedListJob.jobType} | ${formatJobWindow(selectedListJob)}`
+                : `Your ${formatScheduleWindow(windowStart, windowEnd)} schedule is clear.`}
+            </p>
+          </div>
+          {selectedListJob && (
+            <span
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
+                selectedListJob.status
+              )}`}
+            >
+              {selectedListJob.status}
+            </span>
+          )}
+        </div>
+
+        {!selectedListJob ? (
+          <p className="mt-4 text-sm text-slate-500">No jobs scheduled in this two-week window.</p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-2xl border border-border bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">{selectedListJob.propertyAddress}</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Priority: {selectedListJob.priority ?? "MEDIUM"}
+                {selectedListJob.assigneeName ? ` | Assigned to ${selectedListJob.assigneeName}` : ""}
+              </p>
+              {selectedListJob.notes && (
+                <p className="mt-3 text-sm text-slate-600">{selectedListJob.notes}</p>
+              )}
+              {selectedListJob.propertyServiceNotes && (
+                <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  {selectedListJob.propertyServiceNotes}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(260px,1fr)]">
+              <button
+                className="field-button primary w-full px-5"
+                disabled={
+                  startingChecklist ||
+                  !selectedListJob.assigneeId ||
+                  selectedListJob.checklistType === null ||
+                  selectedListJob.status === "COMPLETED" ||
+                  selectedListJob.status === "CANCELLED"
+                }
+                onClick={() => void handleOpenChecklist(selectedListJob)}
+                type="button"
+              >
+                {startingChecklist ? "Opening Checklist..." : checklistActionLabel(selectedListJob)}
+              </button>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  className="field-button secondary w-full px-4"
+                  disabled={
+                    statusControlsLocked ||
+                    updatingStatus !== null ||
+                    selectedJob?.status === "IN_PROGRESS"
+                  }
+                  onClick={() => void handleStatusChange("IN_PROGRESS")}
+                  type="button"
+                >
+                  {updatingStatus === "IN_PROGRESS" ? "Saving..." : "Mark In Progress"}
+                </button>
+                <button
+                  className="field-button secondary w-full px-4"
+                  disabled={
+                    statusControlsLocked ||
+                    updatingStatus !== null ||
+                    selectedJob?.status === "BLOCKED"
+                  }
+                  onClick={() => void handleStatusChange("BLOCKED")}
+                  type="button"
+                >
+                  {updatingStatus === "BLOCKED" ? "Saving..." : "Mark Blocked"}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Use the checklist as the main work surface. Marking the checklist complete is what
+              closes the job.
+            </p>
+          </div>
+        )}
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)]">
+        <div className="rounded-3xl border border-border bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">Upcoming Jobs</h2>
+              <p className="text-sm text-slate-600">
+                One tap opens the checklist. Use Focus Job for full property details.
+              </p>
+            </div>
+            <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
+              {upcomingJobs.length} jobs
+            </span>
+          </div>
+
+          {jobs === undefined ? (
+            <p className="text-sm text-slate-500">Loading schedule...</p>
+          ) : upcomingJobs.length === 0 ? (
+            <p className="text-sm text-slate-500">No upcoming jobs in this window.</p>
+          ) : (
+            <div className="space-y-3">
+              {upcomingJobs.map((job) => (
+                <div
+                  key={job._id}
+                  className={`rounded-2xl border p-4 transition ${
+                    selectedJobId === job._id
+                      ? "border-brand-500 bg-brand-50"
+                      : "border-border bg-slate-50"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{job.propertyName}</p>
+                      <p className="text-sm text-slate-600">{formatJobWindow(job)}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {job.jobType} | Priority: {job.priority ?? "MEDIUM"}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
+                        job.status
+                      )}`}
+                    >
+                      {job.status}
+                    </span>
+                  </div>
+
+                  {(job.notes || job.propertyServiceNotes) && (
+                    <div className="mt-3 space-y-2">
+                      {job.notes && <p className="text-sm text-slate-600">{job.notes}</p>}
+                      {job.propertyServiceNotes && (
+                        <p className="text-xs text-amber-800">{job.propertyServiceNotes}</p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      className="field-button primary w-full px-4 sm:flex-1"
+                      disabled={
+                        startingChecklist ||
+                        !job.assigneeId ||
+                        job.checklistType === null ||
+                        job.status === "COMPLETED" ||
+                        job.status === "CANCELLED"
+                      }
+                      onClick={() => void handleOpenChecklist(job)}
+                      type="button"
+                    >
+                      {checklistActionLabel(job)}
+                    </button>
+                    <button
+                      className="field-button secondary w-full px-4 sm:flex-1"
+                      onClick={() => setSelectedJobId(job._id)}
+                      type="button"
+                    >
+                      Focus Job
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <aside className="rounded-3xl border border-border bg-white p-4 shadow-sm">
+          <h2 className="mb-3 text-lg font-bold">Job Details</h2>
+          {!selectedJobId ? (
+            <p className="text-sm text-slate-500">Choose a job to review field details.</p>
+          ) : selectedJob === undefined ? (
+            <p className="text-sm text-slate-500">Loading job details...</p>
+          ) : !selectedJob ? (
+            <p className="text-sm text-slate-500">Job not found.</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-border bg-slate-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">{selectedJob.property?.name ?? "Unknown property"}</p>
+                    <p className="text-sm text-slate-600">
+                      {selectedJob.property?.address ?? "No address on file"}
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
+                      selectedJob.status
+                    )}`}
+                  >
+                    {selectedJob.status}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-slate-600">
+                  {selectedJob.jobType} | {formatJobWindow(selectedJob)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Priority: {selectedJob.priority ?? "MEDIUM"}
+                  {selectedJob.assignee ? ` | ${selectedJob.assignee.name}` : ""}
+                </p>
+              </div>
+
+              {selectedJob.property?.serviceNotes && (
+                <DetailBlock label="Service Notes" value={selectedJob.property.serviceNotes} />
+              )}
+
+              {selectedJob.property?.accessInstructions && (
+                <DetailBlock
+                  label="Access Instructions"
+                  value={selectedJob.property.accessInstructions}
+                />
+              )}
+
+              {selectedJob.property?.entryMethod && (
+                <DetailBlock label="Entry Method" value={selectedJob.property.entryMethod} />
+              )}
+
+              {selectedJob.notes && <DetailBlock label="Job Notes" value={selectedJob.notes} />}
+
+              {!selectedJobIsMine && user?.role !== "ADMIN" && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  Only the assigned worker can change this job&apos;s status from My Schedule.
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-border p-4">
+                <h3 className="font-semibold">Status Controls</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Workers can move jobs between in-progress and blocked here. Completion still comes
+                  from the checklist flow.
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <button
+                    className="field-button secondary w-full px-4"
+                    disabled={
+                      statusControlsLocked ||
+                      updatingStatus !== null ||
+                      selectedJob.status === "IN_PROGRESS"
+                    }
+                    onClick={() => void handleStatusChange("IN_PROGRESS")}
+                    type="button"
+                  >
+                    {updatingStatus === "IN_PROGRESS" ? "Saving..." : "Mark In Progress"}
+                  </button>
+                  <button
+                    className="field-button secondary w-full px-4"
+                    disabled={
+                      statusControlsLocked ||
+                      updatingStatus !== null ||
+                      selectedJob.status === "BLOCKED"
+                    }
+                    onClick={() => void handleStatusChange("BLOCKED")}
+                    type="button"
+                  >
+                    {updatingStatus === "BLOCKED" ? "Saving..." : "Mark Blocked"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </aside>
+      </section>
+
+      <section className="rounded-3xl border border-border bg-white p-4 shadow-sm">
+        <div className="mb-3">
+          <h2 className="text-lg font-bold">This Week</h2>
+          <p className="text-sm text-slate-600">
+            Quick scan of the current week while your two-week list stays focused on action.
+          </p>
+        </div>
         <div className="grid gap-3 md:grid-cols-7">
           {weekDays.map((day, index) => (
-            <div key={day.toISOString()} className="rounded-xl border border-border bg-slate-50 p-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            <div key={day.toISOString()} className="rounded-2xl border border-border bg-slate-50 p-3">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
                 {day.toLocaleDateString(undefined, { weekday: "short" })}
               </p>
-              <p className="mb-2 text-sm font-semibold">{day.toLocaleDateString()}</p>
+              <p className="mb-3 text-sm font-semibold">{day.toLocaleDateString()}</p>
               <div className="space-y-2">
                 {jobsByDay[index].length === 0 ? (
                   <p className="text-xs text-slate-500">No jobs</p>
@@ -153,7 +605,7 @@ export function MySchedulePage() {
                   jobsByDay[index].map((job) => (
                     <button
                       key={job._id}
-                      className={`w-full rounded-lg border p-2 text-left text-xs transition ${
+                      className={`w-full rounded-2xl border p-2 text-left text-xs transition ${
                         selectedJobId === job._id
                           ? "border-brand-500 bg-brand-50"
                           : "border-border bg-white hover:border-brand-300"
@@ -165,11 +617,10 @@ export function MySchedulePage() {
                         {new Date(job.scheduledStart).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
-                        })}{" "}
-                        {job.jobType}
+                        })}
                       </p>
-                      <p className="text-slate-600">{job.propertyName}</p>
-                      <p className="text-slate-500">{job.status}</p>
+                      <p className="mt-1 text-slate-700">{job.propertyName}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{job.status}</p>
                     </button>
                   ))
                 )}
@@ -178,102 +629,24 @@ export function MySchedulePage() {
           ))}
         </div>
       </section>
+    </div>
+  );
+}
 
-      <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-white p-4">
-          <h2 className="mb-3 text-lg font-bold">Upcoming Jobs</h2>
-          {jobs === undefined ? (
-            <p className="text-sm text-slate-500">Loading schedule...</p>
-          ) : jobs.length === 0 ? (
-            <p className="text-sm text-slate-500">No upcoming jobs in this window.</p>
-          ) : (
-            <div className="space-y-2">
-              {jobs.map((job) => (
-                <button
-                  key={job._id}
-                  className={`w-full rounded-xl border p-3 text-left transition ${
-                    selectedJobId === job._id
-                      ? "border-brand-500 bg-brand-50"
-                      : "border-border bg-white hover:border-brand-300"
-                  }`}
-                  onClick={() => setSelectedJobId(job._id)}
-                  type="button"
-                >
-                  <p className="font-semibold">
-                    {job.propertyName} | {job.jobType}
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    {new Date(job.scheduledStart).toLocaleString()} -{" "}
-                    {new Date(job.scheduledEnd).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {job.status} | Priority: {job.priority ?? "MEDIUM"}
-                    {job.assigneeName ? ` | Assignee: ${job.assigneeName}` : ""}
-                  </p>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+function SummaryCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-border bg-white p-4">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="text-2xl font-bold">{value}</p>
+    </div>
+  );
+}
 
-        <div className="rounded-2xl border border-border bg-white p-4">
-          <h2 className="mb-3 text-lg font-bold">Job Details</h2>
-          {!selectedJobId ? (
-            <p className="text-sm text-slate-500">Select a job to view details.</p>
-          ) : selectedJob === undefined ? (
-            <p className="text-sm text-slate-500">Loading job details...</p>
-          ) : !selectedJob ? (
-            <p className="text-sm text-slate-500">Job not found.</p>
-          ) : (
-            <div className="space-y-3">
-              <div className="rounded-xl border border-border bg-slate-50 p-3">
-                <p className="font-semibold">{selectedJob.property?.name ?? "Unknown property"}</p>
-                <p className="text-sm text-slate-600">
-                  {selectedJob.property?.address ?? "No address"}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {selectedJob.jobType} | {selectedJob.status}
-                </p>
-              </div>
-
-              {selectedJob.notes && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Job Notes</p>
-                  <p className="text-sm text-slate-600">{selectedJob.notes}</p>
-                </div>
-              )}
-
-              {selectedJob.property?.serviceNotes && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Property Service Notes</p>
-                  <p className="text-sm text-slate-600">{selectedJob.property.serviceNotes}</p>
-                </div>
-              )}
-
-              <button
-                className="field-button primary w-full px-4"
-                disabled={
-                  startingChecklist ||
-                  selectedJob.checklistType === null ||
-                  selectedJob.status === "COMPLETED" ||
-                  selectedJob.status === "CANCELLED"
-                }
-                onClick={() => void handleStartChecklist()}
-                type="button"
-              >
-                {startingChecklist
-                  ? "Starting..."
-                  : selectedJob.linkedInspectionId
-                    ? "Open Linked Checklist"
-                    : "Start Checklist"}
-              </button>
-            </div>
-          )}
-        </div>
-      </section>
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-sm font-semibold text-slate-700">{label}</p>
+      <p className="text-sm text-slate-600">{value}</p>
     </div>
   );
 }

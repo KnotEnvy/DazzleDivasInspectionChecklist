@@ -60,7 +60,10 @@ async function ensureAssigneeIsEligible(
   ctx: MutationCtx,
   assigneeId: Id<"users">,
   propertyId: Id<"properties">,
-  checklistType: "CLEANING" | "INSPECTION"
+  checklistType: "CLEANING" | "INSPECTION",
+  options?: {
+    skipPropertyAssignmentCheck?: boolean;
+  }
 ): Promise<Doc<"users">> {
   const assignee = await ctx.db.get(assigneeId);
   if (!assignee) {
@@ -77,19 +80,21 @@ async function ensureAssigneeIsEligible(
     throw new Error("Assignee account is deactivated");
   }
 
-  const assignment = await ctx.db
-    .query("propertyAssignments")
-    .withIndex("by_property_user_role_active", (q) =>
-      q
-        .eq("propertyId", propertyId)
-        .eq("userId", assigneeId)
-        .eq("assignmentRole", requiredRole)
-        .eq("isActive", true)
-    )
-    .unique();
+  if (!options?.skipPropertyAssignmentCheck) {
+    const assignment = await ctx.db
+      .query("propertyAssignments")
+      .withIndex("by_property_user_role_active", (q) =>
+        q
+          .eq("propertyId", propertyId)
+          .eq("userId", assigneeId)
+          .eq("assignmentRole", requiredRole)
+          .eq("isActive", true)
+      )
+      .unique();
 
-  if (!assignment) {
-    throw new Error("Assignee is not assigned to this property for this checklist type");
+    if (!assignment) {
+      throw new Error("Assignee is not assigned to this property for this checklist type");
+    }
   }
 
   return assignee;
@@ -239,7 +244,10 @@ export const create = mutation({
       throw new Error("Only admins can create inspections for other users");
     }
 
-    if (actor.role !== "ADMIN") {
+    const isAssignedWorkerForLinkedJob =
+      !!job && actor.role !== "ADMIN" && job.assigneeId === actor._id;
+
+    if (actor.role !== "ADMIN" && !isAssignedWorkerForLinkedJob) {
       await assertPropertyAccessForChecklist(ctx, actor, args.propertyId, args.type);
     }
 
@@ -247,7 +255,10 @@ export const create = mutation({
       ctx,
       assigneeId,
       args.propertyId,
-      args.type
+      args.type,
+      {
+        skipPropertyAssignmentCheck: !!job,
+      }
     );
 
     const inspectionId = await ctx.db.insert("inspections", {

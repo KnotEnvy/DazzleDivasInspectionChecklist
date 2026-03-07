@@ -3,7 +3,12 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { requireAuth, requireAdmin } from "./lib/permissions";
-import { checklistTypeForJobType, jobStatusValidator } from "./lib/validators";
+import {
+  checklistTypeForJobType,
+  jobPriorityValidator,
+  jobStatusValidator,
+  servicePlanTypeValidator,
+} from "./lib/validators";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -12,7 +17,7 @@ function isDispatchActiveStatus(status: Doc<"jobs">["status"]) {
 }
 
 function requiredAssignmentRoleForJob(
-  job: Doc<"jobs">,
+  job: Pick<Doc<"jobs">, "jobType">,
   servicePlan: Doc<"servicePlans"> | null
 ): "CLEANER" | "INSPECTOR" {
   const checklistType = checklistTypeForJobType(job.jobType);
@@ -118,11 +123,49 @@ async function getJobForAdminUpdate(
   };
 }
 
+async function getJobForAssigneeUpdate(
+  ctx: MutationCtx,
+  jobId: Id<"jobs">
+): Promise<{
+  actor: Doc<"users">;
+  job: Doc<"jobs">;
+  property: Doc<"properties">;
+}> {
+  const actor = await requireAuth(ctx);
+  const job = await ctx.db.get(jobId);
+
+  if (!job) {
+    throw new Error("Job not found");
+  }
+
+  if (!job.assigneeId || job.assigneeId !== actor._id) {
+    throw new Error("Only the assigned worker can update this job");
+  }
+
+  const property = await ctx.db.get(job.propertyId);
+  if (!property) {
+    throw new Error("Property not found");
+  }
+
+  if (!property.isActive || property.isArchived === true) {
+    throw new Error("Job updates are blocked because this property is archived or inactive");
+  }
+
+  if (job.status === "COMPLETED" || job.status === "CANCELLED") {
+    throw new Error("This job can no longer be updated from the worker schedule");
+  }
+
+  return {
+    actor,
+    job,
+    property,
+  };
+}
+
 async function ensureAssigneeEligible(
   ctx: MutationCtx,
   params: {
     assigneeId: Id<"users">;
-    propertyId: Id<"properties">;
     requiredRole: "CLEANER" | "INSPECTOR";
   }
 ) {
@@ -138,21 +181,6 @@ async function ensureAssigneeEligible(
 
   if (assignee.role !== params.requiredRole) {
     throw new Error(`Assignee must have role ${params.requiredRole}`);
-  }
-
-  const assignment = await ctx.db
-    .query("propertyAssignments")
-    .withIndex("by_property_user_role_active", (q) =>
-      q
-        .eq("propertyId", params.propertyId)
-        .eq("userId", params.assigneeId)
-        .eq("assignmentRole", params.requiredRole)
-        .eq("isActive", true)
-    )
-    .unique();
-
-  if (!assignment) {
-    throw new Error("Assignee is not assigned to this property in the required role");
   }
 
   return assignee;
@@ -171,7 +199,7 @@ async function findAssigneeConflict(
     assigneeId: Id<"users">;
     scheduledStart: number;
     scheduledEnd: number;
-    excludeJobId: Id<"jobs">;
+    excludeJobId?: Id<"jobs">;
   }
 ) {
   const jobs = await ctx.db
@@ -196,7 +224,7 @@ async function assertNoAssigneeConflict(
     assigneeId: Id<"users">;
     scheduledStart: number;
     scheduledEnd: number;
-    excludeJobId: Id<"jobs">;
+    excludeJobId?: Id<"jobs">;
   }
 ) {
   const conflict = await findAssigneeConflict(ctx, params);
@@ -347,33 +375,35 @@ export const getById = query({
 export const reassign = mutation({
   args: {
     jobId: v.id("jobs"),
-    assigneeId: v.id("users"),
+    assigneeId: v.union(v.id("users"), v.null()),
   },
   handler: async (ctx, args) => {
     const { actor, job, property, servicePlan } = await getJobForAdminUpdate(ctx, args.jobId);
-    const requiredRole = requiredAssignmentRoleForJob(job, servicePlan);
-
-    if (job.assigneeId === args.assigneeId) {
+    const nextAssigneeId = args.assigneeId ?? undefined;
+    if (job.assigneeId === nextAssigneeId) {
       return job._id;
     }
 
-    const assignee = await ensureAssigneeEligible(ctx, {
-      assigneeId: args.assigneeId,
-      propertyId: property._id,
-      requiredRole,
-    });
-
-    if (isDispatchActiveStatus(job.status)) {
-      await assertNoAssigneeConflict(ctx, {
-        assigneeId: assignee._id,
-        scheduledStart: job.scheduledStart,
-        scheduledEnd: job.scheduledEnd,
-        excludeJobId: job._id,
+    let assignee: Doc<"users"> | undefined;
+    if (nextAssigneeId) {
+      const requiredRole = requiredAssignmentRoleForJob(job, servicePlan);
+      assignee = await ensureAssigneeEligible(ctx, {
+        assigneeId: nextAssigneeId,
+        requiredRole,
       });
+
+      if (isDispatchActiveStatus(job.status)) {
+        await assertNoAssigneeConflict(ctx, {
+          assigneeId: assignee._id,
+          scheduledStart: job.scheduledStart,
+          scheduledEnd: job.scheduledEnd,
+          excludeJobId: job._id,
+        });
+      }
     }
 
     await ctx.db.patch(job._id, {
-      assigneeId: assignee._id,
+      assigneeId: assignee?._id,
     });
 
     await recordJobEvent(ctx, {
@@ -382,11 +412,82 @@ export const reassign = mutation({
       eventType: "JOB_REASSIGNED",
       metadata: {
         previousAssigneeId: job.assigneeId ?? null,
-        nextAssigneeId: assignee._id,
+        nextAssigneeId: assignee?._id ?? null,
+        propertyId: property._id,
       },
     });
 
     return job._id;
+  },
+});
+
+export const createManual = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    jobType: servicePlanTypeValidator,
+    scheduledStart: v.number(),
+    scheduledEnd: v.number(),
+    assigneeId: v.optional(v.id("users")),
+    priority: v.optional(jobPriorityValidator),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireAdmin(ctx);
+    const property = await ctx.db.get(args.propertyId);
+
+    if (!property || !property.isActive || property.isArchived === true) {
+      throw new Error("Property not found or archived");
+    }
+
+    if (args.scheduledEnd <= args.scheduledStart) {
+      throw new Error("Scheduled end must be after scheduled start");
+    }
+
+    let assigneeId = args.assigneeId;
+    if (assigneeId) {
+      const requiredRole = requiredAssignmentRoleForJob(
+        {
+          jobType: args.jobType,
+        },
+        null
+      );
+
+      const assignee = await ensureAssigneeEligible(ctx, {
+        assigneeId,
+        requiredRole,
+      });
+
+      await assertNoAssigneeConflict(ctx, {
+        assigneeId: assignee._id,
+        scheduledStart: args.scheduledStart,
+        scheduledEnd: args.scheduledEnd,
+      });
+    }
+
+    const jobId = await ctx.db.insert("jobs", {
+      propertyId: args.propertyId,
+      jobType: args.jobType,
+      scheduledStart: args.scheduledStart,
+      scheduledEnd: args.scheduledEnd,
+      assigneeId,
+      status: "SCHEDULED",
+      priority: args.priority ?? "MEDIUM",
+      notes: args.notes,
+      createdById: actor._id,
+    });
+
+    await recordJobEvent(ctx, {
+      jobId,
+      actorId: actor._id,
+      eventType: "JOB_CREATED",
+      metadata: {
+        source: "manual_dispatch",
+        propertyId: args.propertyId,
+        assigneeId: assigneeId ?? null,
+      },
+    });
+
+    return jobId;
   },
 });
 
@@ -473,6 +574,37 @@ export const updateStatus = mutation({
       metadata: {
         previousStatus: job.status,
         nextStatus: args.status,
+      },
+    });
+
+    return job._id;
+  },
+});
+
+export const updateMyStatus = mutation({
+  args: {
+    jobId: v.id("jobs"),
+    status: v.union(v.literal("IN_PROGRESS"), v.literal("BLOCKED")),
+  },
+  handler: async (ctx, args) => {
+    const { actor, job } = await getJobForAssigneeUpdate(ctx, args.jobId);
+
+    if (job.status === args.status) {
+      return job._id;
+    }
+
+    await ctx.db.patch(job._id, {
+      status: args.status,
+    });
+
+    await recordJobEvent(ctx, {
+      jobId: job._id,
+      actorId: actor._id,
+      eventType: "JOB_STATUS_UPDATED",
+      metadata: {
+        previousStatus: job.status,
+        nextStatus: args.status,
+        source: "worker_schedule",
       },
     });
 

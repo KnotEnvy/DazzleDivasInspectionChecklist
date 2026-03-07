@@ -8,6 +8,9 @@ import toast from "react-hot-toast";
 type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
 type JobType = "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
 type UserRole = "ADMIN" | "CLEANER" | "INSPECTOR";
+type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+type ViewMode = "week" | "day";
+type SavingAction = "create" | "assign" | "reschedule" | "status" | "checklist" | null;
 
 type DispatchJob = {
   _id: Id<"jobs">;
@@ -22,29 +25,29 @@ type DispatchJob = {
   scheduledEnd: number;
   status: JobStatus;
   jobType: JobType;
-  priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  priority?: Priority;
   assigneeId?: Id<"users">;
   assigneeName?: string | null;
   notes?: string;
   checklistType: "CLEANING" | "INSPECTION" | null;
-  canStartChecklist: boolean;
 };
 
 type DispatchDetail = {
   _id: Id<"jobs">;
   propertyId: Id<"properties">;
-  servicePlanId?: Id<"servicePlans">;
-  assigneeId?: Id<"users">;
   scheduledStart: number;
   scheduledEnd: number;
   status: JobStatus;
   jobType: JobType;
-  priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  priority?: Priority;
+  assigneeId?: Id<"users">;
   notes?: string;
   linkedInspectionId?: Id<"inspections">;
   checklistType: "CLEANING" | "INSPECTION" | null;
+  servicePlan?: {
+    defaultAssigneeRole: "CLEANER" | "INSPECTOR";
+  } | null;
   property?: {
-    _id: Id<"properties">;
     name: string;
     address: string;
     timezone?: string;
@@ -53,10 +56,6 @@ type DispatchDetail = {
     entryMethod?: string;
     isActive: boolean;
     isArchived?: boolean;
-  } | null;
-  servicePlan?: {
-    _id: Id<"servicePlans">;
-    defaultAssigneeRole: "CLEANER" | "INSPECTOR";
   } | null;
   assignee?: {
     _id: Id<"users">;
@@ -83,17 +82,6 @@ type AdminProperty = {
   _id: Id<"properties">;
   name: string;
 };
-
-type PropertyAssignment = {
-  _id: Id<"propertyAssignments">;
-  userId: Id<"users">;
-  assignmentRole: "CLEANER" | "INSPECTOR";
-  isActive: boolean;
-  user?: AdminUser | null;
-};
-
-type ViewMode = "week" | "day";
-type SavingAction = "assign" | "reschedule" | "status" | "checklist" | null;
 
 const dispatchStatuses: JobStatus[] = ["SCHEDULED", "IN_PROGRESS", "BLOCKED", "CANCELLED"];
 const allStatuses: Array<"ALL" | JobStatus> = [
@@ -170,6 +158,13 @@ function formatWindowLabel(start: Date, end: Date) {
   })}`;
 }
 
+function formatJobWindow(job: { scheduledStart: number; scheduledEnd: number }) {
+  return `${new Date(job.scheduledStart).toLocaleString()} - ${new Date(job.scheduledEnd).toLocaleTimeString(
+    [],
+    { hour: "2-digit", minute: "2-digit" }
+  )}`;
+}
+
 function statusTone(status: JobStatus) {
   switch (status) {
     case "SCHEDULED":
@@ -189,14 +184,12 @@ function summarizeMetadata(metadata?: string) {
   if (!metadata) {
     return null;
   }
-
   try {
     const parsed = JSON.parse(metadata) as Record<string, unknown>;
     const parts = Object.entries(parsed)
       .filter(([, value]) => ["string", "number", "boolean"].includes(typeof value))
       .slice(0, 3)
       .map(([key, value]) => `${key}: ${String(value)}`);
-
     return parts.length > 0 ? parts.join(" | ") : null;
   } catch {
     return null;
@@ -207,12 +200,30 @@ function requiredRoleForJob(job: Pick<DispatchDetail, "jobType" | "servicePlan">
   if (job.jobType === "INSPECTION") {
     return "INSPECTOR";
   }
-
   if (job.jobType === "MAINTENANCE") {
     return job.servicePlan?.defaultAssigneeRole ?? "CLEANER";
   }
-
   return "CLEANER";
+}
+
+function requiredRoleForJobType(jobType: JobType) {
+  return jobType === "INSPECTION" ? "INSPECTOR" : "CLEANER";
+}
+
+function buildDefaultCreateForm() {
+  const start = new Date();
+  start.setMinutes(0, 0, 0);
+  start.setHours(Math.max(start.getHours() + 1, 10));
+  const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
+  return {
+    propertyId: "" as Id<"properties"> | "",
+    jobType: "CLEANING" as JobType,
+    assigneeId: "" as Id<"users"> | "",
+    scheduledStart: toDatetimeLocalValue(start.getTime()),
+    scheduledEnd: toDatetimeLocalValue(end.getTime()),
+    priority: "MEDIUM" as Priority,
+    notes: "",
+  };
 }
 
 export function AdminSchedulePage() {
@@ -229,13 +240,16 @@ export function AdminSchedulePage() {
   const [scheduledEndInput, setScheduledEndInput] = useState("");
   const [statusInput, setStatusInput] = useState<JobStatus>("SCHEDULED");
   const [savingAction, setSavingAction] = useState<SavingAction>(null);
+  const [createForm, setCreateForm] = useState(buildDefaultCreateForm);
 
-  const windowStart = useMemo(() => {
-    return viewMode === "week" ? startOfWeekLocal(anchorDate) : startOfDayLocal(anchorDate);
-  }, [anchorDate, viewMode]);
-  const windowEnd = useMemo(() => {
-    return endOfDayLocal(viewMode === "week" ? addDays(windowStart, 6) : windowStart);
-  }, [viewMode, windowStart]);
+  const windowStart = useMemo(
+    () => (viewMode === "week" ? startOfWeekLocal(anchorDate) : startOfDayLocal(anchorDate)),
+    [anchorDate, viewMode]
+  );
+  const windowEnd = useMemo(
+    () => endOfDayLocal(viewMode === "week" ? addDays(windowStart, 6) : windowStart),
+    [viewMode, windowStart]
+  );
   const visibleDays = useMemo(() => {
     const totalDays = viewMode === "week" ? 7 : 1;
     return Array.from({ length: totalDays }, (_, index) => addDays(windowStart, index));
@@ -253,105 +267,96 @@ export function AdminSchedulePage() {
   const properties = useQuery(api.properties.listAdmin, { includeArchived: false }) as
     | AdminProperty[]
     | undefined;
-  const propertyAssignments = useQuery(
-    api.propertyAssignments.listByProperty,
-    selectedJob ? { propertyId: selectedJob.propertyId } : "skip"
-  ) as PropertyAssignment[] | undefined;
 
+  const createManualJob = useMutation(api.jobs.createManual);
   const reassignJob = useMutation(api.jobs.reassign);
   const rescheduleJob = useMutation(api.jobs.reschedule);
   const updateStatus = useMutation(api.jobs.updateStatus);
   const createInspection = useMutation(api.inspections.create);
 
-  const assigneeUsers = useMemo(() => {
-    return (users ?? [])
-      .filter((user) => user.isActive && (user.role === "CLEANER" || user.role === "INSPECTOR"))
-      .sort((left, right) => left.name.localeCompare(right.name));
-  }, [users]);
+  const assigneeUsers = useMemo(
+    () =>
+      (users ?? [])
+        .filter((user) => user.isActive && (user.role === "CLEANER" || user.role === "INSPECTOR"))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [users]
+  );
 
-  const filteredJobs = useMemo(() => {
-    return (jobs ?? []).filter((job) => {
-      if (assigneeFilter === "UNASSIGNED" && job.assigneeId) {
-        return false;
-      }
+  const filteredJobs = useMemo(
+    () =>
+      (jobs ?? []).filter((job) => {
+        if (assigneeFilter === "UNASSIGNED" && job.assigneeId) {
+          return false;
+        }
+        if (
+          assigneeFilter !== "ALL" &&
+          assigneeFilter !== "UNASSIGNED" &&
+          job.assigneeId !== assigneeFilter
+        ) {
+          return false;
+        }
+        if (propertyFilter !== "ALL" && job.propertyId !== propertyFilter) {
+          return false;
+        }
+        if (statusFilter !== "ALL" && job.status !== statusFilter) {
+          return false;
+        }
+        if (jobTypeFilter !== "ALL" && job.jobType !== jobTypeFilter) {
+          return false;
+        }
+        return true;
+      }),
+    [assigneeFilter, jobTypeFilter, jobs, propertyFilter, statusFilter]
+  );
 
-      if (
-        assigneeFilter !== "ALL" &&
-        assigneeFilter !== "UNASSIGNED" &&
-        job.assigneeId !== assigneeFilter
-      ) {
-        return false;
-      }
+  const jobsByDay = useMemo(
+    () =>
+      visibleDays.map((day) =>
+        filteredJobs
+          .filter((job) => sameLocalDate(job.scheduledStart, day))
+          .sort((left, right) => left.scheduledStart - right.scheduledStart)
+      ),
+    [filteredJobs, visibleDays]
+  );
 
-      if (propertyFilter !== "ALL" && job.propertyId !== propertyFilter) {
-        return false;
-      }
+  const listJobs = useMemo(
+    () => filteredJobs.slice().sort((left, right) => left.scheduledStart - right.scheduledStart),
+    [filteredJobs]
+  );
+  const unassignedJobs = useMemo(() => listJobs.filter((job) => !job.assigneeId), [listJobs]);
 
-      if (statusFilter !== "ALL" && job.status !== statusFilter) {
-        return false;
-      }
-
-      if (jobTypeFilter !== "ALL" && job.jobType !== jobTypeFilter) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [assigneeFilter, jobTypeFilter, jobs, propertyFilter, statusFilter]);
-
-  const jobsByDay = useMemo(() => {
-    return visibleDays.map((day) =>
-      filteredJobs
-        .filter((job) => sameLocalDate(job.scheduledStart, day))
-        .sort((left, right) => left.scheduledStart - right.scheduledStart)
-    );
-  }, [filteredJobs, visibleDays]);
-
-  const listJobs = useMemo(() => {
-    return filteredJobs.slice().sort((left, right) => left.scheduledStart - right.scheduledStart);
-  }, [filteredJobs]);
-
-  const summary = useMemo(() => {
-    return {
+  const summary = useMemo(
+    () => ({
       total: filteredJobs.length,
       unassigned: filteredJobs.filter((job) => !job.assigneeId).length,
       inProgress: filteredJobs.filter((job) => job.status === "IN_PROGRESS").length,
       blocked: filteredJobs.filter((job) => job.status === "BLOCKED").length,
-    };
-  }, [filteredJobs]);
+    }),
+    [filteredJobs]
+  );
 
   const eligibleAssignees = useMemo(() => {
-    if (!selectedJob || !propertyAssignments) {
+    if (!selectedJob) {
       return [];
     }
-
     const requiredRole = requiredRoleForJob(selectedJob);
-    const byUserId = new Map<Id<"users">, AdminUser>();
-
-    for (const assignment of propertyAssignments) {
-      const user = assignment.user;
-      if (
-        assignment.isActive &&
-        assignment.assignmentRole === requiredRole &&
-        user &&
-        user.isActive &&
-        user.role === requiredRole
-      ) {
-        byUserId.set(user._id, user);
-      }
-    }
-
+    const candidates = assigneeUsers.filter((user) => user.role === requiredRole);
     if (
       selectedJob.assignee &&
-      selectedJob.assignee.isActive &&
       selectedJob.assignee.role === requiredRole &&
-      !byUserId.has(selectedJob.assignee._id)
+      !candidates.some((user) => user._id === selectedJob.assignee!._id)
     ) {
-      byUserId.set(selectedJob.assignee._id, selectedJob.assignee);
+      return [...candidates, selectedJob.assignee].sort((left, right) =>
+        left.name.localeCompare(right.name)
+      );
     }
+    return candidates;
+  }, [assigneeUsers, selectedJob]);
 
-    return Array.from(byUserId.values()).sort((left, right) => left.name.localeCompare(right.name));
-  }, [propertyAssignments, selectedJob]);
+  const eligibleCreateAssignees = useMemo(
+    () => assigneeUsers.filter((user) => user.role === requiredRoleForJobType(createForm.jobType)),
+    [assigneeUsers, createForm.jobType]
+  );
 
   const controlsLocked =
     !selectedJob ||
@@ -360,11 +365,25 @@ export function AdminSchedulePage() {
     selectedJob.property?.isArchived === true;
 
   useEffect(() => {
+    if (properties && properties.length > 0 && createForm.propertyId.length === 0) {
+      setCreateForm((current) => ({ ...current, propertyId: properties[0]._id }));
+    }
+  }, [createForm.propertyId.length, properties]);
+
+  useEffect(() => {
+    if (
+      createForm.assigneeId.length > 0 &&
+      !eligibleCreateAssignees.some((user) => user._id === createForm.assigneeId)
+    ) {
+      setCreateForm((current) => ({ ...current, assigneeId: "" }));
+    }
+  }, [createForm.assigneeId, eligibleCreateAssignees]);
+
+  useEffect(() => {
     if (filteredJobs.length === 0) {
       setSelectedJobId(null);
       return;
     }
-
     if (!selectedJobId || !filteredJobs.some((job) => job._id === selectedJobId)) {
       setSelectedJobId(filteredJobs[0]._id);
     }
@@ -374,7 +393,6 @@ export function AdminSchedulePage() {
     if (!selectedJob) {
       return;
     }
-
     setAssigneeId(selectedJob.assignee?._id ?? "");
     setScheduledStartInput(toDatetimeLocalValue(selectedJob.scheduledStart));
     setScheduledEndInput(toDatetimeLocalValue(selectedJob.scheduledEnd));
@@ -385,18 +403,55 @@ export function AdminSchedulePage() {
     setAnchorDate((current) => addDays(current, direction * (viewMode === "week" ? 7 : 1)));
   }
 
-  async function handleAssign() {
-    if (!selectedJob || !assigneeId) {
+  async function handleCreateJob() {
+    if (!createForm.propertyId) {
+      toast.error("Choose a property");
       return;
     }
+    const scheduledStart = fromDatetimeLocalValue(createForm.scheduledStart);
+    const scheduledEnd = fromDatetimeLocalValue(createForm.scheduledEnd);
+    if (!Number.isFinite(scheduledStart) || !Number.isFinite(scheduledEnd)) {
+      toast.error("Enter a valid start and end time");
+      return;
+    }
+    setSavingAction("create");
+    try {
+      const jobId = await createManualJob({
+        propertyId: createForm.propertyId,
+        jobType: createForm.jobType,
+        scheduledStart,
+        scheduledEnd,
+        assigneeId: createForm.assigneeId.length > 0 ? createForm.assigneeId : undefined,
+        priority: createForm.priority,
+        notes: createForm.notes.trim() || undefined,
+      });
+      toast.success("Dispatch job created");
+      setSelectedJobId(jobId);
+      setAnchorDate(startOfDayLocal(new Date(scheduledStart)));
+      const nextDefaults = buildDefaultCreateForm();
+      setCreateForm((current) => ({
+        ...nextDefaults,
+        propertyId: current.propertyId,
+        jobType: current.jobType,
+      }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create job");
+    } finally {
+      setSavingAction(null);
+    }
+  }
 
+  async function handleAssign() {
+    if (!selectedJob) {
+      return;
+    }
     setSavingAction("assign");
     try {
       await reassignJob({
         jobId: selectedJob._id,
-        assigneeId,
+        assigneeId: assigneeId.length > 0 ? assigneeId : null,
       });
-      toast.success("Job reassigned");
+      toast.success(assigneeId.length > 0 ? "Job assignment updated" : "Job moved to unassigned");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to update assignee");
     } finally {
@@ -408,15 +463,12 @@ export function AdminSchedulePage() {
     if (!selectedJob) {
       return;
     }
-
     const scheduledStart = fromDatetimeLocalValue(scheduledStartInput);
     const scheduledEnd = fromDatetimeLocalValue(scheduledEndInput);
-
     if (!Number.isFinite(scheduledStart) || !Number.isFinite(scheduledEnd)) {
       toast.error("Enter valid start and end times");
       return;
     }
-
     setSavingAction("reschedule");
     try {
       await rescheduleJob({
@@ -436,7 +488,6 @@ export function AdminSchedulePage() {
     if (!selectedJob) {
       return;
     }
-
     setSavingAction("status");
     try {
       await updateStatus({
@@ -455,22 +506,18 @@ export function AdminSchedulePage() {
     if (!selectedJob) {
       return;
     }
-
     if (selectedJob.linkedInspectionId) {
       navigate(`/checklists/${selectedJob.linkedInspectionId}`);
       return;
     }
-
     if (!selectedJob.checklistType) {
       toast.error("This job type does not support checklist execution");
       return;
     }
-
     if (!selectedJob.assigneeId) {
       toast.error("Assign the job before starting a checklist");
       return;
     }
-
     setSavingAction("checklist");
     try {
       const inspectionId = await createInspection({
@@ -487,13 +534,15 @@ export function AdminSchedulePage() {
     }
   }
 
+  const selectedAssigneeValue = selectedJob?.assignee?._id ?? "";
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Dispatch Schedule</h1>
           <p className="text-sm text-slate-600">
-            Admin board for staffing, rescheduling, and real-time job status control.
+            Manual turnover dispatch for jobs coming in by email or text, with flexible daily assignment.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -520,13 +569,182 @@ export function AdminSchedulePage() {
         <SummaryCard label="Blocked" value={summary.blocked} />
       </section>
 
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <section className="rounded-2xl border border-border bg-white p-4">
+          <div className="mb-3">
+            <h2 className="text-lg font-bold">Quick Add Turnover Job</h2>
+            <p className="text-sm text-slate-600">Create a clean for a specific day and assign it now or later.</p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <label className="text-sm font-medium text-slate-700">
+              Property
+              <select
+                className="input mt-1"
+                value={createForm.propertyId}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    propertyId: event.target.value as Id<"properties"> | "",
+                  }))
+                }
+              >
+                <option value="">Select property</option>
+                {(properties ?? []).map((property) => (
+                  <option key={property._id} value={property._id}>
+                    {property.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Job Type
+              <select
+                className="input mt-1"
+                value={createForm.jobType}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    jobType: event.target.value as JobType,
+                    assigneeId: "",
+                  }))
+                }
+              >
+                <option value="CLEANING">CLEANING</option>
+                <option value="INSPECTION">INSPECTION</option>
+                <option value="DEEP_CLEAN">DEEP_CLEAN</option>
+                <option value="MAINTENANCE">MAINTENANCE</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Start
+              <input
+                className="input mt-1"
+                type="datetime-local"
+                value={createForm.scheduledStart}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, scheduledStart: event.target.value }))
+                }
+              />
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              End
+              <input
+                className="input mt-1"
+                type="datetime-local"
+                value={createForm.scheduledEnd}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, scheduledEnd: event.target.value }))
+                }
+              />
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Assignee
+              <select
+                className="input mt-1"
+                value={createForm.assigneeId}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    assigneeId: event.target.value as Id<"users"> | "",
+                  }))
+                }
+              >
+                <option value="">Leave unassigned</option>
+                {eligibleCreateAssignees.map((user) => (
+                  <option key={user._id} value={user._id}>
+                    {user.name} ({user.role})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Priority
+              <select
+                className="input mt-1"
+                value={createForm.priority}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    priority: event.target.value as Priority,
+                  }))
+                }
+              >
+                <option value="LOW">LOW</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="HIGH">HIGH</option>
+                <option value="URGENT">URGENT</option>
+              </select>
+            </label>
+          </div>
+          <label className="mt-3 block text-sm font-medium text-slate-700">
+            Job Notes
+            <textarea
+              className="input mt-1 min-h-24"
+              placeholder="Arrival deadline, client message, or cleaning instructions"
+              value={createForm.notes}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, notes: event.target.value }))
+              }
+            />
+          </label>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">
+              Property assignments can stay as preferences, but dispatch is no longer locked to them.
+            </p>
+            <button
+              className="field-button primary px-4"
+              disabled={savingAction === "create"}
+              onClick={() => void handleCreateJob()}
+              type="button"
+            >
+              {savingAction === "create" ? "Creating..." : "Create Dispatch Job"}
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-border bg-white p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">Unassigned Queue</h2>
+              <p className="text-sm text-slate-600">Jobs waiting for a cleaner in this window.</p>
+            </div>
+            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+              {unassignedJobs.length} open
+            </span>
+          </div>
+          {jobs === undefined ? (
+            <p className="text-sm text-slate-500">Loading queue...</p>
+          ) : unassignedJobs.length === 0 ? (
+            <p className="text-sm text-slate-500">No unassigned jobs in this window.</p>
+          ) : (
+            <div className="space-y-2">
+              {unassignedJobs.slice(0, 8).map((job) => (
+                <button
+                  key={job._id}
+                  className={`w-full rounded-2xl border p-3 text-left transition ${
+                    selectedJobId === job._id
+                      ? "border-brand-500 bg-brand-50"
+                      : "border-border bg-slate-50 hover:border-brand-300"
+                  }`}
+                  onClick={() => setSelectedJobId(job._id)}
+                  type="button"
+                >
+                  <p className="font-semibold">{job.propertyName}</p>
+                  <p className="text-sm text-slate-600">{formatJobWindow(job)}</p>
+                  <p className="text-xs text-slate-500">{job.jobType}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      </section>
+
       <section className="rounded-2xl border border-border bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold">Window Controls</h2>
             <p className="text-sm text-slate-600">{formatWindowLabel(windowStart, windowEnd)}</p>
           </div>
-
           <div className="inline-flex rounded-2xl border border-border bg-slate-50 p-1">
             <button
               className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
@@ -548,7 +766,6 @@ export function AdminSchedulePage() {
             </button>
           </div>
         </div>
-
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm font-medium text-slate-700">
             Assignee
@@ -568,7 +785,6 @@ export function AdminSchedulePage() {
               ))}
             </select>
           </label>
-
           <label className="text-sm font-medium text-slate-700">
             Property
             <select
@@ -584,7 +800,6 @@ export function AdminSchedulePage() {
               ))}
             </select>
           </label>
-
           <label className="text-sm font-medium text-slate-700">
             Status
             <select
@@ -599,7 +814,6 @@ export function AdminSchedulePage() {
               ))}
             </select>
           </label>
-
           <label className="text-sm font-medium text-slate-700">
             Job Type
             <select
@@ -623,15 +837,12 @@ export function AdminSchedulePage() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-lg font-bold">{viewMode === "week" ? "Week Board" : "Day Board"}</h2>
-                <p className="text-sm text-slate-600">
-                  Click any job to open dispatch controls and recent job history.
-                </p>
+                <p className="text-sm text-slate-600">Manual jobs and recurring jobs appear together here.</p>
               </div>
               <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
                 {filteredJobs.length} visible
               </span>
             </div>
-
             {jobs === undefined ? (
               <p className="text-sm text-slate-500">Loading dispatch board...</p>
             ) : filteredJobs.length === 0 ? (
@@ -714,20 +925,12 @@ export function AdminSchedulePage() {
                       {selectedJob.property?.address ?? "No address on file"}
                     </p>
                   </div>
-                  <span
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
-                      selectedJob.status
-                    )}`}
-                  >
+                  <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(selectedJob.status)}`}>
                     {selectedJob.status}
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-slate-600">
-                  {selectedJob.jobType} | {new Date(selectedJob.scheduledStart).toLocaleString()} -{" "}
-                  {new Date(selectedJob.scheduledEnd).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {selectedJob.jobType} | {formatJobWindow(selectedJob)}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   Priority: {selectedJob.priority ?? "MEDIUM"}
@@ -748,21 +951,18 @@ export function AdminSchedulePage() {
                   <p className="text-sm text-slate-600">{selectedJob.notes}</p>
                 </div>
               )}
-
               {selectedJob.property?.serviceNotes && (
                 <div>
                   <p className="text-sm font-semibold text-slate-700">Service Notes</p>
                   <p className="text-sm text-slate-600">{selectedJob.property.serviceNotes}</p>
                 </div>
               )}
-
               {selectedJob.property?.accessInstructions && (
                 <div>
                   <p className="text-sm font-semibold text-slate-700">Access Instructions</p>
                   <p className="text-sm text-slate-600">{selectedJob.property.accessInstructions}</p>
                 </div>
               )}
-
               {selectedJob.property?.entryMethod && (
                 <div>
                   <p className="text-sm font-semibold text-slate-700">Entry Method</p>
@@ -793,18 +993,18 @@ export function AdminSchedulePage() {
                 <div className="mb-2">
                   <h3 className="font-semibold">Assignee</h3>
                   <p className="text-sm text-slate-600">
-                    Eligible staff come from active property assignments.
+                    Choose any active {requiredRoleForJob(selectedJob).toLowerCase()} or leave this job unassigned.
                   </p>
                 </div>
                 <label className="text-sm font-medium text-slate-700">
                   Assigned Staff
                   <select
                     className="input mt-1"
-                    disabled={controlsLocked || propertyAssignments === undefined}
+                    disabled={controlsLocked}
                     value={assigneeId}
                     onChange={(event) => setAssigneeId(event.target.value as Id<"users"> | "")}
                   >
-                    <option value="">Select assignee</option>
+                    <option value="">Leave unassigned</option>
                     {eligibleAssignees.map((user) => (
                       <option key={user._id} value={user._id}>
                         {user.name} ({user.role})
@@ -812,32 +1012,20 @@ export function AdminSchedulePage() {
                     ))}
                   </select>
                 </label>
-                {propertyAssignments !== undefined && eligibleAssignees.length === 0 && (
-                  <p className="mt-2 text-xs text-amber-700">
-                    No active property assignments match this job type yet.
-                  </p>
-                )}
                 <button
                   className="field-button secondary mt-3 w-full px-4"
-                  disabled={
-                    controlsLocked ||
-                    savingAction === "assign" ||
-                    !assigneeId ||
-                    assigneeId === (selectedJob.assignee?._id ?? "")
-                  }
+                  disabled={controlsLocked || savingAction === "assign" || assigneeId === selectedAssigneeValue}
                   onClick={() => void handleAssign()}
                   type="button"
                 >
-                  {savingAction === "assign" ? "Saving..." : "Save Assignee"}
+                  {savingAction === "assign" ? "Saving..." : "Save Assignment"}
                 </button>
               </section>
 
               <section className="rounded-2xl border border-border p-4">
                 <div className="mb-2">
                   <h3 className="font-semibold">Reschedule</h3>
-                  <p className="text-sm text-slate-600">
-                    Conflict checks run against the selected assignee&apos;s other active jobs.
-                  </p>
+                  <p className="text-sm text-slate-600">Move the clean to the correct day or time window.</p>
                 </div>
                 <div className="grid gap-3">
                   <label className="text-sm font-medium text-slate-700">
@@ -881,9 +1069,7 @@ export function AdminSchedulePage() {
               <section className="rounded-2xl border border-border p-4">
                 <div className="mb-2">
                   <h3 className="font-semibold">Status</h3>
-                  <p className="text-sm text-slate-600">
-                    Dispatch can move jobs through scheduled, active, blocked, and cancelled states.
-                  </p>
+                  <p className="text-sm text-slate-600">Dispatch controls everything except `COMPLETED`.</p>
                 </div>
                 <label className="text-sm font-medium text-slate-700">
                   Status
@@ -923,16 +1109,14 @@ export function AdminSchedulePage() {
                 ) : (
                   <div className="space-y-2">
                     {selectedJob.events.slice(0, 8).map((event) => {
-                      const metadataSummary = summarizeMetadata(event.metadata);
+                      const summaryText = summarizeMetadata(event.metadata);
                       return (
                         <div key={event._id} className="rounded-2xl border border-border bg-slate-50 p-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-semibold">{event.eventType}</p>
-                            <p className="text-xs text-slate-500">
-                              {new Date(event.createdAt).toLocaleString()}
-                            </p>
+                            <p className="text-xs text-slate-500">{new Date(event.createdAt).toLocaleString()}</p>
                           </div>
-                          {metadataSummary && <p className="mt-1 text-xs text-slate-500">{metadataSummary}</p>}
+                          {summaryText && <p className="mt-1 text-xs text-slate-500">{summaryText}</p>}
                         </div>
                       );
                     })}
@@ -1013,13 +1197,7 @@ function JobRow({
           <p className="font-semibold">
             {job.propertyName} | {job.jobType}
           </p>
-          <p className="text-sm text-slate-600">
-            {new Date(job.scheduledStart).toLocaleString()} -{" "}
-            {new Date(job.scheduledEnd).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </p>
+          <p className="text-sm text-slate-600">{formatJobWindow(job)}</p>
           <p className="text-xs text-slate-500">
             {job.assigneeName ?? "Unassigned"} | Priority: {job.priority ?? "MEDIUM"}
           </p>
