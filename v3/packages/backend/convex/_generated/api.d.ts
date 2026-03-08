@@ -14,6 +14,7 @@ import type * as devTools from "../devTools.js";
 import type * as http from "../http.js";
 import type * as inspections from "../inspections.js";
 import type * as jobs from "../jobs.js";
+import type * as lib_checklistTemplates from "../lib/checklistTemplates.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as photos from "../photos.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   inspections: typeof inspections;
   jobs: typeof jobs;
+  "lib/checklistTemplates": typeof lib_checklistTemplates;
   "lib/permissions": typeof lib_permissions;
   "lib/validators": typeof lib_validators;
   photos: typeof photos;

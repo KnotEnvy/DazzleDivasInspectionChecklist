@@ -4,6 +4,7 @@ import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
 import { PROPERTY_TYPES } from "@dazzle/shared";
+import { PropertyChecklistOverridesSection } from "@/components/PropertyChecklistOverridesSection";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 type ChecklistType = "CLEANING" | "INSPECTION";
@@ -314,12 +315,6 @@ export function AdminPropertiesPage() {
       : "skip"
   ) as PropertyJob[] | undefined;
 
-  const templateRooms = useQuery(api.templates.listWithTasks, {
-    includeInactive: true,
-  }) as
-    | TemplateRoom[]
-    | undefined;
-
   const assignments = useQuery(
     api.propertyAssignments.listByProperty,
     selectedPropertyId ? { propertyId: selectedPropertyId } : "skip"
@@ -397,31 +392,6 @@ export function AdminPropertiesPage() {
     const parsed = parseOptionalCount(editForm.bathrooms);
     return parsed === null ? selectedProperty?.bathrooms : parsed;
   }, [editForm.bathrooms, selectedProperty?.bathrooms]);
-
-  const checklistPreview = useMemo(() => {
-    if (!selectedProperty || !templateRooms) {
-      return null;
-    }
-
-    const activeTemplateRooms = templateRooms.filter((room) => room.isActive);
-    const previewRooms = activeTemplateRooms.flatMap((room) =>
-      deriveRoomNames({
-        room,
-        bedrooms: previewBedrooms,
-        bathrooms: previewBathrooms,
-      }).map((roomName) => ({
-        templateRoomId: room._id,
-        roomName,
-        cleaningTasks: room.tasks.filter((task) => task.checklistType === "CLEANING"),
-        inspectionTasks: room.tasks.filter((task) => task.checklistType === "INSPECTION"),
-      }))
-    );
-
-    return {
-      CLEANING: previewRooms.filter((room) => room.cleaningTasks.length > 0),
-      INSPECTION: previewRooms.filter((room) => room.inspectionTasks.length > 0),
-    };
-  }, [previewBathrooms, previewBedrooms, selectedProperty, templateRooms]);
 
   useEffect(() => {
     setSelectedCleanerId("");
@@ -911,103 +881,15 @@ export function AdminPropertiesPage() {
 
       {!selectedProperty ? null : (
         <>
-          <section className="rounded-2xl border border-border bg-white p-4">
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold">Checklist Preview</h2>
-                <p className="text-sm text-slate-600">
-                  This property will generate one cleaning checklist and one inspection checklist
-                  from the base template. The preview updates from the bedroom and bathroom fields
-                  above, even before you save.
-                </p>
-              </div>
-              <p className="text-xs font-semibold text-slate-500">
-                Using {previewBedrooms ?? 1} bedroom(s) and {previewBathrooms ?? 1} bathroom(s)
-              </p>
-            </div>
-
-            {templateRooms === undefined || checklistPreview === null ? (
-              <p className="text-sm text-slate-500">Loading checklist preview...</p>
-            ) : templateRooms.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-700">
-                  No base checklist templates exist yet.
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Create the starter room library first, then this preview will expand into
-                  bedrooms, bathrooms, entrance, kitchen, general, and the rest.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    className="field-button primary px-4"
-                    disabled={isSaving}
-                    onClick={() => void handleBootstrapTemplates()}
-                    type="button"
-                  >
-                    Create Starter Templates
-                  </button>
-                </div>
-              </div>
-            ) : templateRooms.every((room) => room.isActive !== true) ? (
-              <div className="rounded-xl border border-dashed border-border bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-700">
-                  Your base template rooms exist, but they are all inactive.
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Reactivate rooms in the checklist template manager and this preview will populate.
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {(["CLEANING", "INSPECTION"] as ChecklistType[]).map((checklistType) => (
-                  <div
-                    key={checklistType}
-                    className="rounded-xl border border-border bg-slate-50 p-3"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <h3 className="font-semibold">{checklistType} Checklist</h3>
-                      <span className="text-xs font-semibold text-slate-500">
-                        {checklistPreview[checklistType].length} rooms
-                      </span>
-                    </div>
-
-                    {checklistPreview[checklistType].length === 0 ? (
-                      <p className="text-sm text-slate-500">
-                        No {checklistType.toLowerCase()} rooms are active in the base template.
-                      </p>
-                    ) : (
-                      <div className="grid gap-2 xl:grid-cols-2">
-                        {checklistPreview[checklistType].map((room) => {
-                          const tasks =
-                            checklistType === "CLEANING"
-                              ? room.cleaningTasks
-                              : room.inspectionTasks;
-
-                          return (
-                            <div
-                              key={`${checklistType}-${room.templateRoomId}-${room.roomName}`}
-                              className="rounded-lg border border-border bg-white p-2"
-                            >
-                              <p className="text-sm font-semibold">{room.roomName}</p>
-                              <p className="text-xs text-slate-500">
-                                {tasks.length} tasks | Photos required:{" "}
-                                {Math.max(2, ...tasks.map((task) => task.requiredPhotoMin ?? 0))}
-                              </p>
-                              <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                                {tasks.map((task) => (
-                                  <li key={task._id}>- {task.description}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          <PropertyChecklistOverridesSection
+            bathrooms={previewBathrooms}
+            bedrooms={previewBedrooms}
+            bootstrapDisabled={isSaving}
+            isArchived={selectedProperty.isArchived === true}
+            onBootstrapTemplates={handleBootstrapTemplates}
+            propertyId={selectedProperty._id}
+            propertyName={selectedProperty.name}
+          />
 
           <section className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-4 rounded-2xl border border-border bg-white p-4">

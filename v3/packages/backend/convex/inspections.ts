@@ -8,53 +8,14 @@ import {
   assertPropertyAccessForChecklist,
 } from "./lib/permissions";
 import {
+  deriveRoomNames,
+  loadEffectivePropertyTemplateRooms,
+} from "./lib/checklistTemplates";
+import {
   assignmentRoleForChecklistType,
   checklistTypeValidator,
   checklistTypeForJobType,
 } from "./lib/validators";
-
-function inferRoomGenerationMode(room: {
-  name: string;
-  generationMode?: "SINGLE" | "PER_BEDROOM" | "PER_BATHROOM";
-}) {
-  if (room.generationMode) {
-    return room.generationMode;
-  }
-
-  const normalizedName = room.name.trim().toLowerCase();
-  if (normalizedName === "bedroom" || normalizedName.startsWith("bedroom ")) {
-    return "PER_BEDROOM" as const;
-  }
-
-  if (normalizedName === "bathroom" || normalizedName.startsWith("bathroom ")) {
-    return "PER_BATHROOM" as const;
-  }
-
-  return "SINGLE" as const;
-}
-
-function deriveRoomNames(params: {
-  room: {
-    name: string;
-    generationMode?: "SINGLE" | "PER_BEDROOM" | "PER_BATHROOM";
-  };
-  bedrooms?: number;
-  bathrooms?: number;
-}) {
-  const generationMode = inferRoomGenerationMode(params.room);
-
-  if (generationMode === "PER_BEDROOM") {
-    const count = Math.max(1, params.bedrooms ?? 1);
-    return Array.from({ length: count }, (_, index) => `Bedroom ${index + 1}`);
-  }
-
-  if (generationMode === "PER_BATHROOM") {
-    const count = Math.max(1, params.bathrooms ?? 1);
-    return Array.from({ length: count }, (_, index) => `Bathroom ${index + 1}`);
-  }
-
-  return [params.room.name];
-}
 
 async function ensureAssigneeIsEligible(
   ctx: MutationCtx,
@@ -272,19 +233,13 @@ export const create = mutation({
       sourceInspectionId: args.sourceInspectionId,
     });
 
-    const rooms = await ctx.db
-      .query("rooms")
-      .withIndex("by_sort_order")
-      .collect();
+    const templateLibrary = await loadEffectivePropertyTemplateRooms(ctx, args.propertyId, {
+      checklistType: args.type,
+      includeInactive: false,
+    });
 
-    for (const room of rooms.filter((candidate) => candidate.isActive)) {
-      const tasks = await ctx.db
-        .query("tasks")
-        .withIndex("by_room_type_sort", (q) =>
-          q.eq("roomId", room._id).eq("checklistType", args.type)
-        )
-        .collect();
-
+    for (const room of templateLibrary.rooms) {
+      const tasks = room.tasks;
       if (tasks.length === 0) {
         continue;
       }
@@ -303,7 +258,7 @@ export const create = mutation({
 
         const roomInspectionId = await ctx.db.insert("roomInspections", {
           inspectionId,
-          roomId: room._id,
+          roomId: room.sourceRoomId,
           roomName,
           status: "PENDING",
           requiredPhotoMin,
@@ -311,7 +266,7 @@ export const create = mutation({
 
         for (const task of tasks) {
           await ctx.db.insert("taskResults", {
-            taskId: task._id,
+            taskId: task.sourceTaskId,
             roomInspectionId,
             taskDescription: task.description,
             completed: false,

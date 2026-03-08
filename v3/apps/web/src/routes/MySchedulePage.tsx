@@ -10,6 +10,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
 type JobType = "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
+type IntakeSource = "EMAIL" | "TEXT" | "PHONE" | "MANUAL";
 type WorkerEditableStatus = "IN_PROGRESS" | "BLOCKED";
 
 type ScheduleJob = {
@@ -25,6 +26,9 @@ type ScheduleJob = {
   status: JobStatus;
   jobType: JobType;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  intakeSource?: IntakeSource;
+  clientLabel?: string;
+  arrivalDeadline?: number;
   assigneeName?: string | null;
   notes?: string;
   checklistType: "CLEANING" | "INSPECTION" | null;
@@ -40,6 +44,9 @@ type JobDetail = {
   status: JobStatus;
   jobType: JobType;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  intakeSource?: IntakeSource;
+  clientLabel?: string;
+  arrivalDeadline?: number;
   notes?: string;
   linkedInspectionId?: Id<"inspections">;
   checklistType: "CLEANING" | "INSPECTION" | null;
@@ -95,6 +102,28 @@ function formatScheduleWindow(start: Date, end: Date) {
     month: "short",
     day: "numeric",
   })}`;
+}
+
+function formatOptionalDateTime(timestamp?: number) {
+  return timestamp ? new Date(timestamp).toLocaleString() : null;
+}
+
+function summarizeTurnoverIntake(job: {
+  intakeSource?: IntakeSource;
+  clientLabel?: string;
+  arrivalDeadline?: number;
+}) {
+  const parts: string[] = [];
+  if (job.clientLabel) {
+    parts.push(job.clientLabel);
+  }
+  if (job.intakeSource) {
+    parts.push(job.intakeSource);
+  }
+  if (job.arrivalDeadline) {
+    parts.push(`Arrival ${new Date(job.arrivalDeadline).toLocaleString()}`);
+  }
+  return parts.length > 0 ? parts.join(" | ") : null;
 }
 
 function statusTone(status: JobStatus) {
@@ -342,6 +371,9 @@ export function MySchedulePage() {
                 Priority: {selectedListJob.priority ?? "MEDIUM"}
                 {selectedListJob.assigneeName ? ` | Assigned to ${selectedListJob.assigneeName}` : ""}
               </p>
+              {summarizeTurnoverIntake(selectedListJob) && (
+                <p className="mt-1 text-sm text-slate-600">{summarizeTurnoverIntake(selectedListJob)}</p>
+              )}
               {selectedListJob.notes && (
                 <p className="mt-3 text-sm text-slate-600">{selectedListJob.notes}</p>
               )}
@@ -440,6 +472,9 @@ export function MySchedulePage() {
                       <p className="mt-1 text-xs text-slate-500">
                         {job.jobType} | Priority: {job.priority ?? "MEDIUM"}
                       </p>
+                      {summarizeTurnoverIntake(job) && (
+                        <p className="mt-1 text-xs text-slate-500">{summarizeTurnoverIntake(job)}</p>
+                      )}
                     </div>
                     <span
                       className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
@@ -536,6 +571,21 @@ export function MySchedulePage() {
 
               {selectedJob.property?.entryMethod && (
                 <DetailBlock label="Entry Method" value={selectedJob.property.entryMethod} />
+              )}
+
+              {selectedJob.intakeSource && (
+                <DetailBlock label="Turnover Source" value={selectedJob.intakeSource} />
+              )}
+
+              {selectedJob.clientLabel && (
+                <DetailBlock label="Client / Account" value={selectedJob.clientLabel} />
+              )}
+
+              {selectedJob.arrivalDeadline && (
+                <DetailBlock
+                  label="Arrival Deadline"
+                  value={formatOptionalDateTime(selectedJob.arrivalDeadline) ?? ""}
+                />
               )}
 
               {selectedJob.notes && <DetailBlock label="Job Notes" value={selectedJob.notes} />}

@@ -1,13 +1,17 @@
-import { query, mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAuth, requireAdmin } from "./lib/permissions";
 import { checklistTypeValidator } from "./lib/validators";
-
-const roomGenerationModeValidator = v.union(
-  v.literal("SINGLE"),
-  v.literal("PER_BEDROOM"),
-  v.literal("PER_BATHROOM")
-);
+import {
+  buildPropertyChecklistOverridesFromBase,
+  createChecklistOverrideKey,
+  loadBaseTemplateRooms,
+  loadEffectivePropertyTemplateRooms,
+  roomGenerationModeValidator,
+  type PropertyChecklistRoom,
+} from "./lib/checklistTemplates";
 
 const STARTER_ROOM_TEMPLATES: Array<{
   name: string;
@@ -134,6 +138,40 @@ const STARTER_ROOM_TEMPLATES: Array<{
   },
 ];
 
+function sortPropertyChecklistRooms(rooms: PropertyChecklistRoom[]) {
+  return rooms
+    .slice()
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((room) => ({
+      ...room,
+      tasks: room.tasks.slice().sort((left, right) => {
+        if (left.checklistType !== right.checklistType) {
+          return left.checklistType.localeCompare(right.checklistType);
+        }
+        return left.sortOrder - right.sortOrder;
+      }),
+    }));
+}
+
+async function getPropertyForOverrideMutation(
+  ctx: MutationCtx,
+  propertyId: Id<"properties">
+) {
+  await requireAdmin(ctx);
+  const property = await ctx.db.get(propertyId);
+  if (!property) {
+    throw new Error("Property not found");
+  }
+  return property;
+}
+
+function requireExistingOverrides(roomOverrides: PropertyChecklistRoom[] | undefined) {
+  if (!roomOverrides) {
+    throw new Error("Create a property override copy before editing this checklist");
+  }
+  return roomOverrides;
+}
+
 export const listWithTasks = query({
   args: {
     checklistType: v.optional(checklistTypeValidator),
@@ -141,39 +179,301 @@ export const listWithTasks = query({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    return await loadBaseTemplateRooms(ctx, args);
+  },
+});
 
-    const rooms = await ctx.db
-      .query("rooms")
-      .withIndex("by_sort_order")
-      .collect();
+export const listEffectiveForProperty = query({
+  args: {
+    propertyId: v.id("properties"),
+    checklistType: v.optional(checklistTypeValidator),
+    includeInactive: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    return await loadEffectivePropertyTemplateRooms(ctx, args.propertyId, args);
+  },
+});
 
-    return await Promise.all(
-      rooms
-        .filter((room) => (args.includeInactive === true ? true : room.isActive))
-        .map(async (room) => {
-          const tasks = args.checklistType
-            ? await ctx.db
-                .query("tasks")
-                .withIndex("by_room_type_sort", (q) =>
-                  q.eq("roomId", room._id).eq("checklistType", args.checklistType!)
-                )
-                .collect()
-            : await ctx.db
-                .query("tasks")
-                .withIndex("by_room", (q) => q.eq("roomId", room._id))
-                .collect();
+export const createPropertyOverrides = mutation({
+  args: {
+    propertyId: v.id("properties"),
+  },
+  handler: async (ctx, args) => {
+    const property = await getPropertyForOverrideMutation(ctx, args.propertyId);
 
+    if (property.checklistOverrides) {
+      throw new Error("Property overrides already exist. Reset them first if you need a fresh copy");
+    }
+
+    const checklistOverrides = await buildPropertyChecklistOverridesFromBase(ctx);
+    await ctx.db.patch(args.propertyId, {
+      checklistOverrides,
+    });
+
+    return {
+      roomsCopied: checklistOverrides.rooms.length,
+    };
+  },
+});
+
+export const resetPropertyOverrides = mutation({
+  args: {
+    propertyId: v.id("properties"),
+  },
+  handler: async (ctx, args) => {
+    const property = await getPropertyForOverrideMutation(ctx, args.propertyId);
+
+    if (!property.checklistOverrides) {
+      return { cleared: false };
+    }
+
+    await ctx.db.patch(args.propertyId, {
+      checklistOverrides: undefined,
+    });
+
+    return { cleared: true };
+  },
+});
+
+export const createPropertyOverrideRoom = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    sortOrder: v.number(),
+    generationMode: v.optional(roomGenerationModeValidator),
+    isActive: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const property = await getPropertyForOverrideMutation(ctx, args.propertyId);
+    const rooms = requireExistingOverrides(property.checklistOverrides?.rooms);
+
+    const nextRoom: PropertyChecklistRoom = {
+      key: createChecklistOverrideKey("room"),
+      name: args.name,
+      description: args.description,
+      sortOrder: args.sortOrder,
+      generationMode: args.generationMode ?? "SINGLE",
+      isActive: args.isActive ?? true,
+      tasks: [],
+    };
+
+    await ctx.db.patch(args.propertyId, {
+      checklistOverrides: {
+        rooms: sortPropertyChecklistRooms([...rooms, nextRoom]),
+      },
+    });
+
+    return nextRoom.key;
+  },
+});
+
+export const updatePropertyOverrideRoom = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    roomKey: v.string(),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    sortOrder: v.optional(v.number()),
+    generationMode: v.optional(roomGenerationModeValidator),
+    isActive: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const property = await getPropertyForOverrideMutation(ctx, args.propertyId);
+    const rooms = requireExistingOverrides(property.checklistOverrides?.rooms);
+
+    let found = false;
+    const updatedRooms = rooms.map((room) => {
+      if (room.key !== args.roomKey) {
+        return room;
+      }
+      found = true;
+      return {
+        ...room,
+        name: args.name ?? room.name,
+        description: args.description ?? room.description,
+        sortOrder: args.sortOrder ?? room.sortOrder,
+        generationMode: args.generationMode ?? room.generationMode,
+        isActive: args.isActive ?? room.isActive,
+      };
+    });
+
+    if (!found) {
+      throw new Error("Property override room not found");
+    }
+
+    await ctx.db.patch(args.propertyId, {
+      checklistOverrides: {
+        rooms: sortPropertyChecklistRooms(updatedRooms),
+      },
+    });
+  },
+});
+
+export const removePropertyOverrideRoom = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    roomKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const property = await getPropertyForOverrideMutation(ctx, args.propertyId);
+    const rooms = requireExistingOverrides(property.checklistOverrides?.rooms);
+
+    const nextRooms = rooms.filter((room) => room.key !== args.roomKey);
+    if (nextRooms.length === rooms.length) {
+      throw new Error("Property override room not found");
+    }
+
+    await ctx.db.patch(args.propertyId, {
+      checklistOverrides: {
+        rooms: sortPropertyChecklistRooms(nextRooms),
+      },
+    });
+  },
+});
+
+export const createPropertyOverrideTask = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    roomKey: v.string(),
+    checklistType: checklistTypeValidator,
+    description: v.string(),
+    sortOrder: v.number(),
+    requiredPhotoMin: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const property = await getPropertyForOverrideMutation(ctx, args.propertyId);
+    const rooms = requireExistingOverrides(property.checklistOverrides?.rooms);
+
+    let found = false;
+    const updatedRooms = rooms.map((room) => {
+      if (room.key !== args.roomKey) {
+        return room;
+      }
+
+      found = true;
+      return {
+        ...room,
+        tasks: [
+          ...room.tasks,
+          {
+            key: createChecklistOverrideKey("task"),
+            checklistType: args.checklistType,
+            description: args.description,
+            sortOrder: args.sortOrder,
+            requiredPhotoMin: args.requiredPhotoMin,
+          },
+        ],
+      };
+    });
+
+    if (!found) {
+      throw new Error("Property override room not found");
+    }
+
+    await ctx.db.patch(args.propertyId, {
+      checklistOverrides: {
+        rooms: sortPropertyChecklistRooms(updatedRooms),
+      },
+    });
+  },
+});
+
+export const updatePropertyOverrideTask = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    roomKey: v.string(),
+    taskKey: v.string(),
+    checklistType: v.optional(checklistTypeValidator),
+    description: v.optional(v.string()),
+    sortOrder: v.optional(v.number()),
+    requiredPhotoMin: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const property = await getPropertyForOverrideMutation(ctx, args.propertyId);
+    const rooms = requireExistingOverrides(property.checklistOverrides?.rooms);
+
+    let roomFound = false;
+    let taskFound = false;
+    const updatedRooms = rooms.map((room) => {
+      if (room.key !== args.roomKey) {
+        return room;
+      }
+
+      roomFound = true;
+      return {
+        ...room,
+        tasks: room.tasks.map((task) => {
+          if (task.key !== args.taskKey) {
+            return task;
+          }
+
+          taskFound = true;
           return {
-            ...room,
-            tasks: tasks.sort((a, b) => {
-              if (a.checklistType !== b.checklistType) {
-                return a.checklistType.localeCompare(b.checklistType);
-              }
-              return a.sortOrder - b.sortOrder;
-            }),
+            ...task,
+            checklistType: args.checklistType ?? task.checklistType,
+            description: args.description ?? task.description,
+            sortOrder: args.sortOrder ?? task.sortOrder,
+            requiredPhotoMin: args.requiredPhotoMin ?? task.requiredPhotoMin,
           };
-        })
-    );
+        }),
+      };
+    });
+
+    if (!roomFound) {
+      throw new Error("Property override room not found");
+    }
+    if (!taskFound) {
+      throw new Error("Property override task not found");
+    }
+
+    await ctx.db.patch(args.propertyId, {
+      checklistOverrides: {
+        rooms: sortPropertyChecklistRooms(updatedRooms),
+      },
+    });
+  },
+});
+
+export const removePropertyOverrideTask = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    roomKey: v.string(),
+    taskKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const property = await getPropertyForOverrideMutation(ctx, args.propertyId);
+    const rooms = requireExistingOverrides(property.checklistOverrides?.rooms);
+
+    let roomFound = false;
+    let taskFound = false;
+    const updatedRooms = rooms.map((room) => {
+      if (room.key !== args.roomKey) {
+        return room;
+      }
+
+      roomFound = true;
+      const nextTasks = room.tasks.filter((task) => task.key !== args.taskKey);
+      taskFound = nextTasks.length !== room.tasks.length;
+      return {
+        ...room,
+        tasks: nextTasks,
+      };
+    });
+
+    if (!roomFound) {
+      throw new Error("Property override room not found");
+    }
+    if (!taskFound) {
+      throw new Error("Property override task not found");
+    }
+
+    await ctx.db.patch(args.propertyId, {
+      checklistOverrides: {
+        rooms: sortPropertyChecklistRooms(updatedRooms),
+      },
+    });
   },
 });
 
@@ -325,4 +625,3 @@ export const bootstrapStarterTemplates = mutation({
     };
   },
 });
-

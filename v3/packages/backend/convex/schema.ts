@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { authTables } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { propertyChecklistOverrideValidator } from "./lib/checklistTemplates";
 
 const schema = defineSchema({
   ...authTables,
@@ -45,6 +46,7 @@ const schema = defineSchema({
     accessInstructions: v.optional(v.string()),
     entryMethod: v.optional(v.string()),
     serviceNotes: v.optional(v.string()),
+    checklistOverrides: v.optional(propertyChecklistOverrideValidator),
     isArchived: v.optional(v.boolean()),
     isActive: v.boolean(),
   })
@@ -125,6 +127,16 @@ const schema = defineSchema({
     priority: v.optional(
       v.union(v.literal("LOW"), v.literal("MEDIUM"), v.literal("HIGH"), v.literal("URGENT"))
     ),
+    intakeSource: v.optional(
+      v.union(
+        v.literal("EMAIL"),
+        v.literal("TEXT"),
+        v.literal("PHONE"),
+        v.literal("MANUAL")
+      )
+    ),
+    clientLabel: v.optional(v.string()),
+    arrivalDeadline: v.optional(v.number()),
     notes: v.optional(v.string()),
     createdById: v.id("users"),
     completedAt: v.optional(v.number()),
@@ -193,7 +205,7 @@ const schema = defineSchema({
 
   roomInspections: defineTable({
     inspectionId: v.id("inspections"),
-    roomId: v.id("rooms"),
+    roomId: v.optional(v.id("rooms")),
     roomName: v.string(),
     status: v.union(v.literal("PENDING"), v.literal("COMPLETED")),
     notes: v.optional(v.string()),
@@ -204,7 +216,7 @@ const schema = defineSchema({
     .index("by_room", ["roomId"]),
 
   taskResults: defineTable({
-    taskId: v.id("tasks"),
+    taskId: v.optional(v.id("tasks")),
     roomInspectionId: v.id("roomInspections"),
     taskDescription: v.string(),
     completed: v.boolean(),

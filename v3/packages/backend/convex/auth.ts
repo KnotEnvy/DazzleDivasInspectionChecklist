@@ -32,6 +32,10 @@ export function buildUserProfile(params: {
 
 const CustomPassword = Password<DataModel>({
   profile(params) {
+    if (params.flow === "signUp") {
+      throw new Error("Self-signup is disabled. Ask an admin to create your account.");
+    }
+
     return buildUserProfile({
       name: params.name as string | undefined,
       email: params.email as string,

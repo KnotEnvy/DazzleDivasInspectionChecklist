@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import { requireAuth, requireAdmin } from "./lib/permissions";
 import {
   checklistTypeForJobType,
+  jobIntakeSourceValidator,
   jobPriorityValidator,
   jobStatusValidator,
   servicePlanTypeValidator,
@@ -429,6 +430,9 @@ export const createManual = mutation({
     scheduledEnd: v.number(),
     assigneeId: v.optional(v.id("users")),
     priority: v.optional(jobPriorityValidator),
+    intakeSource: jobIntakeSourceValidator,
+    clientLabel: v.optional(v.string()),
+    arrivalDeadline: v.optional(v.number()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -444,6 +448,8 @@ export const createManual = mutation({
     }
 
     let assigneeId = args.assigneeId;
+    const notes = args.notes?.trim() || undefined;
+    const clientLabel = args.clientLabel?.trim() || undefined;
     if (assigneeId) {
       const requiredRole = requiredAssignmentRoleForJob(
         {
@@ -472,7 +478,10 @@ export const createManual = mutation({
       assigneeId,
       status: "SCHEDULED",
       priority: args.priority ?? "MEDIUM",
-      notes: args.notes,
+      intakeSource: args.intakeSource,
+      clientLabel,
+      arrivalDeadline: args.arrivalDeadline,
+      notes,
       createdById: actor._id,
     });
 
@@ -484,6 +493,9 @@ export const createManual = mutation({
         source: "manual_dispatch",
         propertyId: args.propertyId,
         assigneeId: assigneeId ?? null,
+        intakeSource: args.intakeSource,
+        clientLabel: clientLabel ?? null,
+        arrivalDeadline: args.arrivalDeadline ?? null,
       },
     });
 

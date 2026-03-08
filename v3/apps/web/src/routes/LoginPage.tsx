@@ -10,7 +10,7 @@ function formatAuthErrorMessage(error: unknown) {
   }
 
   if (error.message === "InvalidAccountId") {
-    return "No account found for this email. Use Create Account first.";
+    return "No account found for this email. Ask an admin to create your staff account.";
   }
 
   if (error.message === "InvalidSecret") {
@@ -24,7 +24,6 @@ export function LoginPage() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signIn } = useAuthActions();
 
-  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [pending, setPending] = useState(false);
 
   if (isLoading) {
@@ -40,11 +39,11 @@ export function LoginPage() {
     setPending(true);
 
     const formData = new FormData(event.currentTarget);
-    formData.set("flow", flow);
+    formData.set("flow", "signIn");
 
     try {
       await signIn("password", formData);
-      toast.success(flow === "signIn" ? "Welcome back" : "Account created");
+      toast.success("Welcome back");
     } catch (error) {
       toast.error(formatAuthErrorMessage(error));
     } finally {
@@ -60,17 +59,13 @@ export function LoginPage() {
         </p>
         <h1 className="mt-1 text-2xl font-bold">Field Checklist</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Offline-ready workflow for cleaners and inspectors.
+          Staff sign-in for cleaners, inspectors, and admins.
         </p>
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Accounts are provisioned by admin. Open self-signup is disabled for production use.
+        </div>
 
         <form className="mt-5 space-y-3" onSubmit={onSubmit}>
-          {flow === "signUp" && (
-            <label className="block text-sm font-medium text-slate-700">
-              Full name
-              <input className="input mt-1" name="name" required placeholder="Alex Rivera" />
-            </label>
-          )}
-
           <label className="block text-sm font-medium text-slate-700">
             Email
             <input
@@ -95,15 +90,7 @@ export function LoginPage() {
           </label>
 
           <button className="field-button primary w-full" disabled={pending} type="submit">
-            {pending ? "Please wait..." : flow === "signIn" ? "Sign In" : "Create Account"}
-          </button>
-
-          <button
-            type="button"
-            className="field-button secondary w-full"
-            onClick={() => setFlow(flow === "signIn" ? "signUp" : "signIn")}
-          >
-            {flow === "signIn" ? "Need an account?" : "Already have an account?"}
+            {pending ? "Please wait..." : "Sign In"}
           </button>
         </form>
       </div>

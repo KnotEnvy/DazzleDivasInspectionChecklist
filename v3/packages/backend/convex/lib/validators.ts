@@ -69,6 +69,13 @@ export const jobPriorityValidator = v.union(
   v.literal("URGENT")
 );
 
+export const jobIntakeSourceValidator = v.union(
+  v.literal("EMAIL"),
+  v.literal("TEXT"),
+  v.literal("PHONE"),
+  v.literal("MANUAL")
+);
+
 export function assignmentRoleForChecklistType(type: "CLEANING" | "INSPECTION") {
   return type === "CLEANING" ? "CLEANER" : "INSPECTOR";
 }

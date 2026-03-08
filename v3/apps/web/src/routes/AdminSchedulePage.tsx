@@ -9,6 +9,7 @@ type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOC
 type JobType = "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
 type UserRole = "ADMIN" | "CLEANER" | "INSPECTOR";
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+type IntakeSource = "EMAIL" | "TEXT" | "PHONE" | "MANUAL";
 type ViewMode = "week" | "day";
 type SavingAction = "create" | "assign" | "reschedule" | "status" | "checklist" | null;
 
@@ -26,6 +27,9 @@ type DispatchJob = {
   status: JobStatus;
   jobType: JobType;
   priority?: Priority;
+  intakeSource?: IntakeSource;
+  clientLabel?: string;
+  arrivalDeadline?: number;
   assigneeId?: Id<"users">;
   assigneeName?: string | null;
   notes?: string;
@@ -40,6 +44,9 @@ type DispatchDetail = {
   status: JobStatus;
   jobType: JobType;
   priority?: Priority;
+  intakeSource?: IntakeSource;
+  clientLabel?: string;
+  arrivalDeadline?: number;
   assigneeId?: Id<"users">;
   notes?: string;
   linkedInspectionId?: Id<"inspections">;
@@ -165,6 +172,28 @@ function formatJobWindow(job: { scheduledStart: number; scheduledEnd: number }) 
   )}`;
 }
 
+function formatOptionalDateTime(timestamp?: number) {
+  return timestamp ? new Date(timestamp).toLocaleString() : null;
+}
+
+function summarizeTurnoverIntake(job: {
+  intakeSource?: IntakeSource;
+  clientLabel?: string;
+  arrivalDeadline?: number;
+}) {
+  const parts: string[] = [];
+  if (job.clientLabel) {
+    parts.push(job.clientLabel);
+  }
+  if (job.intakeSource) {
+    parts.push(job.intakeSource);
+  }
+  if (job.arrivalDeadline) {
+    parts.push(`Arrival ${new Date(job.arrivalDeadline).toLocaleString()}`);
+  }
+  return parts.length > 0 ? parts.join(" | ") : null;
+}
+
 function statusTone(status: JobStatus) {
   switch (status) {
     case "SCHEDULED":
@@ -222,6 +251,9 @@ function buildDefaultCreateForm() {
     scheduledStart: toDatetimeLocalValue(start.getTime()),
     scheduledEnd: toDatetimeLocalValue(end.getTime()),
     priority: "MEDIUM" as Priority,
+    intakeSource: "MANUAL" as IntakeSource,
+    clientLabel: "",
+    arrivalDeadline: "",
     notes: "",
   };
 }
@@ -414,6 +446,14 @@ export function AdminSchedulePage() {
       toast.error("Enter a valid start and end time");
       return;
     }
+    const arrivalDeadline =
+      createForm.arrivalDeadline.length > 0
+        ? fromDatetimeLocalValue(createForm.arrivalDeadline)
+        : undefined;
+    if (createForm.arrivalDeadline.length > 0 && !Number.isFinite(arrivalDeadline)) {
+      toast.error("Enter a valid arrival deadline");
+      return;
+    }
     setSavingAction("create");
     try {
       const jobId = await createManualJob({
@@ -423,6 +463,9 @@ export function AdminSchedulePage() {
         scheduledEnd,
         assigneeId: createForm.assigneeId.length > 0 ? createForm.assigneeId : undefined,
         priority: createForm.priority,
+        intakeSource: createForm.intakeSource,
+        clientLabel: createForm.clientLabel.trim() || undefined,
+        arrivalDeadline,
         notes: createForm.notes.trim() || undefined,
       });
       toast.success("Dispatch job created");
@@ -658,6 +701,24 @@ export function AdminSchedulePage() {
               </select>
             </label>
             <label className="text-sm font-medium text-slate-700">
+              Intake Source
+              <select
+                className="input mt-1"
+                value={createForm.intakeSource}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    intakeSource: event.target.value as IntakeSource,
+                  }))
+                }
+              >
+                <option value="MANUAL">MANUAL</option>
+                <option value="EMAIL">EMAIL</option>
+                <option value="TEXT">TEXT</option>
+                <option value="PHONE">PHONE</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium text-slate-700">
               Priority
               <select
                 className="input mt-1"
@@ -675,12 +736,34 @@ export function AdminSchedulePage() {
                 <option value="URGENT">URGENT</option>
               </select>
             </label>
+            <label className="text-sm font-medium text-slate-700">
+              Client / Account
+              <input
+                className="input mt-1"
+                placeholder="Airbnb PM team"
+                value={createForm.clientLabel}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, clientLabel: event.target.value }))
+                }
+              />
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Arrival Deadline
+              <input
+                className="input mt-1"
+                type="datetime-local"
+                value={createForm.arrivalDeadline}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, arrivalDeadline: event.target.value }))
+                }
+              />
+            </label>
           </div>
           <label className="mt-3 block text-sm font-medium text-slate-700">
             Job Notes
             <textarea
               className="input mt-1 min-h-24"
-              placeholder="Arrival deadline, client message, or cleaning instructions"
+              placeholder="Cleaning instructions, guest issues, or dispatch notes"
               value={createForm.notes}
               onChange={(event) =>
                 setCreateForm((current) => ({ ...current, notes: event.target.value }))
@@ -951,6 +1034,26 @@ export function AdminSchedulePage() {
                   <p className="text-sm text-slate-600">{selectedJob.notes}</p>
                 </div>
               )}
+              {selectedJob.intakeSource && (
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Turnover Source</p>
+                  <p className="text-sm text-slate-600">{selectedJob.intakeSource}</p>
+                </div>
+              )}
+              {selectedJob.clientLabel && (
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Client / Account</p>
+                  <p className="text-sm text-slate-600">{selectedJob.clientLabel}</p>
+                </div>
+              )}
+              {selectedJob.arrivalDeadline && (
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Arrival Deadline</p>
+                  <p className="text-sm text-slate-600">
+                    {formatOptionalDateTime(selectedJob.arrivalDeadline)}
+                  </p>
+                </div>
+              )}
               {selectedJob.property?.serviceNotes && (
                 <div>
                   <p className="text-sm font-semibold text-slate-700">Service Notes</p>
@@ -1170,6 +1273,9 @@ function JobCard({
       </div>
       <p className="mt-2 text-sm font-semibold">{job.propertyName}</p>
       <p className="text-xs text-slate-600">{job.jobType}</p>
+      {summarizeTurnoverIntake(job) && (
+        <p className="mt-1 text-xs text-slate-500">{summarizeTurnoverIntake(job)}</p>
+      )}
       <p className="mt-1 text-xs text-slate-500">{job.assigneeName ?? "Unassigned"}</p>
     </button>
   );
@@ -1201,6 +1307,9 @@ function JobRow({
           <p className="text-xs text-slate-500">
             {job.assigneeName ?? "Unassigned"} | Priority: {job.priority ?? "MEDIUM"}
           </p>
+          {summarizeTurnoverIntake(job) && (
+            <p className="text-xs text-slate-500">{summarizeTurnoverIntake(job)}</p>
+          )}
         </div>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(job.status)}`}>
           {job.status}
