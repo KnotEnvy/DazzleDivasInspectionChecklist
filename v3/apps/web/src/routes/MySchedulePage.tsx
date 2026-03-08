@@ -5,6 +5,14 @@ import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { useOutboxItems } from "@/hooks/useOutboxItems";
+import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
+import {
+  queueCreateInspection,
+  queueUpdateMyJobStatus,
+} from "@/lib/offlineOutbox";
+import { buildJobStatusOverlay } from "@/lib/offlineInspectionState";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -176,6 +184,8 @@ function workerFocusRank(job: ScheduleJob, now: number) {
 export function MySchedulePage() {
   const navigate = useNavigate();
   const { user } = useCurrentUser();
+  const isOnline = useNetworkStatus();
+  const { items: outboxItems } = useOutboxItems({ includeResolved: true });
   const [selectedJobId, setSelectedJobId] = useState<Id<"jobs"> | null>(null);
   const [startingChecklist, setStartingChecklist] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<WorkerEditableStatus | null>(null);
@@ -198,6 +208,16 @@ export function MySchedulePage() {
 
   const createInspection = useMutation(api.inspections.create);
   const updateMyStatus = useMutation(api.jobs.updateMyStatus);
+  const outboxOverlay = useMemo(() => buildJobStatusOverlay(outboxItems), [outboxItems]);
+  const scheduleQueueItems = useMemo(
+    () =>
+      outboxItems.filter(
+        (item) =>
+          item.type === "UPDATE_MY_JOB_STATUS" ||
+          (item.type === "CREATE_INSPECTION" && !!item.payload.jobId)
+      ),
+    [outboxItems]
+  );
 
   const weekDays = useMemo(() => {
     return Array.from({ length: 7 }).map((_, index) => {
@@ -208,15 +228,23 @@ export function MySchedulePage() {
   const jobsByDay = useMemo(() => {
     return weekDays.map((day) =>
       (jobs ?? [])
+        .map((job) => ({
+          ...job,
+          status: outboxOverlay.latestStatusByJobId.get(job._id) ?? job.status,
+        }))
         .filter((job) => sameLocalDate(job.scheduledStart, day))
         .sort((left, right) => left.scheduledStart - right.scheduledStart)
     );
-  }, [jobs, weekDays]);
+  }, [jobs, outboxOverlay.latestStatusByJobId, weekDays]);
 
   const prioritizedJob = useMemo(() => {
     const now = Date.now();
     return (jobs ?? [])
       .slice()
+      .map((job) => ({
+        ...job,
+        status: outboxOverlay.latestStatusByJobId.get(job._id) ?? job.status,
+      }))
       .sort((left, right) => {
         const rankDelta = workerFocusRank(left, now) - workerFocusRank(right, now);
         if (rankDelta !== 0) {
@@ -225,21 +253,29 @@ export function MySchedulePage() {
 
         return left.scheduledStart - right.scheduledStart;
       })[0] ?? null;
-  }, [jobs]);
+  }, [jobs, outboxOverlay.latestStatusByJobId]);
 
   const upcomingJobs = useMemo(() => {
-    return (jobs ?? []).slice().sort((left, right) => left.scheduledStart - right.scheduledStart);
-  }, [jobs]);
+    return (jobs ?? [])
+      .map((job) => ({
+        ...job,
+        status: outboxOverlay.latestStatusByJobId.get(job._id) ?? job.status,
+      }))
+      .sort((left, right) => left.scheduledStart - right.scheduledStart);
+  }, [jobs, outboxOverlay.latestStatusByJobId]);
 
   const summary = useMemo(() => {
-    const activeJobs = jobs ?? [];
+    const activeJobs = (jobs ?? []).map((job) => ({
+      ...job,
+      status: outboxOverlay.latestStatusByJobId.get(job._id) ?? job.status,
+    }));
     return {
       total: activeJobs.length,
       inProgress: activeJobs.filter((job) => job.status === "IN_PROGRESS").length,
       blocked: activeJobs.filter((job) => job.status === "BLOCKED").length,
       readyToResume: activeJobs.filter((job) => job.linkedInspectionId).length,
     };
-  }, [jobs]);
+  }, [jobs, outboxOverlay.latestStatusByJobId]);
 
   useEffect(() => {
     if (!jobs || jobs.length === 0) {
@@ -273,6 +309,16 @@ export function MySchedulePage() {
       return;
     }
 
+    if (!isOnline) {
+      await queueCreateInspection({
+        propertyId: job.propertyId,
+        type: job.checklistType,
+        jobId: job._id,
+      });
+      toast.success("Checklist start queued for sync");
+      return;
+    }
+
     setStartingChecklist(true);
     try {
       const inspectionId = await createInspection({
@@ -297,6 +343,15 @@ export function MySchedulePage() {
 
     setUpdatingStatus(status);
     try {
+      if (!isOnline) {
+        await queueUpdateMyJobStatus({
+          jobId: selectedJob._id,
+          status,
+        });
+        toast.success(status === "IN_PROGRESS" ? "Status queued: in progress" : "Status queued: blocked");
+        return;
+      }
+
       await updateMyStatus({
         jobId: selectedJob._id,
         status,
@@ -310,13 +365,22 @@ export function MySchedulePage() {
   }
 
   const selectedListJob = upcomingJobs.find((job) => job._id === selectedJobId) ?? prioritizedJob;
+  const selectedJobEffectiveStatus =
+    (selectedJob ? outboxOverlay.latestStatusByJobId.get(selectedJob._id) : undefined) ??
+    selectedJob?.status;
+  const selectedJobEffective = selectedJob
+    ? {
+        ...selectedJob,
+        status: selectedJobEffectiveStatus ?? selectedJob.status,
+      }
+    : selectedJob;
   const selectedJobIsMine =
     !!selectedJob?.assigneeId && !!user?._id && selectedJob.assigneeId === user._id;
   const statusControlsLocked =
     !selectedJob ||
     !selectedJobIsMine ||
-    selectedJob.status === "COMPLETED" ||
-    selectedJob.status === "CANCELLED";
+    selectedJobEffectiveStatus === "COMPLETED" ||
+    selectedJobEffectiveStatus === "CANCELLED";
 
   return (
     <div className="space-y-5">
@@ -334,6 +398,13 @@ export function MySchedulePage() {
         <SummaryCard label="Blocked" value={summary.blocked} />
         <SummaryCard label="Checklists Started" value={summary.readyToResume} />
       </section>
+
+      <OfflineQueuePanel
+        description="Worker status changes and checklist starts can queue locally and replay when the device reconnects."
+        items={scheduleQueueItems}
+        maxItems={4}
+        title="Schedule Sync Status"
+      />
 
       <section className="rounded-3xl border border-border bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -397,7 +468,11 @@ export function MySchedulePage() {
                 onClick={() => void handleOpenChecklist(selectedListJob)}
                 type="button"
               >
-                {startingChecklist ? "Opening Checklist..." : checklistActionLabel(selectedListJob)}
+                {startingChecklist
+                  ? "Opening Checklist..."
+                  : outboxOverlay.queuedChecklistByJobId.has(selectedListJob._id)
+                    ? "Checklist Queued"
+                    : checklistActionLabel(selectedListJob)}
               </button>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -406,7 +481,7 @@ export function MySchedulePage() {
                   disabled={
                     statusControlsLocked ||
                     updatingStatus !== null ||
-                    selectedJob?.status === "IN_PROGRESS"
+                    selectedJobEffectiveStatus === "IN_PROGRESS"
                   }
                   onClick={() => void handleStatusChange("IN_PROGRESS")}
                   type="button"
@@ -418,7 +493,7 @@ export function MySchedulePage() {
                   disabled={
                     statusControlsLocked ||
                     updatingStatus !== null ||
-                    selectedJob?.status === "BLOCKED"
+                    selectedJobEffectiveStatus === "BLOCKED"
                   }
                   onClick={() => void handleStatusChange("BLOCKED")}
                   type="button"
@@ -507,7 +582,9 @@ export function MySchedulePage() {
                       onClick={() => void handleOpenChecklist(job)}
                       type="button"
                     >
-                      {checklistActionLabel(job)}
+                      {outboxOverlay.queuedChecklistByJobId.has(job._id)
+                        ? "Checklist Queued"
+                        : checklistActionLabel(job)}
                     </button>
                     <button
                       className="field-button secondary w-full px-4 sm:flex-1"
@@ -529,66 +606,66 @@ export function MySchedulePage() {
             <p className="text-sm text-slate-500">Choose a job to review field details.</p>
           ) : selectedJob === undefined ? (
             <p className="text-sm text-slate-500">Loading job details...</p>
-          ) : !selectedJob ? (
+          ) : !selectedJobEffective ? (
             <p className="text-sm text-slate-500">Job not found.</p>
           ) : (
             <div className="space-y-4">
               <div className="rounded-2xl border border-border bg-slate-50 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold">{selectedJob.property?.name ?? "Unknown property"}</p>
+                    <p className="font-semibold">{selectedJobEffective.property?.name ?? "Unknown property"}</p>
                     <p className="text-sm text-slate-600">
-                      {selectedJob.property?.address ?? "No address on file"}
+                      {selectedJobEffective.property?.address ?? "No address on file"}
                     </p>
                   </div>
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
-                      selectedJob.status
+                      selectedJobEffective.status
                     )}`}
                   >
-                    {selectedJob.status}
+                    {selectedJobEffective.status}
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-slate-600">
-                  {selectedJob.jobType} | {formatJobWindow(selectedJob)}
+                  {selectedJobEffective.jobType} | {formatJobWindow(selectedJobEffective)}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Priority: {selectedJob.priority ?? "MEDIUM"}
-                  {selectedJob.assignee ? ` | ${selectedJob.assignee.name}` : ""}
+                  Priority: {selectedJobEffective.priority ?? "MEDIUM"}
+                  {selectedJobEffective.assignee ? ` | ${selectedJobEffective.assignee.name}` : ""}
                 </p>
               </div>
 
-              {selectedJob.property?.serviceNotes && (
-                <DetailBlock label="Service Notes" value={selectedJob.property.serviceNotes} />
+              {selectedJobEffective.property?.serviceNotes && (
+                <DetailBlock label="Service Notes" value={selectedJobEffective.property.serviceNotes} />
               )}
 
-              {selectedJob.property?.accessInstructions && (
+              {selectedJobEffective.property?.accessInstructions && (
                 <DetailBlock
                   label="Access Instructions"
-                  value={selectedJob.property.accessInstructions}
+                  value={selectedJobEffective.property.accessInstructions}
                 />
               )}
 
-              {selectedJob.property?.entryMethod && (
-                <DetailBlock label="Entry Method" value={selectedJob.property.entryMethod} />
+              {selectedJobEffective.property?.entryMethod && (
+                <DetailBlock label="Entry Method" value={selectedJobEffective.property.entryMethod} />
               )}
 
-              {selectedJob.intakeSource && (
-                <DetailBlock label="Turnover Source" value={selectedJob.intakeSource} />
+              {selectedJobEffective.intakeSource && (
+                <DetailBlock label="Turnover Source" value={selectedJobEffective.intakeSource} />
               )}
 
-              {selectedJob.clientLabel && (
-                <DetailBlock label="Client / Account" value={selectedJob.clientLabel} />
+              {selectedJobEffective.clientLabel && (
+                <DetailBlock label="Client / Account" value={selectedJobEffective.clientLabel} />
               )}
 
-              {selectedJob.arrivalDeadline && (
+              {selectedJobEffective.arrivalDeadline && (
                 <DetailBlock
                   label="Arrival Deadline"
-                  value={formatOptionalDateTime(selectedJob.arrivalDeadline) ?? ""}
+                  value={formatOptionalDateTime(selectedJobEffective.arrivalDeadline) ?? ""}
                 />
               )}
 
-              {selectedJob.notes && <DetailBlock label="Job Notes" value={selectedJob.notes} />}
+              {selectedJobEffective.notes && <DetailBlock label="Job Notes" value={selectedJobEffective.notes} />}
 
               {!selectedJobIsMine && user?.role !== "ADMIN" && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -606,11 +683,11 @@ export function MySchedulePage() {
                   <button
                     className="field-button secondary w-full px-4"
                     disabled={
-                      statusControlsLocked ||
-                      updatingStatus !== null ||
-                      selectedJob.status === "IN_PROGRESS"
-                    }
-                    onClick={() => void handleStatusChange("IN_PROGRESS")}
+                    statusControlsLocked ||
+                    updatingStatus !== null ||
+                    selectedJobEffectiveStatus === "IN_PROGRESS"
+                  }
+                  onClick={() => void handleStatusChange("IN_PROGRESS")}
                     type="button"
                   >
                     {updatingStatus === "IN_PROGRESS" ? "Saving..." : "Mark In Progress"}
@@ -618,11 +695,11 @@ export function MySchedulePage() {
                   <button
                     className="field-button secondary w-full px-4"
                     disabled={
-                      statusControlsLocked ||
-                      updatingStatus !== null ||
-                      selectedJob.status === "BLOCKED"
-                    }
-                    onClick={() => void handleStatusChange("BLOCKED")}
+                    statusControlsLocked ||
+                    updatingStatus !== null ||
+                    selectedJobEffectiveStatus === "BLOCKED"
+                  }
+                  onClick={() => void handleStatusChange("BLOCKED")}
                     type="button"
                   >
                     {updatingStatus === "BLOCKED" ? "Saving..." : "Mark Blocked"}

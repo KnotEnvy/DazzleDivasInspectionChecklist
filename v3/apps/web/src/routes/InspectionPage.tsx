@@ -6,6 +6,19 @@ import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { useOutboxItems } from "@/hooks/useOutboxItems";
+import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
+import {
+  queueCompleteInspection,
+  queueCompleteRoom,
+  queueRemovePhoto,
+  queueSetTaskCompleted,
+  queueUpdateRoomNotes,
+  queueUploadPhoto,
+  removeQueuedLocalPhoto,
+  type PhotoKind,
+} from "@/lib/offlineOutbox";
+import { applyInspectionOutboxOverlay } from "@/lib/offlineInspectionState";
 
 type RoomSummary = {
   _id: Id<"roomInspections">;
@@ -47,8 +60,6 @@ type RoomDetail = {
   }>;
 };
 
-type PhotoKind = "BEFORE" | "AFTER" | "ISSUE" | "GENERAL";
-
 const photoKinds: PhotoKind[] = ["BEFORE", "AFTER", "ISSUE", "GENERAL"];
 
 function roomStatusTone(status: RoomSummary["status"]) {
@@ -73,6 +84,7 @@ export function InspectionPage() {
     api.inspections.getById,
     inspectionId ? { inspectionId } : "skip"
   ) as InspectionDetail | null | undefined;
+  const { items: outboxItems } = useOutboxItems({ includeResolved: true });
 
   const [selectedRoomId, setSelectedRoomId] = useState<Id<"roomInspections"> | null>(null);
   const selectedRoom = useQuery(
@@ -98,8 +110,28 @@ export function InspectionPage() {
   const [completingRoomId, setCompletingRoomId] = useState<Id<"roomInspections"> | null>(null);
   const [completingInspection, setCompletingInspection] = useState(false);
 
+  const inspectionOverlay = useMemo(
+    () => applyInspectionOutboxOverlay(inspection, selectedRoom, outboxItems),
+    [inspection, outboxItems, selectedRoom]
+  );
+  const inspectionView = inspectionOverlay.inspection;
+  const selectedRoomView = inspectionOverlay.selectedRoom;
+  const inspectionQueueItems = useMemo(() => {
+    if (!inspectionId) {
+      return [];
+    }
+
+    return outboxItems.filter((item) => {
+      if (item.type === "CREATE_INSPECTION" || item.type === "UPDATE_MY_JOB_STATUS") {
+        return false;
+      }
+
+      return "inspectionId" in item.payload && item.payload.inspectionId === inspectionId;
+    });
+  }, [inspectionId, outboxItems]);
+
   const totals = useMemo(() => {
-    const rooms = inspection?.roomInspections ?? [];
+    const rooms = inspectionView?.roomInspections ?? [];
     return {
       rooms: rooms.length,
       completedRooms: rooms.filter((room) => room.status === "COMPLETED").length,
@@ -107,21 +139,21 @@ export function InspectionPage() {
       completedTasks: rooms.reduce((sum, room) => sum + room.completedTasks, 0),
       photos: rooms.reduce((sum, room) => sum + room.photoCount, 0),
     };
-  }, [inspection]);
+  }, [inspectionView]);
 
   useEffect(() => {
-    if (!inspection || inspection.roomInspections.length === 0) {
+    if (!inspectionView || inspectionView.roomInspections.length === 0) {
       setSelectedRoomId(null);
       return;
     }
 
     if (
       !selectedRoomId ||
-      !inspection.roomInspections.some((room) => room._id === selectedRoomId)
+      !inspectionView.roomInspections.some((room) => room._id === selectedRoomId)
     ) {
-      setSelectedRoomId(inspection.roomInspections[0]._id);
+      setSelectedRoomId(inspectionView.roomInspections[0]._id);
     }
-  }, [inspection, selectedRoomId]);
+  }, [inspectionView, selectedRoomId]);
 
   useEffect(() => {
     if (selectedRoom) {
@@ -130,10 +162,10 @@ export function InspectionPage() {
   }, [selectedRoom?._id]);
 
   useEffect(() => {
-    if (inspection) {
-      setInspectionNotes(inspection.notes ?? "");
+    if (inspectionView) {
+      setInspectionNotes(inspectionView.notes ?? "");
     }
-  }, [inspection?._id]);
+  }, [inspectionView?._id]);
 
   if (!inspectionId) {
     return <p className="text-slate-600">Missing inspection id.</p>;
@@ -143,6 +175,23 @@ export function InspectionPage() {
     setSavingTaskId(taskResultId);
 
     try {
+      if (!inspectionId || !selectedRoomView) {
+        return;
+      }
+
+      if (!isOnline) {
+        const task = selectedRoomView.taskResults.find((candidate) => candidate._id === taskResultId);
+        await queueSetTaskCompleted({
+          inspectionId,
+          roomInspectionId: selectedRoomView._id,
+          taskResultId,
+          completed,
+          previousCompleted: task?.completed,
+        });
+        toast.success("Task update queued for sync");
+        return;
+      }
+
       await setTaskCompleted({
         taskResultId,
         completed,
@@ -155,14 +204,24 @@ export function InspectionPage() {
   }
 
   async function handleSaveNotes() {
-    if (!selectedRoom) {
+    if (!inspectionId || !selectedRoomView) {
       return;
     }
 
     setSavingNotes(true);
     try {
+      if (!isOnline) {
+        await queueUpdateRoomNotes({
+          inspectionId,
+          roomInspectionId: selectedRoomView._id,
+          notes: roomNotes.trim(),
+        });
+        toast.success("Room notes saved offline");
+        return;
+      }
+
       await updateRoomNotes({
-        roomInspectionId: selectedRoom._id,
+        roomInspectionId: selectedRoomView._id,
         notes: roomNotes.trim(),
       });
       toast.success("Room notes saved");
@@ -175,12 +234,24 @@ export function InspectionPage() {
 
   async function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    if (!selectedRoom || files.length === 0) {
+    if (!inspectionId || !selectedRoomView || files.length === 0) {
       return;
     }
 
     if (!isOnline) {
-      toast.error("Photo uploads require a live connection right now");
+      for (const file of files) {
+        await queueUploadPhoto({
+          inspectionId,
+          roomInspectionId: selectedRoomView._id,
+          file,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type || "application/octet-stream",
+          kind: photoKind,
+        });
+      }
+
+      toast.success(`Saved ${files.length} photo${files.length === 1 ? "" : "s"} for sync`);
       event.target.value = "";
       return;
     }
@@ -191,7 +262,7 @@ export function InspectionPage() {
     try {
       for (const file of files) {
         const uploadUrl = await generateUploadUrl({
-          roomInspectionId: selectedRoom._id,
+          roomInspectionId: selectedRoomView._id,
         });
 
         const response = await fetch(uploadUrl, {
@@ -213,7 +284,7 @@ export function InspectionPage() {
 
         await savePhoto({
           storageId,
-          roomInspectionId: selectedRoom._id,
+          roomInspectionId: selectedRoomView._id,
           fileName: file.name,
           fileSize: file.size,
           mimeType: file.type || "application/octet-stream",
@@ -232,10 +303,33 @@ export function InspectionPage() {
     }
   }
 
-  async function handleRemovePhoto(photoId: Id<"photos">) {
-    setRemovingPhotoId(photoId);
+  async function handleRemovePhoto(photo: {
+    _id: string;
+    isPendingUpload?: boolean;
+  }) {
+    if (!inspectionId || !selectedRoomView) {
+      return;
+    }
+
+    if (photo.isPendingUpload) {
+      await removeQueuedLocalPhoto(photo._id);
+      toast.success("Queued photo removed");
+      return;
+    }
+
+    setRemovingPhotoId(photo._id as Id<"photos">);
     try {
-      await removePhoto({ photoId });
+      if (!isOnline) {
+        await queueRemovePhoto({
+          inspectionId,
+          roomInspectionId: selectedRoomView._id,
+          photoId: photo._id,
+        });
+        toast.success("Photo removal queued for sync");
+        return;
+      }
+
+      await removePhoto({ photoId: photo._id as Id<"photos"> });
       toast.success("Photo removed");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to remove photo");
@@ -245,16 +339,25 @@ export function InspectionPage() {
   }
 
   async function handleCompleteRoom() {
-    if (!selectedRoom) {
+    if (!inspectionId || !selectedRoomView) {
       return;
     }
 
-    setCompletingRoomId(selectedRoom._id);
+    setCompletingRoomId(selectedRoomView._id);
     try {
-      await completeRoom({ roomInspectionId: selectedRoom._id });
-      toast.success("Room marked complete");
-      const nextPendingRoom = inspection?.roomInspections.find(
-        (room) => room._id !== selectedRoom._id && room.status !== "COMPLETED"
+      if (!isOnline) {
+        await queueCompleteRoom({
+          inspectionId,
+          roomInspectionId: selectedRoomView._id,
+        });
+        toast.success("Room completion queued for sync");
+      } else {
+        await completeRoom({ roomInspectionId: selectedRoomView._id });
+        toast.success("Room marked complete");
+      }
+
+      const nextPendingRoom = inspectionView?.roomInspections.find(
+        (room) => room._id !== selectedRoomView._id && room.status !== "COMPLETED"
       );
       if (nextPendingRoom) {
         setSelectedRoomId(nextPendingRoom._id);
@@ -273,6 +376,15 @@ export function InspectionPage() {
 
     setCompletingInspection(true);
     try {
+      if (!isOnline) {
+        await queueCompleteInspection({
+          inspectionId,
+          notes: inspectionNotes.trim() || undefined,
+        });
+        toast.success("Checklist completion queued for sync");
+        return;
+      }
+
       await completeInspection({
         inspectionId,
         notes: inspectionNotes.trim() || undefined,
@@ -286,32 +398,32 @@ export function InspectionPage() {
     }
   }
 
-  if (inspection === undefined) {
+  if (inspectionView === undefined) {
     return <p className="text-slate-600">Loading checklist...</p>;
   }
 
-  if (!inspection) {
+  if (!inspectionView) {
     return <p className="text-slate-600">Checklist not found.</p>;
   }
 
   const selectedRoomSummary =
-    inspection.roomInspections.find((room) => room._id === selectedRoomId) ?? null;
+    inspectionView.roomInspections.find((room) => room._id === selectedRoomId) ?? null;
   const roomTasksComplete =
-    selectedRoom?.taskResults.every((task) => task.completed) ?? false;
+    selectedRoomView?.taskResults.every((task) => task.completed) ?? false;
   const roomHasEnoughPhotos =
-    selectedRoom !== undefined && selectedRoom !== null
-      ? selectedRoom.photos.length >= selectedRoom.requiredPhotoMin
+    selectedRoomView !== undefined && selectedRoomView !== null
+      ? selectedRoomView.photos.length >= selectedRoomView.requiredPhotoMin
       : false;
   const canCompleteSelectedRoom =
-    inspection.status !== "COMPLETED" &&
-    selectedRoom !== null &&
-    selectedRoom !== undefined &&
+    inspectionView.status !== "COMPLETED" &&
+    selectedRoomView !== null &&
+    selectedRoomView !== undefined &&
     roomTasksComplete &&
     roomHasEnoughPhotos &&
-    selectedRoom.status !== "COMPLETED";
+    selectedRoomView.status !== "COMPLETED";
 
-  const hasNoRooms = inspection.roomInspections.length === 0;
-  const nextPendingRoom = inspection.roomInspections.find((room) => room.status !== "COMPLETED");
+  const hasNoRooms = inspectionView.roomInspections.length === 0;
+  const nextPendingRoom = inspectionView.roomInspections.find((room) => room.status !== "COMPLETED");
   const roomsRemaining = totals.rooms - totals.completedRooms;
 
   return (
@@ -319,13 +431,15 @@ export function InspectionPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
-            {inspection.type}
+            {inspectionView.type}
           </p>
-          <h1 className="text-2xl font-bold">{inspection.propertyName}</h1>
-          <p className="text-sm text-slate-600">Status: {inspection.status}</p>
+          <h1 className="text-2xl font-bold">{inspectionView.propertyName}</h1>
+          <p className="text-sm text-slate-600">Status: {inspectionView.status}</p>
         </div>
         <div className="max-w-sm rounded-2xl border border-border bg-white p-3 text-sm text-slate-600">
-          {isOnline ? "Live sync active" : "Offline detected. Field edits need live sync right now."}
+          {isOnline
+            ? "Live sync active. Any queued field edits will replay automatically."
+            : "Offline detected. Field edits are being queued on this device."}
         </div>
       </div>
 
@@ -335,6 +449,13 @@ export function InspectionPage() {
         <SummaryCard label="Photos" value={String(totals.photos)} />
         <SummaryCard label="Selected Room" value={selectedRoomSummary?.roomName ?? "None"} />
       </section>
+
+      <OfflineQueuePanel
+        description="Checklist actions, room notes, room completion, and photo uploads queue locally and replay when connection returns."
+        items={inspectionQueueItems}
+        maxItems={4}
+        title="Checklist Sync Status"
+      />
 
       {!hasNoRooms && nextPendingRoom ? (
         <section className="rounded-2xl border border-border bg-white p-4">
@@ -378,7 +499,7 @@ export function InspectionPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {inspection.roomInspections.map((room) => (
+              {inspectionView.roomInspections.map((room) => (
                 <button
                   key={room._id}
                   className={`w-full rounded-2xl border p-3 text-left transition ${
@@ -423,27 +544,27 @@ export function InspectionPage() {
           <div className="rounded-2xl border border-border bg-white p-4">
             {!selectedRoomId ? (
               <p className="text-sm text-slate-500">Select a room to start executing work.</p>
-            ) : selectedRoom === undefined ? (
+            ) : selectedRoomView === undefined ? (
               <p className="text-sm text-slate-500">Loading room details...</p>
-            ) : !selectedRoom ? (
+            ) : !selectedRoomView ? (
               <p className="text-sm text-slate-500">Room not found.</p>
             ) : (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-bold">{selectedRoom.roomName}</h2>
+                    <h2 className="text-lg font-bold">{selectedRoomView.roomName}</h2>
                     <p className="text-sm text-slate-600">
-                      {selectedRoom.taskResults.filter((task) => task.completed).length}/
-                      {selectedRoom.taskResults.length} tasks complete |{" "}
-                      {selectedRoom.photos.length}/{selectedRoom.requiredPhotoMin} required photos
+                      {selectedRoomView.taskResults.filter((task) => task.completed).length}/
+                      {selectedRoomView.taskResults.length} tasks complete |{" "}
+                      {selectedRoomView.photos.length}/{selectedRoomView.requiredPhotoMin} required photos
                     </p>
                   </div>
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-semibold ${roomStatusTone(
-                      selectedRoom.status
+                      selectedRoomView.status
                     )}`}
                   >
-                    {selectedRoom.status}
+                    {selectedRoomView.status}
                   </span>
                 </div>
 
@@ -452,26 +573,26 @@ export function InspectionPage() {
                     <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 1</p>
                     <p className="mt-1 font-semibold">Complete tasks</p>
                     <p className="mt-1 text-sm">
-                      {selectedRoom.taskResults.filter((task) => task.completed).length}/
-                      {selectedRoom.taskResults.length} complete
+                      {selectedRoomView.taskResults.filter((task) => task.completed).length}/
+                      {selectedRoomView.taskResults.length} complete
                     </p>
                   </div>
                   <div className={`rounded-2xl border p-3 ${stepTone(roomHasEnoughPhotos)}`}>
                     <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 2</p>
                     <p className="mt-1 font-semibold">Upload proof photos</p>
                     <p className="mt-1 text-sm">
-                      {selectedRoom.photos.length}/{selectedRoom.requiredPhotoMin} required
+                      {selectedRoomView.photos.length}/{selectedRoomView.requiredPhotoMin} required
                     </p>
                   </div>
                   <div
                     className={`rounded-2xl border p-3 ${stepTone(
-                      selectedRoom.status === "COMPLETED"
+                      selectedRoomView.status === "COMPLETED"
                     )}`}
                   >
                     <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 3</p>
                     <p className="mt-1 font-semibold">Finish room</p>
                     <p className="mt-1 text-sm">
-                      {selectedRoom.status === "COMPLETED"
+                      {selectedRoomView.status === "COMPLETED"
                         ? "Room is complete"
                         : "Mark complete after tasks and photos"}
                     </p>
@@ -481,14 +602,14 @@ export function InspectionPage() {
                 <div>
                   <h3 className="mb-2 font-semibold">Step 1: Complete room tasks</h3>
                   <div className="space-y-2">
-                    {selectedRoom.taskResults.map((task) => (
+                    {selectedRoomView.taskResults.map((task) => (
                       <label
                         key={task._id}
                         className="flex items-start gap-3 rounded-2xl border border-border bg-slate-50 p-3"
                       >
                         <input
                           checked={task.completed}
-                          disabled={inspection.status === "COMPLETED" || savingTaskId === task._id}
+                          disabled={inspectionView.status === "COMPLETED" || savingTaskId === task._id}
                           onChange={(event) =>
                             void handleTaskToggle(task._id, event.target.checked)
                           }
@@ -511,13 +632,13 @@ export function InspectionPage() {
                   </div>
                   <textarea
                     className="input min-h-28"
-                    disabled={inspection.status === "COMPLETED"}
+                    disabled={inspectionView.status === "COMPLETED"}
                     onChange={(event) => setRoomNotes(event.target.value)}
                     value={roomNotes}
                   />
                   <button
                     className="field-button secondary mt-3 px-4"
-                    disabled={inspection.status === "COMPLETED" || savingNotes}
+                    disabled={inspectionView.status === "COMPLETED" || savingNotes}
                     onClick={() => void handleSaveNotes()}
                     type="button"
                   >
@@ -537,7 +658,7 @@ export function InspectionPage() {
                       Photo Type
                       <select
                         className="input mt-1"
-                        disabled={inspection.status === "COMPLETED" || uploadingPhotos}
+                        disabled={inspectionView.status === "COMPLETED" || uploadingPhotos}
                         onChange={(event) => setPhotoKind(event.target.value as PhotoKind)}
                         value={photoKind}
                       >
@@ -553,7 +674,7 @@ export function InspectionPage() {
                       <input
                         accept="image/*"
                         className="input mt-1 py-2"
-                        disabled={inspection.status === "COMPLETED" || uploadingPhotos || !isOnline}
+                        disabled={inspectionView.status === "COMPLETED" || uploadingPhotos}
                         multiple
                         onChange={(event) => void handlePhotoUpload(event)}
                         type="file"
@@ -561,11 +682,11 @@ export function InspectionPage() {
                     </label>
                   </div>
 
-                  {selectedRoom.photos.length === 0 ? (
+                  {selectedRoomView.photos.length === 0 ? (
                     <p className="mt-3 text-sm text-slate-500">No photos uploaded yet.</p>
                   ) : (
                     <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {selectedRoom.photos.map((photo) => (
+                      {selectedRoomView.photos.map((photo) => (
                         <div
                           key={photo._id}
                           className="overflow-hidden rounded-2xl border border-border bg-white"
@@ -578,18 +699,28 @@ export function InspectionPage() {
                             />
                           ) : (
                             <div className="flex h-40 items-center justify-center bg-slate-100 text-sm text-slate-500">
-                              Preview unavailable
+                              {"isPendingUpload" in photo && photo.isPendingUpload
+                                ? "Pending local upload"
+                                : "Preview unavailable"}
                             </div>
                           )}
                           <div className="space-y-2 p-3">
                             <div>
                               <p className="text-sm font-semibold">{photo.fileName}</p>
-                              <p className="text-xs text-slate-500">{photo.kind ?? "GENERAL"}</p>
+                              <p className="text-xs text-slate-500">
+                                {photo.kind ?? "GENERAL"}
+                                {"isPendingUpload" in photo && photo.isPendingUpload
+                                  ? " | queued"
+                                  : ""}
+                              </p>
                             </div>
                             <button
                               className="field-button secondary w-full px-3"
-                              disabled={inspection.status === "COMPLETED" || removingPhotoId === photo._id}
-                              onClick={() => void handleRemovePhoto(photo._id)}
+                              disabled={
+                                inspectionView.status === "COMPLETED" ||
+                                removingPhotoId === photo._id
+                              }
+                              onClick={() => void handleRemovePhoto(photo)}
                               type="button"
                             >
                               {removingPhotoId === photo._id ? "Removing..." : "Remove Photo"}
@@ -616,7 +747,7 @@ export function InspectionPage() {
                       ) : null}
                       {!roomHasEnoughPhotos ? (
                         <p>
-                          Upload at least {selectedRoom.requiredPhotoMin} photo(s) for this room
+                          Upload at least {selectedRoomView.requiredPhotoMin} photo(s) for this room
                           before completing it.
                         </p>
                       ) : null}
@@ -624,13 +755,13 @@ export function InspectionPage() {
                   ) : null}
                   <button
                     className="field-button primary w-full px-5"
-                    disabled={!canCompleteSelectedRoom || completingRoomId === selectedRoom._id}
+                    disabled={!canCompleteSelectedRoom || completingRoomId === selectedRoomView._id}
                     onClick={() => void handleCompleteRoom()}
                     type="button"
                   >
-                    {completingRoomId === selectedRoom._id
+                    {completingRoomId === selectedRoomView._id
                       ? "Completing Room..."
-                      : selectedRoom.status === "COMPLETED"
+                      : selectedRoomView.status === "COMPLETED"
                         ? "Room Completed"
                         : "Mark Room Complete"}
                   </button>
@@ -648,20 +779,20 @@ export function InspectionPage() {
             </div>
             <textarea
               className="input min-h-28"
-              disabled={inspection.status === "COMPLETED"}
+              disabled={inspectionView.status === "COMPLETED"}
               onChange={(event) => setInspectionNotes(event.target.value)}
               placeholder="Add overall inspection notes or shift summary"
               value={inspectionNotes}
             />
             <button
               className="field-button primary mt-3 w-full px-5"
-              disabled={inspection.status === "COMPLETED" || completingInspection}
+              disabled={inspectionView.status === "COMPLETED" || completingInspection}
               onClick={() => void handleCompleteInspection()}
               type="button"
             >
               {completingInspection
                 ? "Completing Checklist..."
-                : inspection.status === "COMPLETED"
+                : inspectionView.status === "COMPLETED"
                   ? "Checklist Completed"
                   : "Complete Checklist"}
             </button>

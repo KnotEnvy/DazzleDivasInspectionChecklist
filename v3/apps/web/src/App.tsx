@@ -13,6 +13,7 @@ import { AdminSchedulePage } from "@/routes/AdminSchedulePage";
 import { AdminTemplatesPage } from "@/routes/AdminTemplatesPage";
 import { MySchedulePage } from "@/routes/MySchedulePage";
 import { NotFoundPage } from "@/routes/NotFoundPage";
+import { OfflineSyncProvider } from "@/app/OfflineSyncProvider";
 
 export default function App() {
   return (
@@ -22,7 +23,9 @@ export default function App() {
       <Route
         element={
           <AuthGuard>
-            <AppShell />
+            <OfflineSyncProvider>
+              <AppShell />
+            </OfflineSyncProvider>
           </AuthGuard>
         }
       >

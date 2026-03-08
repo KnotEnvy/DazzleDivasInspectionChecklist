@@ -1,13 +1,10 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Id } from "convex/_generated/dataModel";
-import toast from "react-hot-toast";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxCount } from "@/hooks/useOutboxCount";
-import { flushCreateInspectionOutbox } from "@/lib/offlineOutbox";
+import { useOutboxItems } from "@/hooks/useOutboxItems";
+import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
 
 type ActiveInspection = {
   _id: string;
@@ -26,8 +23,8 @@ type AssignedProperty = {
 
 export function DashboardPage() {
   const { user } = useCurrentUser();
-  const isOnline = useNetworkStatus();
-  const { count, refresh } = useOutboxCount();
+  const { count } = useOutboxCount();
+  const { items } = useOutboxItems({ includeResolved: true });
 
   const active = useQuery(api.inspections.listActive) as
     | ActiveInspection[]
@@ -35,39 +32,6 @@ export function DashboardPage() {
   const mine = useQuery(api.propertyAssignments.listMine) as
     | AssignedProperty[]
     | undefined;
-  const createInspection = useMutation(api.inspections.create);
-
-  const [syncing, setSyncing] = useState(false);
-
-  async function handleSyncOutbox() {
-    if (!isOnline) {
-      toast.error("Reconnect to sync queued actions");
-      return;
-    }
-
-    setSyncing(true);
-    const result = await flushCreateInspectionOutbox((payload) =>
-      createInspection({
-        propertyId: payload.propertyId as Id<"properties">,
-        type: payload.type,
-      })
-    );
-
-    if (result.processed > 0) {
-      toast.success(`Synced ${result.processed} queued checklist(s)`);
-    }
-
-    if (result.failed > 0) {
-      toast.error(`${result.failed} queued item(s) still failed`);
-    }
-
-    if (result.processed === 0 && result.failed === 0) {
-      toast("Queue is already empty");
-    }
-
-    await refresh();
-    setSyncing(false);
-  }
 
   return (
     <div className="space-y-5">
@@ -86,21 +50,11 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-white p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold">Offline Outbox</h2>
-          <button
-            className="field-button secondary px-4"
-            disabled={!isOnline || syncing || count === 0}
-            onClick={() => void handleSyncOutbox()}
-          >
-            {syncing ? "Syncing..." : "Sync Queue"}
-          </button>
-        </div>
-        <p className="text-sm text-slate-600">
-          New checklists created while offline are stored locally and replayed when you reconnect.
-        </p>
-      </section>
+      <OfflineQueuePanel
+        description="Field actions now queue locally when you lose connection and replay when the device reconnects."
+        items={items}
+        title="Offline Outbox"
+      />
 
       <section className="rounded-2xl border border-border bg-white p-4">
         <h2 className="mb-2 text-lg font-bold">Assigned Properties</h2>
