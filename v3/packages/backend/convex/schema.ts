@@ -220,6 +220,8 @@ const schema = defineSchema({
     roomInspectionId: v.id("roomInspections"),
     taskDescription: v.string(),
     completed: v.boolean(),
+    hasIssue: v.optional(v.boolean()),
+    issueNotes: v.optional(v.string()),
   })
     .index("by_room_inspection", ["roomInspectionId"])
     .index("by_task", ["taskId"]),

@@ -10,8 +10,15 @@ type JobType = "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
 type UserRole = "ADMIN" | "CLEANER" | "INSPECTOR";
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 type IntakeSource = "EMAIL" | "TEXT" | "PHONE" | "MANUAL";
-type ViewMode = "week" | "day";
-type SavingAction = "create" | "assign" | "reschedule" | "status" | "checklist" | null;
+type ViewMode = "month" | "week" | "day";
+type SavingAction =
+  | "create"
+  | "assign"
+  | "reschedule"
+  | "status"
+  | "saveAll"
+  | "checklist"
+  | null;
 
 type DispatchJob = {
   _id: Id<"jobs">;
@@ -127,10 +134,26 @@ function startOfWeekLocal(value: Date) {
   return next;
 }
 
+function startOfMonthLocal(value: Date) {
+  const next = startOfDayLocal(value);
+  next.setDate(1);
+  return next;
+}
+
 function addDays(value: Date, days: number) {
   const next = new Date(value);
   next.setDate(next.getDate() + days);
   return next;
+}
+
+function addMonths(value: Date, months: number) {
+  const next = new Date(value);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function monthGridStart(value: Date) {
+  return startOfWeekLocal(startOfMonthLocal(value));
 }
 
 function sameLocalDate(timestamp: number, date: Date) {
@@ -272,18 +295,26 @@ export function AdminSchedulePage() {
   const [scheduledEndInput, setScheduledEndInput] = useState("");
   const [statusInput, setStatusInput] = useState<JobStatus>("SCHEDULED");
   const [savingAction, setSavingAction] = useState<SavingAction>(null);
+  const [quickAssigningJobId, setQuickAssigningJobId] = useState<Id<"jobs"> | null>(null);
+  const [quickAssigneeByJobId, setQuickAssigneeByJobId] = useState<
+    Record<string, Id<"users"> | "">
+  >({});
   const [createForm, setCreateForm] = useState(buildDefaultCreateForm);
 
-  const windowStart = useMemo(
-    () => (viewMode === "week" ? startOfWeekLocal(anchorDate) : startOfDayLocal(anchorDate)),
-    [anchorDate, viewMode]
-  );
-  const windowEnd = useMemo(
-    () => endOfDayLocal(viewMode === "week" ? addDays(windowStart, 6) : windowStart),
-    [viewMode, windowStart]
-  );
+  const windowStart = useMemo(() => {
+    if (viewMode === "month") {
+      return monthGridStart(anchorDate);
+    }
+    return viewMode === "week" ? startOfWeekLocal(anchorDate) : startOfDayLocal(anchorDate);
+  }, [anchorDate, viewMode]);
+  const windowEnd = useMemo(() => {
+    if (viewMode === "month") {
+      return endOfDayLocal(addDays(windowStart, 41));
+    }
+    return endOfDayLocal(viewMode === "week" ? addDays(windowStart, 6) : windowStart);
+  }, [viewMode, windowStart]);
   const visibleDays = useMemo(() => {
-    const totalDays = viewMode === "week" ? 7 : 1;
+    const totalDays = viewMode === "month" ? 42 : viewMode === "week" ? 7 : 1;
     return Array.from({ length: totalDays }, (_, index) => addDays(windowStart, index));
   }, [viewMode, windowStart]);
 
@@ -356,6 +387,15 @@ export function AdminSchedulePage() {
     [filteredJobs]
   );
   const unassignedJobs = useMemo(() => listJobs.filter((job) => !job.assigneeId), [listJobs]);
+  const monthWeeks = useMemo(() => {
+    if (viewMode !== "month") {
+      return [];
+    }
+
+    return Array.from({ length: 6 }, (_, weekIndex) =>
+      visibleDays.slice(weekIndex * 7, weekIndex * 7 + 7)
+    );
+  }, [viewMode, visibleDays]);
 
   const summary = useMemo(
     () => ({
@@ -431,8 +471,29 @@ export function AdminSchedulePage() {
     setStatusInput(selectedJob.status);
   }, [selectedJob]);
 
+  useEffect(() => {
+    if (unassignedJobs.length === 0) {
+      return;
+    }
+
+    setQuickAssigneeByJobId((current) => {
+      const next = { ...current };
+      for (const job of unassignedJobs) {
+        if (!(job._id in next)) {
+          next[job._id] = "";
+        }
+      }
+      return next;
+    });
+  }, [unassignedJobs]);
+
   function shiftWindow(direction: -1 | 1) {
-    setAnchorDate((current) => addDays(current, direction * (viewMode === "week" ? 7 : 1)));
+    setAnchorDate((current) => {
+      if (viewMode === "month") {
+        return addMonths(current, direction);
+      }
+      return addDays(current, direction * (viewMode === "week" ? 7 : 1));
+    });
   }
 
   async function handleCreateJob() {
@@ -545,6 +606,66 @@ export function AdminSchedulePage() {
     }
   }
 
+  async function handleSaveAllDispatchChanges() {
+    if (!selectedJob) {
+      return;
+    }
+
+    const nextAssigneeId = assigneeId.length > 0 ? assigneeId : null;
+    const hasAssignmentChange = nextAssigneeId !== (selectedJob.assignee?._id ?? null);
+    const hasTimingChange =
+      scheduledStartInput !== toDatetimeLocalValue(selectedJob.scheduledStart) ||
+      scheduledEndInput !== toDatetimeLocalValue(selectedJob.scheduledEnd);
+    const hasStatusChange =
+      selectedJob.status !== "COMPLETED" && statusInput !== selectedJob.status;
+
+    if (!hasAssignmentChange && !hasTimingChange && !hasStatusChange) {
+      toast("No dispatch changes to save");
+      return;
+    }
+
+    const scheduledStart = fromDatetimeLocalValue(scheduledStartInput);
+    const scheduledEnd = fromDatetimeLocalValue(scheduledEndInput);
+    if (
+      hasTimingChange &&
+      (!Number.isFinite(scheduledStart) || !Number.isFinite(scheduledEnd))
+    ) {
+      toast.error("Enter valid start and end times");
+      return;
+    }
+
+    setSavingAction("saveAll");
+    try {
+      if (hasAssignmentChange) {
+        await reassignJob({
+          jobId: selectedJob._id,
+          assigneeId: nextAssigneeId,
+        });
+      }
+
+      if (hasTimingChange) {
+        await rescheduleJob({
+          jobId: selectedJob._id,
+          scheduledStart,
+          scheduledEnd,
+        });
+      }
+
+      if (hasStatusChange) {
+        await updateStatus({
+          jobId: selectedJob._id,
+          status: statusInput,
+        });
+      }
+
+      toast.success("Dispatch changes saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save dispatch changes");
+    } finally {
+      setSavingAction(null);
+    }
+  }
+
   async function handleChecklist() {
     if (!selectedJob) {
       return;
@@ -577,7 +698,43 @@ export function AdminSchedulePage() {
     }
   }
 
+  async function handleQuickAssign(job: DispatchJob) {
+    const nextAssigneeId = quickAssigneeByJobId[job._id];
+    if (!nextAssigneeId) {
+      toast.error("Choose a staff member first");
+      return;
+    }
+
+    setQuickAssigningJobId(job._id);
+    try {
+      await reassignJob({
+        jobId: job._id,
+        assigneeId: nextAssigneeId,
+      });
+      toast.success("Job assigned from queue");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign job");
+    } finally {
+      setQuickAssigningJobId(null);
+    }
+  }
+
+  function eligibleAssigneesForDispatchJob(job: Pick<DispatchJob, "jobType">) {
+    const requiredRole = requiredRoleForJobType(job.jobType);
+    return assigneeUsers.filter((user) => user.role === requiredRole);
+  }
+
   const selectedAssigneeValue = selectedJob?.assignee?._id ?? "";
+  const hasDispatchChanges =
+    !!selectedJob &&
+    (assigneeId !== selectedAssigneeValue ||
+      scheduledStartInput !== toDatetimeLocalValue(selectedJob.scheduledStart) ||
+      scheduledEndInput !== toDatetimeLocalValue(selectedJob.scheduledEnd) ||
+      (selectedJob.status !== "COMPLETED" && statusInput !== selectedJob.status));
+  const windowLabel =
+    viewMode === "month"
+      ? anchorDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+      : formatWindowLabel(windowStart, windowEnd);
 
   return (
     <div className="space-y-5">
@@ -802,20 +959,53 @@ export function AdminSchedulePage() {
           ) : (
             <div className="space-y-2">
               {unassignedJobs.slice(0, 8).map((job) => (
-                <button
+                <div
                   key={job._id}
-                  className={`w-full rounded-2xl border p-3 text-left transition ${
+                  className={`rounded-2xl border p-3 transition ${
                     selectedJobId === job._id
                       ? "border-brand-500 bg-brand-50"
-                      : "border-border bg-slate-50 hover:border-brand-300"
+                      : "border-border bg-slate-50"
                   }`}
-                  onClick={() => setSelectedJobId(job._id)}
-                  type="button"
                 >
-                  <p className="font-semibold">{job.propertyName}</p>
-                  <p className="text-sm text-slate-600">{formatJobWindow(job)}</p>
-                  <p className="text-xs text-slate-500">{job.jobType}</p>
-                </button>
+                  <button
+                    className="w-full text-left"
+                    onClick={() => setSelectedJobId(job._id)}
+                    type="button"
+                  >
+                    <p className="font-semibold">{job.propertyName}</p>
+                    <p className="text-sm text-slate-600">{formatJobWindow(job)}</p>
+                    <p className="text-xs text-slate-500">{job.jobType}</p>
+                  </button>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <select
+                      className="input"
+                      value={quickAssigneeByJobId[job._id] ?? ""}
+                      onChange={(event) =>
+                        setQuickAssigneeByJobId((current) => ({
+                          ...current,
+                          [job._id]: event.target.value as Id<"users"> | "",
+                        }))
+                      }
+                    >
+                      <option value="">Pick assignee</option>
+                      {eligibleAssigneesForDispatchJob(job).map((user) => (
+                        <option key={user._id} value={user._id}>
+                          {user.name} ({user.role})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="field-button secondary px-4"
+                      disabled={
+                        quickAssigningJobId === job._id || !(quickAssigneeByJobId[job._id] ?? "")
+                      }
+                      onClick={() => void handleQuickAssign(job)}
+                      type="button"
+                    >
+                      {quickAssigningJobId === job._id ? "Assigning..." : "Assign"}
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -826,9 +1016,18 @@ export function AdminSchedulePage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold">Window Controls</h2>
-            <p className="text-sm text-slate-600">{formatWindowLabel(windowStart, windowEnd)}</p>
+            <p className="text-sm text-slate-600">{windowLabel}</p>
           </div>
           <div className="inline-flex rounded-2xl border border-border bg-slate-50 p-1">
+            <button
+              className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                viewMode === "month" ? "bg-brand-700 text-white" : "text-slate-600"
+              }`}
+              onClick={() => setViewMode("month")}
+              type="button"
+            >
+              Month
+            </button>
             <button
               className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
                 viewMode === "week" ? "bg-brand-700 text-white" : "text-slate-600"
@@ -919,7 +1118,13 @@ export function AdminSchedulePage() {
           <section className="rounded-2xl border border-border bg-white p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-lg font-bold">{viewMode === "week" ? "Week Board" : "Day Board"}</h2>
+                <h2 className="text-lg font-bold">
+                  {viewMode === "month"
+                    ? "Month Board"
+                    : viewMode === "week"
+                      ? "Week Board"
+                      : "Day Board"}
+                </h2>
                 <p className="text-sm text-slate-600">Manual jobs and recurring jobs appear together here.</p>
               </div>
               <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
@@ -930,6 +1135,85 @@ export function AdminSchedulePage() {
               <p className="text-sm text-slate-500">Loading dispatch board...</p>
             ) : filteredJobs.length === 0 ? (
               <p className="text-sm text-slate-500">No jobs match the current filters.</p>
+            ) : viewMode === "month" ? (
+              <div className="grid gap-3 lg:grid-cols-7">
+                {monthWeeks.flat().map((day, index) => {
+                  const dayJobs = jobsByDay[index] ?? [];
+                  const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
+
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      className={`rounded-2xl border p-3 ${
+                        isCurrentMonth ? "border-border bg-slate-50" : "border-slate-200 bg-slate-100"
+                      }`}
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                            {day.toLocaleDateString(undefined, { weekday: "short" })}
+                          </p>
+                          <p
+                            className={`text-sm font-semibold ${
+                              isCurrentMonth ? "text-slate-900" : "text-slate-500"
+                            }`}
+                          >
+                            {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-slate-600">
+                          {dayJobs.length}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {dayJobs.length === 0 ? (
+                          <p className="text-xs text-slate-500">No jobs</p>
+                        ) : (
+                          <>
+                            {dayJobs.slice(0, 3).map((job) => (
+                              <button
+                                key={job._id}
+                                className={`w-full rounded-xl border p-2 text-left text-xs transition ${
+                                  selectedJobId === job._id
+                                    ? "border-brand-500 bg-brand-50"
+                                    : "border-border bg-white hover:border-brand-300"
+                                }`}
+                                onClick={() => setSelectedJobId(job._id)}
+                                type="button"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="font-semibold">
+                                    {new Date(job.scheduledStart).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </p>
+                                  <span
+                                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(
+                                      job.status
+                                    )}`}
+                                  >
+                                    {job.status}
+                                  </span>
+                                </div>
+                                <p className="mt-1 font-semibold">{job.propertyName}</p>
+                                <p className="mt-1 text-[11px] text-slate-500">
+                                  {job.assigneeName ?? "Unassigned"}
+                                </p>
+                              </button>
+                            ))}
+                            {dayJobs.length > 3 ? (
+                              <p className="text-[11px] font-semibold text-slate-500">
+                                +{dayJobs.length - 3} more jobs
+                              </p>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             ) : viewMode === "week" ? (
               <div className="grid gap-3 lg:grid-cols-7">
                 {visibleDays.map((day, index) => (
@@ -1090,6 +1374,15 @@ export function AdminSchedulePage() {
                   : selectedJob.linkedInspectionId
                     ? "Open Linked Checklist"
                     : "Start Checklist"}
+              </button>
+
+              <button
+                className="field-button secondary w-full px-4"
+                disabled={controlsLocked || savingAction === "saveAll" || !hasDispatchChanges}
+                onClick={() => void handleSaveAllDispatchChanges()}
+                type="button"
+              >
+                {savingAction === "saveAll" ? "Saving All..." : "Save All Dispatch Changes"}
               </button>
 
               <section className="rounded-2xl border border-border p-4">

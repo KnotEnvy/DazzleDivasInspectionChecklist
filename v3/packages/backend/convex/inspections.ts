@@ -8,6 +8,10 @@ import {
   assertPropertyAccessForChecklist,
 } from "./lib/permissions";
 import {
+  assertAllRoomsCompleted,
+  validateChecklistStartFromJob,
+} from "./lib/jobLifecycle";
+import {
   deriveRoomNames,
   loadEffectivePropertyTemplateRooms,
 } from "./lib/checklistTemplates";
@@ -87,21 +91,47 @@ export const listCompleted = query({
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
 
-    if (user.role === "ADMIN") {
-      return await ctx.db
-        .query("inspections")
-        .withIndex("by_status", (q) => q.eq("status", "COMPLETED"))
-        .order("desc")
-        .collect();
-    }
+    const inspections =
+      user.role === "ADMIN"
+        ? await ctx.db
+            .query("inspections")
+            .withIndex("by_status", (q) => q.eq("status", "COMPLETED"))
+            .order("desc")
+            .collect()
+        : await ctx.db
+            .query("inspections")
+            .withIndex("by_assignee_status", (q) =>
+              q.eq("assigneeId", user._id).eq("status", "COMPLETED")
+            )
+            .order("desc")
+            .collect();
 
-    return await ctx.db
-      .query("inspections")
-      .withIndex("by_assignee_status", (q) =>
-        q.eq("assigneeId", user._id).eq("status", "COMPLETED")
-      )
-      .order("desc")
-      .collect();
+    return await Promise.all(
+      inspections.map(async (inspection) => {
+        const roomInspections = await ctx.db
+          .query("roomInspections")
+          .withIndex("by_inspection", (q) => q.eq("inspectionId", inspection._id))
+          .collect();
+
+        const roomIssueCounts = await Promise.all(
+          roomInspections.map(async (roomInspection) => {
+            const taskResults = await ctx.db
+              .query("taskResults")
+              .withIndex("by_room_inspection", (q) =>
+                q.eq("roomInspectionId", roomInspection._id)
+              )
+              .collect();
+
+            return taskResults.filter((task) => task.hasIssue).length;
+          })
+        );
+
+        return {
+          ...inspection,
+          issueCount: roomIssueCounts.reduce((sum, count) => sum + count, 0),
+        };
+      })
+    );
   },
 });
 
@@ -135,6 +165,7 @@ export const getById = query({
           ...roomInspection,
           totalTasks: taskResults.length,
           completedTasks: taskResults.filter((task) => task.completed).length,
+          issueCount: taskResults.filter((task) => task.hasIssue).length,
           photoCount: photos.length,
         };
       })
@@ -158,39 +189,31 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const actor = await requireAuth(ctx);
     const job = args.jobId ? await ctx.db.get(args.jobId) : null;
+    const existingInspection = job?.linkedInspectionId
+      ? await ctx.db.get(job.linkedInspectionId)
+      : null;
+    const lifecycleDecision = validateChecklistStartFromJob({
+      jobIdProvided: !!args.jobId,
+      job: job
+        ? {
+            propertyId: job.propertyId,
+            status: job.status,
+            jobType: job.jobType,
+            linkedInspectionId: job.linkedInspectionId,
+            assigneeId: job.assigneeId,
+          }
+        : null,
+      propertyId: args.propertyId,
+      checklistType: args.type,
+      actor: {
+        _id: actor._id,
+        role: actor.role,
+      },
+      existingInspectionExists: !!existingInspection,
+    });
 
-    if (args.jobId && !job) {
-      throw new Error("Job not found");
-    }
-
-    if (job) {
-      if (job.propertyId !== args.propertyId) {
-        throw new Error("Job does not belong to the selected property");
-      }
-
-      if (job.status === "CANCELLED" || job.status === "COMPLETED") {
-        throw new Error("This job cannot start a checklist");
-      }
-
-      const expectedType = checklistTypeForJobType(job.jobType);
-      if (!expectedType) {
-        throw new Error("This job type does not support checklist execution");
-      }
-
-      if (expectedType !== args.type) {
-        throw new Error("Checklist type does not match the selected job type");
-      }
-
-      if (job.linkedInspectionId) {
-        const existingInspection = await ctx.db.get(job.linkedInspectionId);
-        if (existingInspection) {
-          return existingInspection._id;
-        }
-      }
-
-      if (actor.role !== "ADMIN" && job.assigneeId && job.assigneeId !== actor._id) {
-        throw new Error("You are not assigned to this job");
-      }
+    if (lifecycleDecision.existingInspectionId && existingInspection) {
+      return existingInspection._id;
     }
 
     const property = await ctx.db.get(args.propertyId);
@@ -199,16 +222,13 @@ export const create = mutation({
       throw new Error("Property not found or inactive");
     }
 
-    const assigneeId = args.assigneeId ?? job?.assigneeId ?? actor._id;
+    const assigneeId = args.assigneeId ?? lifecycleDecision.nextAssigneeId ?? actor._id;
 
     if (actor.role !== "ADMIN" && assigneeId !== actor._id) {
       throw new Error("Only admins can create inspections for other users");
     }
 
-    const isAssignedWorkerForLinkedJob =
-      !!job && actor.role !== "ADMIN" && job.assigneeId === actor._id;
-
-    if (actor.role !== "ADMIN" && !isAssignedWorkerForLinkedJob) {
+    if (actor.role !== "ADMIN" && !lifecycleDecision.isAssignedWorkerForLinkedJob) {
       await assertPropertyAccessForChecklist(ctx, actor, args.propertyId, args.type);
     }
 
@@ -218,7 +238,7 @@ export const create = mutation({
       args.propertyId,
       args.type,
       {
-        skipPropertyAssignmentCheck: !!job,
+        skipPropertyAssignmentCheck: lifecycleDecision.skipPropertyAssignmentCheck,
       }
     );
 
@@ -315,9 +335,7 @@ export const complete = mutation({
       .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
       .collect();
 
-    if (rooms.some((room) => room.status !== "COMPLETED")) {
-      throw new Error("All room checklists must be completed first");
-    }
+    assertAllRoomsCompleted(rooms);
 
     const completedAt = Date.now();
     await ctx.db.patch(args.inspectionId, {
@@ -389,6 +407,8 @@ export const getFullReport = query({
           tasks: tasks.map((task) => ({
             description: task.taskDescription,
             completed: task.completed,
+            has_issue: task.hasIssue ?? false,
+            issue_notes: task.issueNotes ?? null,
           })),
         };
       })

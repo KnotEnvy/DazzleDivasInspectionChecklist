@@ -13,6 +13,7 @@ import {
   queueCompleteRoom,
   queueRemovePhoto,
   queueSetTaskCompleted,
+  queueSetTaskIssue,
   queueUpdateRoomNotes,
   queueUploadPhoto,
   removeQueuedLocalPhoto,
@@ -28,6 +29,7 @@ type RoomSummary = {
   requiredPhotoMin: number;
   completedTasks: number;
   totalTasks: number;
+  issueCount?: number;
   photoCount: number;
 };
 
@@ -50,6 +52,8 @@ type RoomDetail = {
     _id: Id<"taskResults">;
     taskDescription: string;
     completed: boolean;
+    hasIssue?: boolean;
+    issueNotes?: string;
   }>;
   photos: Array<{
     _id: Id<"photos">;
@@ -94,6 +98,7 @@ export function InspectionPage() {
 
   const completeInspection = useMutation(api.inspections.complete);
   const setTaskCompleted = useMutation(api.taskResults.setCompleted);
+  const setTaskIssue = useMutation(api.taskResults.setIssue);
   const updateRoomNotes = useMutation(api.roomInspections.updateNotes);
   const completeRoom = useMutation(api.roomInspections.complete);
   const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
@@ -102,8 +107,10 @@ export function InspectionPage() {
 
   const [roomNotes, setRoomNotes] = useState("");
   const [inspectionNotes, setInspectionNotes] = useState("");
+  const [taskIssueDrafts, setTaskIssueDrafts] = useState<Record<string, string>>({});
   const [photoKind, setPhotoKind] = useState<PhotoKind>("AFTER");
   const [savingTaskId, setSavingTaskId] = useState<Id<"taskResults"> | null>(null);
+  const [savingIssueTaskId, setSavingIssueTaskId] = useState<Id<"taskResults"> | null>(null);
   const [savingNotes, setSavingNotes] = useState(false);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [removingPhotoId, setRemovingPhotoId] = useState<Id<"photos"> | null>(null);
@@ -137,6 +144,7 @@ export function InspectionPage() {
       completedRooms: rooms.filter((room) => room.status === "COMPLETED").length,
       totalTasks: rooms.reduce((sum, room) => sum + room.totalTasks, 0),
       completedTasks: rooms.reduce((sum, room) => sum + room.completedTasks, 0),
+      issues: rooms.reduce((sum, room) => sum + (room.issueCount ?? 0), 0),
       photos: rooms.reduce((sum, room) => sum + room.photoCount, 0),
     };
   }, [inspectionView]);
@@ -160,6 +168,19 @@ export function InspectionPage() {
       setRoomNotes(selectedRoom.notes ?? "");
     }
   }, [selectedRoom?._id]);
+
+  useEffect(() => {
+    if (!selectedRoomView) {
+      setTaskIssueDrafts({});
+      return;
+    }
+
+    setTaskIssueDrafts(
+      Object.fromEntries(
+        selectedRoomView.taskResults.map((task) => [task._id, task.issueNotes ?? ""])
+      )
+    );
+  }, [selectedRoomView]);
 
   useEffect(() => {
     if (inspectionView) {
@@ -200,6 +221,43 @@ export function InspectionPage() {
       toast.error(error instanceof Error ? error.message : "Failed to update task");
     } finally {
       setSavingTaskId(null);
+    }
+  }
+
+  async function handleTaskIssueSave(taskResultId: Id<"taskResults">, hasIssue: boolean) {
+    setSavingIssueTaskId(taskResultId);
+
+    try {
+      if (!inspectionId || !selectedRoomView) {
+        return;
+      }
+
+      const task = selectedRoomView.taskResults.find((candidate) => candidate._id === taskResultId);
+      const issueNotes = hasIssue ? taskIssueDrafts[taskResultId] ?? "" : "";
+
+      if (!isOnline) {
+        await queueSetTaskIssue({
+          inspectionId,
+          roomInspectionId: selectedRoomView._id,
+          taskResultId,
+          hasIssue,
+          issueNotes,
+          previousHasIssue: task?.hasIssue,
+        });
+        toast.success(hasIssue ? "Task issue queued for sync" : "Issue clear queued for sync");
+        return;
+      }
+
+      await setTaskIssue({
+        taskResultId,
+        hasIssue,
+        issueNotes,
+      });
+      toast.success(hasIssue ? "Task issue saved" : "Task issue cleared");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save task issue");
+    } finally {
+      setSavingIssueTaskId(null);
     }
   }
 
@@ -443,9 +501,10 @@ export function InspectionPage() {
         </div>
       </div>
 
-      <section className="grid gap-3 md:grid-cols-4">
+      <section className="grid gap-3 md:grid-cols-5">
         <SummaryCard label="Rooms" value={`${totals.completedRooms}/${totals.rooms}`} />
         <SummaryCard label="Tasks" value={`${totals.completedTasks}/${totals.totalTasks}`} />
+        <SummaryCard label="Issues" value={String(totals.issues)} />
         <SummaryCard label="Photos" value={String(totals.photos)} />
         <SummaryCard label="Selected Room" value={selectedRoomSummary?.roomName ?? "None"} />
       </section>
@@ -517,6 +576,11 @@ export function InspectionPage() {
                         Tasks {room.completedTasks}/{room.totalTasks} | Photos {room.photoCount}/
                         {room.requiredPhotoMin}
                       </p>
+                      {(room.issueCount ?? 0) > 0 ? (
+                        <p className="mt-1 text-xs text-rose-700">
+                          {room.issueCount} issue{room.issueCount === 1 ? "" : "s"} flagged
+                        </p>
+                      ) : null}
                       {room.status !== "COMPLETED" ? (
                         <p className="mt-1 text-xs text-amber-700">
                           {room.totalTasks - room.completedTasks} tasks left and{" "}
@@ -556,6 +620,7 @@ export function InspectionPage() {
                     <p className="text-sm text-slate-600">
                       {selectedRoomView.taskResults.filter((task) => task.completed).length}/
                       {selectedRoomView.taskResults.length} tasks complete |{" "}
+                      {selectedRoomView.taskResults.filter((task) => task.hasIssue).length} issues |{" "}
                       {selectedRoomView.photos.length}/{selectedRoomView.requiredPhotoMin} required photos
                     </p>
                   </div>
@@ -603,22 +668,96 @@ export function InspectionPage() {
                   <h3 className="mb-2 font-semibold">Step 1: Complete room tasks</h3>
                   <div className="space-y-2">
                     {selectedRoomView.taskResults.map((task) => (
-                      <label
+                      <div
                         key={task._id}
-                        className="flex items-start gap-3 rounded-2xl border border-border bg-slate-50 p-3"
+                        className={`block rounded-2xl border p-3 ${
+                          task.hasIssue
+                            ? "border-rose-200 bg-rose-50"
+                            : "border-border bg-slate-50"
+                        }`}
                       >
-                        <input
-                          checked={task.completed}
-                          disabled={inspectionView.status === "COMPLETED" || savingTaskId === task._id}
-                          onChange={(event) =>
-                            void handleTaskToggle(task._id, event.target.checked)
-                          }
-                          type="checkbox"
-                        />
-                        <span className={task.completed ? "text-slate-500 line-through" : "text-slate-700"}>
-                          {task.taskDescription}
-                        </span>
-                      </label>
+                        <div className="flex items-start gap-3">
+                          <input
+                            checked={task.completed}
+                            disabled={inspectionView.status === "COMPLETED" || savingTaskId === task._id}
+                            onChange={(event) =>
+                              void handleTaskToggle(task._id, event.target.checked)
+                            }
+                            type="checkbox"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <span
+                                className={
+                                  task.completed ? "text-slate-500 line-through" : "text-slate-700"
+                                }
+                              >
+                                {task.taskDescription}
+                              </span>
+                              {task.hasIssue ? (
+                                <span className="rounded-full border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700">
+                                  Issue Flagged
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="mt-3 space-y-2">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  className="field-button secondary px-3"
+                                  disabled={
+                                    inspectionView.status === "COMPLETED" ||
+                                    savingIssueTaskId === task._id ||
+                                    task.hasIssue === true
+                                  }
+                                  onClick={() => void handleTaskIssueSave(task._id, true)}
+                                  type="button"
+                                >
+                                  Flag Issue
+                                </button>
+                                <button
+                                  className="field-button secondary px-3"
+                                  disabled={
+                                    inspectionView.status === "COMPLETED" ||
+                                    savingIssueTaskId === task._id ||
+                                    !task.hasIssue
+                                  }
+                                  onClick={() => void handleTaskIssueSave(task._id, false)}
+                                  type="button"
+                                >
+                                  Clear Issue
+                                </button>
+                              </div>
+                              {task.hasIssue ? (
+                                <div className="space-y-2">
+                                  <textarea
+                                    className="input min-h-24"
+                                    disabled={inspectionView.status === "COMPLETED"}
+                                    onChange={(event) =>
+                                      setTaskIssueDrafts((current) => ({
+                                        ...current,
+                                        [task._id]: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="Describe what was wrong or what needs follow-up"
+                                    value={taskIssueDrafts[task._id] ?? ""}
+                                  />
+                                  <button
+                                    className="field-button secondary px-3"
+                                    disabled={
+                                      inspectionView.status === "COMPLETED" ||
+                                      savingIssueTaskId === task._id
+                                    }
+                                    onClick={() => void handleTaskIssueSave(task._id, true)}
+                                    type="button"
+                                  >
+                                    {savingIssueTaskId === task._id ? "Saving..." : "Save Issue Note"}
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>

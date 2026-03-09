@@ -129,7 +129,7 @@ function toDateParts(epochDay: number) {
   };
 }
 
-function planRunsOnDay(params: {
+export function planRunsOnDay(params: {
   frequency: "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "CUSTOM_RRULE";
   daysOfWeek?: number[];
   dayWeekday: number;

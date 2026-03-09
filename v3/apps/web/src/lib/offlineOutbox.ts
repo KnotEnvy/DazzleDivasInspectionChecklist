@@ -14,6 +14,15 @@ export type SetTaskCompletedPayload = {
   previousCompleted?: boolean;
 };
 
+export type SetTaskIssuePayload = {
+  inspectionId: string;
+  roomInspectionId: string;
+  taskResultId: string;
+  hasIssue: boolean;
+  issueNotes?: string;
+  previousHasIssue?: boolean;
+};
+
 export type UpdateRoomNotesPayload = {
   inspectionId: string;
   roomInspectionId: string;
@@ -66,6 +75,7 @@ export type OutboxItemStatus =
 export type OutboxItemType =
   | "CREATE_INSPECTION"
   | "SET_TASK_COMPLETED"
+  | "SET_TASK_ISSUE"
   | "UPDATE_ROOM_NOTES"
   | "UPLOAD_PHOTO"
   | "REMOVE_PHOTO"
@@ -97,6 +107,11 @@ export type SetTaskCompletedOutboxItem = BaseOutboxItem<
   SetTaskCompletedPayload
 >;
 
+export type SetTaskIssueOutboxItem = BaseOutboxItem<
+  "SET_TASK_ISSUE",
+  SetTaskIssuePayload
+>;
+
 export type UpdateRoomNotesOutboxItem = BaseOutboxItem<
   "UPDATE_ROOM_NOTES",
   UpdateRoomNotesPayload
@@ -124,6 +139,7 @@ export type UpdateMyJobStatusOutboxItem = BaseOutboxItem<
 export type OutboxItem =
   | CreateInspectionOutboxItem
   | SetTaskCompletedOutboxItem
+  | SetTaskIssueOutboxItem
   | UpdateRoomNotesOutboxItem
   | UploadPhotoOutboxItem
   | RemovePhotoOutboxItem
@@ -293,6 +309,8 @@ export function describeOutboxItem(item: OutboxItem) {
       return item.payload.jobId ? "Queued checklist start from schedule" : "Queued checklist start";
     case "SET_TASK_COMPLETED":
       return item.payload.completed ? "Queued task completion" : "Queued task reopen";
+    case "SET_TASK_ISSUE":
+      return item.payload.hasIssue ? "Queued task issue" : "Queued issue clear";
     case "UPDATE_ROOM_NOTES":
       return "Queued room notes";
     case "UPLOAD_PHOTO":
@@ -338,6 +356,24 @@ export async function queueSetTaskCompleted(payload: SetTaskCompletedPayload) {
   if (!payload.completed) {
     await clearPendingRoomCompletion(payload.inspectionId, payload.roomInspectionId);
   }
+
+  await replaceByDedupeKey(
+    item,
+    (existing) => isActionableStatus(existing.status) && existing.dedupeKey === item.dedupeKey
+  );
+
+  return item.id;
+}
+
+export async function queueSetTaskIssue(payload: SetTaskIssuePayload) {
+  const item = makeBaseItem(
+    "SET_TASK_ISSUE",
+    {
+      ...payload,
+      issueNotes: payload.hasIssue ? payload.issueNotes?.trim() || undefined : undefined,
+    },
+    `TASK_ISSUE:${payload.taskResultId}`
+  );
 
   await replaceByDedupeKey(
     item,

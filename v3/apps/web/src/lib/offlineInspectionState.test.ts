@@ -36,6 +36,7 @@ describe("applyInspectionOutboxOverlay", () => {
           requiredPhotoMin: 2,
           completedTasks: 1,
           totalTasks: 2,
+          issueCount: 0,
           photoCount: 1,
         },
       ],
@@ -48,8 +49,20 @@ describe("applyInspectionOutboxOverlay", () => {
       notes: "old room notes",
       requiredPhotoMin: 2,
       taskResults: [
-        { _id: "task-1", taskDescription: "Task 1", completed: true },
-        { _id: "task-2", taskDescription: "Task 2", completed: false },
+        {
+          _id: "task-1",
+          taskDescription: "Task 1",
+          completed: true,
+          hasIssue: false,
+          issueNotes: undefined,
+        },
+        {
+          _id: "task-2",
+          taskDescription: "Task 2",
+          completed: false,
+          hasIssue: false,
+          issueNotes: undefined,
+        },
       ],
       photos: [
         {
@@ -85,9 +98,22 @@ describe("applyInspectionOutboxOverlay", () => {
         },
       }),
       baseItem({
+        id: "task-issue",
+        type: "SET_TASK_ISSUE",
+        createdAt: 3,
+        payload: {
+          inspectionId: "inspection-1",
+          roomInspectionId: "room-1",
+          taskResultId: "task-2",
+          hasIssue: true,
+          issueNotes: "Broken supply bin",
+          previousHasIssue: false,
+        },
+      }),
+      baseItem({
         id: "photo-upload",
         type: "UPLOAD_PHOTO",
-        createdAt: 3,
+        createdAt: 4,
         payload: {
           inspectionId: "inspection-1",
           roomInspectionId: "room-1",
@@ -102,12 +128,12 @@ describe("applyInspectionOutboxOverlay", () => {
       baseItem({
         id: "room-complete",
         type: "COMPLETE_ROOM",
-        createdAt: 4,
+        createdAt: 5,
       }),
       baseItem({
         id: "inspection-complete",
         type: "COMPLETE_INSPECTION",
-        createdAt: 5,
+        createdAt: 6,
         payload: {
           inspectionId: "inspection-1",
           notes: "offline inspection note",
@@ -120,14 +146,17 @@ describe("applyInspectionOutboxOverlay", () => {
     expect(result.inspection?.status).toBe("COMPLETED");
     expect(result.inspection?.notes).toBe("offline inspection note");
     expect(result.inspection?.roomInspections[0]?.completedTasks).toBe(2);
+    expect(result.inspection?.roomInspections[0]?.issueCount).toBe(1);
     expect(result.inspection?.roomInspections[0]?.photoCount).toBe(2);
     expect(result.inspection?.roomInspections[0]?.status).toBe("COMPLETED");
 
     expect(result.selectedRoom?.notes).toBe("offline note");
     expect(result.selectedRoom?.taskResults[1]?.completed).toBe(true);
+    expect(result.selectedRoom?.taskResults[1]?.hasIssue).toBe(true);
+    expect(result.selectedRoom?.taskResults[1]?.issueNotes).toBe("Broken supply bin");
     expect(result.selectedRoom?.photos).toHaveLength(2);
     expect(result.selectedRoom?.photos[1]?.isPendingUpload).toBe(true);
-    expect(result.diagnostics.relevantPendingCount).toBe(5);
+    expect(result.diagnostics.relevantPendingCount).toBe(6);
   });
 });
 

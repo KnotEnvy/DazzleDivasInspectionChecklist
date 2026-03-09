@@ -12,6 +12,7 @@ type RoomSummaryLike = {
   requiredPhotoMin: number;
   completedTasks: number;
   totalTasks: number;
+  issueCount?: number;
   photoCount: number;
 };
 
@@ -26,6 +27,8 @@ type RoomDetailTaskLike = {
   _id: string;
   taskDescription: string;
   completed: boolean;
+  hasIssue?: boolean;
+  issueNotes?: string;
 };
 
 type RoomDetailPhotoLike = {
@@ -108,6 +111,7 @@ export function applyInspectionOutboxOverlay<
     .sort((left, right) => left.createdAt - right.createdAt);
 
   const roomTaskDeltas = new Map<string, number>();
+  const roomIssueDeltas = new Map<string, number>();
   const roomNotes = new Map<string, string>();
   const roomCompletions = new Set<string>();
   const removedPhotoIds = new Set<string>();
@@ -129,6 +133,24 @@ export function applyInspectionOutboxOverlay<
             roomTaskDeltas.set(
               item.payload.roomInspectionId,
               (roomTaskDeltas.get(item.payload.roomInspectionId) ?? 0) + delta
+            );
+          }
+        }
+        break;
+      }
+
+      case "SET_TASK_ISSUE": {
+        if (item.payload.previousHasIssue !== undefined) {
+          const delta =
+            item.payload.hasIssue === item.payload.previousHasIssue
+              ? 0
+              : item.payload.hasIssue
+                ? 1
+                : -1;
+          if (delta !== 0) {
+            roomIssueDeltas.set(
+              item.payload.roomInspectionId,
+              (roomIssueDeltas.get(item.payload.roomInspectionId) ?? 0) + delta
             );
           }
         }
@@ -187,6 +209,7 @@ export function applyInspectionOutboxOverlay<
           0,
           Math.min(room.totalTasks, room.completedTasks + (roomTaskDeltas.get(room._id) ?? 0))
         ),
+        issueCount: Math.max(0, (room.issueCount ?? 0) + (roomIssueDeltas.get(room._id) ?? 0)),
         photoCount: Math.max(0, room.photoCount + photoUploads - photoRemovals),
       };
     }),
@@ -204,9 +227,17 @@ export function applyInspectionOutboxOverlay<
   }
 
   const taskOverrides = new Map<string, boolean>();
+  const taskIssueOverrides = new Map<string, { hasIssue: boolean; issueNotes?: string }>();
   for (const item of actionable) {
     if (item.type === "SET_TASK_COMPLETED") {
       taskOverrides.set(item.payload.taskResultId, item.payload.completed);
+    }
+
+    if (item.type === "SET_TASK_ISSUE") {
+      taskIssueOverrides.set(item.payload.taskResultId, {
+        hasIssue: item.payload.hasIssue,
+        issueNotes: item.payload.issueNotes,
+      });
     }
   }
 
@@ -218,6 +249,8 @@ export function applyInspectionOutboxOverlay<
     taskResults: selectedRoom.taskResults.map((task) => ({
       ...task,
       completed: taskOverrides.get(task._id) ?? task.completed,
+      hasIssue: taskIssueOverrides.get(task._id)?.hasIssue ?? task.hasIssue,
+      issueNotes: taskIssueOverrides.get(task._id)?.issueNotes ?? task.issueNotes,
     })),
     photos: [
       ...selectedRoom.photos.filter((photo) => !removedPhotoIds.has(photo._id)).map((photo) => ({

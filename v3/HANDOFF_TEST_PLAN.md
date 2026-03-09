@@ -1,32 +1,35 @@
 # Dazzle Divas v3 - Rebuild Handoff Brief
 
 ## Purpose
-Hand this to the next engineering team so they can finish the v3 rebuild into a production-viable field operations product.
+Hand this to the next engineering team so they can finish the v3 rebuild into a production-viable field operations product and safely push it into real cleaner feedback loops.
 
-This is not a QA-only handoff. It is a delivery blueprint for missing core product capabilities:
+This is not a QA-only handoff. It is a delivery blueprint for the remaining hardening work after the core product rebuild:
 - Property management (admin CRUD)
 - User administration (admin-managed staffing)
 - Cleaning schedules per property
 - Calendar planning for cleaners + inspectors
+- Field execution reliability
 - Competitive capability benchmarking (Breezeway-level baseline)
 
-## Current State (As Of March 8, 2026 - Session Update)
+## Current State (As Of March 8, 2026 - Latest Session Update)
 
 ### What v3 already has
 - Bun monorepo with React + Vite web app and Convex backend.
 - Convex Auth with 3 roles: `ADMIN`, `CLEANER`, `INSPECTOR`.
-- Password auth is now staff-only on `/login`.
+- Password auth is staff-only on `/login`.
 - Open self-signup is disabled in both UI and backend auth flow.
 - Admin role can change user roles in Admin Console.
 - Admin can create users from the app with initial password, role, and activation state.
 - Checklist execution core:
-  - Create checklist
-  - Room/task/photo tracking
-  - Complete checklist
-  - History view
-- Field checklist execution is now room-driven:
+  - create checklist
+  - room/task/photo tracking
+  - complete checklist
+  - history view
+- Field checklist execution is room-driven:
   - select room
   - complete room tasks
+  - flag task issues
+  - save task issue notes
   - upload/remove proof photos
   - save room notes
   - mark room complete
@@ -41,7 +44,7 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
   - property `bedrooms` / `bathrooms` fields exposed in admin UI
   - checklist preview on `/admin/properties`
   - new checklists derive room instances from base templates + property counts
-- Offline queue for checklist creation.
+  - optional property override library
 - Admin property management route shipped: `/admin/properties` with:
   - create/edit/search/archive-unarchive
   - bedroom/bathroom counts
@@ -64,50 +67,77 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
   - assignee-safe worker status controls (`IN_PROGRESS`, `BLOCKED`)
   - upcoming list + week calendar
 - Admin dispatch route shipped:
-  - `/schedule` with week/day view
+  - `/schedule` with month/week/day views
   - filters (`assignee`, `property`, `status`, `job type`)
   - manual turnover job creation
   - turnover-intake metadata capture (`source`, `client/account`, `arrival deadline`)
   - unassigned-job queue
+  - quick assignment from queue
   - job detail drawer
   - checklist start/open action from job drawer
+  - save-all dispatch changes flow in drawer
 - Admin dispatch controls shipped:
   - reassign assignee
   - clear assignee / leave unassigned
   - reschedule start/end
   - status transitions (`SCHEDULED`/`IN_PROGRESS`/`BLOCKED`/`CANCELLED`)
   - overlap guardrails + archived/inactive property guardrails
-- Dispatch assignment flow now supports flexible daily staffing:
+- Dispatch assignment flow supports flexible daily staffing:
   - manual jobs can be created with or without an assignee
   - dispatch can assign any active cleaner/inspector with the required role
   - property assignments remain useful as roster/preference data, not a hard dispatch gate
-- Job/checklist convergence shipped (core linkage):
+- Job/checklist convergence shipped:
   - start checklist from job via `jobId`
   - `jobs.linkedInspectionId` set on start
   - linked jobs auto-transition to `COMPLETED` when checklist is completed
   - audit events written to `jobEvents`
-- Per-property checklist overrides shipped:
-  - property can clone base room/task library into a private override copy
-  - property-specific room CRUD
-  - property-specific task CRUD
-  - property-specific room activation/order/generation mode
-  - checklist creation now uses effective property template library
+  - `COMPLETED` remains tied to checklist completion
+- Offline field support is materially expanded:
+  - create checklist
+  - start checklist from worker schedule
+  - task completion toggles
+  - task issue flags and issue notes
+  - room notes
+  - photo uploads/removals
+  - room completion
+  - checklist completion
+  - worker job status changes
+- Offline replay diagnostics UI shipped:
+  - app shell queue visibility
+  - dashboard outbox panel
+  - checklist sync panel
+  - worker schedule sync panel
+- Inspection creation uses the effective property checklist library.
+  - if a property has overrides, new checklists use them
+  - if not, base template behavior remains unchanged
+- History now surfaces issue counts on completed checklists.
+- Completed inspection report output includes issue flags and issue notes per task.
 - Competitive benchmark matrix doc shipped:
   - `v3/BENCHMARK_MATRIX.md`
+- Root Vitest harness shipped with current automated coverage for:
+  - checklist derivation helpers
+  - scheduling recurrence rules
+  - job/checklist lifecycle guards
+  - offline replay classification
+  - offline inspection overlay behavior
 
 ### What is still missing
-- No admin month view or richer dispatch polish yet.
 - No password reset / invite-email flow yet for admin-created staff.
-- Offline outbox is still limited (mostly checklist creation only).
-- No full offline replay/conflict-resolution policy implementation yet.
+- Offline replay conflict policy is only partially implemented.
+  - queue items can land in `CONFLICT`
+  - diagnostics are surfaced
+  - but server-wins/client-wins resolution semantics are not fully codified yet
+  - operator recovery flow is still light
 - Worker mobile execution polish is still open beyond the core flow.
-  - `/my-schedule` is now usable as the primary worker screen, but room-navigation speed and issue-capture ergonomics can still improve.
+  - `/my-schedule` and checklist execution are usable, but tap-count and scan speed can still improve from real cleaner feedback
+- Starting a checklist fully offline from schedule queues the start correctly, but does not yet open a fully local draft checklist immediately.
 - No notification/messaging layer yet.
-- No reporting primitives yet (completion rate, SLA misses, photo compliance).
-- M1/M2 test coverage is still thin for:
-  - schedule generation correctness edge cases
-  - job/checklist lifecycle regression checks
-  - offline replay/conflict correctness
+- No reporting primitives yet beyond history/report details.
+  - still missing completion-rate, SLA-miss, and photo-compliance dashboards
+- Automated coverage is stronger than before, but still thin for:
+  - offline replay conflict resolution semantics
+  - end-to-end issue capture persistence
+  - permissions/integration regressions across mutations
 
 ## Handoff Update - Recent Batch Progress
 
@@ -119,7 +149,7 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
 5. "Start Checklist" from job details shipped and linked to `jobs.linkedInspectionId`.
 6. Benchmark matrix published with gap severity mapping.
 
-### Completed in current session (March 6, 2026)
+### Completed in March 6, 2026 session
 1. `/schedule` admin dispatch board implemented with week/day views, filters, and job drawer.
 2. Admin dispatch actions shipped:
    - reassign assignee
@@ -128,76 +158,64 @@ This is not a QA-only handoff. It is a delivery blueprint for missing core produ
 3. Dispatch conflict guardrails shipped:
    - overlapping assignments
    - archived/inactive property guardrails
-4. Property assignment management hardened inside `/admin/properties`:
-   - assign cleaner
-   - assign inspector
-   - unassign active staff
-5. Admin properties render-loop/query stability fixes shipped.
-6. Admin user creation shipped in-app with auditable bootstrap flow.
-7. Default worker assignment shipped on service plans so generated jobs route to the right worker.
-8. Checklist template manager shipped at `/admin/templates`.
-9. Checklist generation now derives repeated bedrooms/bathrooms from property counts.
-10. Property page now includes live checklist preview and starter-template bootstrap.
-11. Field checklist execution UI is no longer summary-only; workers can execute room-by-room with tasks, photos, notes, room completion, and checklist completion.
+4. Property assignment management hardened inside `/admin/properties`.
+5. Admin user creation shipped in-app with auditable bootstrap flow.
+6. Default worker assignment shipped on service plans.
+7. Checklist template manager shipped at `/admin/templates`.
+8. Checklist generation now derives repeated bedrooms/bathrooms from property counts.
+9. Property page includes live checklist preview and starter-template bootstrap.
+10. Field checklist execution moved from summary-only to room-by-room execution.
 
-### Completed in follow-up session (March 7, 2026)
+### Completed in March 7, 2026 follow-up
 1. `/my-schedule` upgraded into the primary worker operating screen.
 2. Worker-safe job status controls shipped:
    - assigned user can move job to `IN_PROGRESS`
    - assigned user can move job to `BLOCKED`
    - `COMPLETED` remains tied to checklist completion
-3. Start/resume checklist is now the primary worker CTA from schedule UI.
-4. `/schedule` now supports manual turnover dispatch:
-   - create manual jobs without a service plan
-   - create jobs unassigned or assigned
-   - visible unassigned queue
+3. Start/resume checklist is the primary worker CTA from schedule UI.
+4. `/schedule` supports manual turnover dispatch.
 5. Dispatch staffing is no longer hard-coupled to property assignments.
-   - any active user with the required role can be assigned
-   - property assignments remain useful for staffing visibility/preferences
-6. Assigned workers can start linked checklist execution even when dispatch assignment was made outside the property-assignment roster model.
 
-### Completed in latest follow-up session (March 8, 2026)
-1. Open self-signup was disabled for production use.
-   - `/login` is now staff sign-in only
-   - backend password auth rejects self-signup flow
-2. Manual turnover jobs now capture first-class intake metadata:
-   - source (`EMAIL`, `TEXT`, `PHONE`, `MANUAL`)
-   - client/account label
-   - arrival/check-in deadline
-3. Dispatch drawer and worker schedule now surface turnover-intake metadata.
+### Completed in March 8, 2026 earlier follow-up
+1. Open self-signup disabled for production use.
+2. Manual turnover jobs gained first-class intake metadata.
+3. Dispatch drawer and worker schedule surface turnover-intake metadata.
 4. Per-property checklist overrides shipped on `/admin/properties`.
-   - clone base template into property-specific override copy
-   - property-only room/task editing
-   - property-level room activation/order/generation mode
-   - reset property override copy back to base template
 5. Inspection creation now uses the effective property checklist library.
-   - if a property has overrides, new checklists use them
-   - if not, base template behavior remains unchanged
-6. Verification completed for this slice:
+6. Verification completed for that slice:
    - Convex codegen
    - backend typecheck
    - web typecheck
    - production web build
 
-### Important implementation notes for next team
-- `CUSTOM_RRULE` is represented in schema but not yet executed by generator logic (currently skipped).
-- `/schedule` is now usable for both recurring-plan jobs and manual turnover dispatch, but month view and deeper dispatch polish remain open.
-- `/login` is now staff-only.
+### Completed in March 8, 2026 latest build sessions
+1. Offline outbox generalized beyond checklist creation.
+2. Auto replay + diagnostics UI shipped for worker/checklist flows.
+3. `/schedule` gained month view and faster staffing/save-all admin workflow.
+4. Root Vitest harness added at repo root.
+5. Scheduling, checklist derivation, lifecycle, and offline helper tests added.
+6. Task-level issue capture shipped in checklist execution.
+7. Issue counts now surface in completed history and report output.
+8. Convex codegen, tests, backend typecheck, web typecheck, and production web build all passed after these updates.
+
+## Important implementation notes for next team
+- `CUSTOM_RRULE` is represented in schema but not yet executed by generator logic.
+- `/schedule` now has month/week/day views and better dispatch ergonomics, but further scale/performance work may still be needed later.
+- `/login` is staff-only.
   - Admin-created accounts are the expected production path.
   - Invite/reset-password flow is still not implemented.
 - Dispatch reassignment no longer depends on property assignments.
   - Role compatibility and overlap checks still apply.
-  - Property assignments should now be treated as roster/preference data, not as the only eligible-assignee source.
-- Admin user creation exists, but it is still a manual bootstrap flow rather than invite/reset-email flow.
-- Template library is now a global base checklist model with optional property-specific override snapshots.
+  - Property assignments should be treated as roster/preference data, not the only eligible-assignee source.
+- Template library is a global base checklist model with optional property-specific override snapshots.
   - `rooms.generationMode` controls whether a room appears once, once per bedroom, or once per bathroom.
   - Property checklists are derived from the effective library for that property plus property `bedrooms` / `bathrooms`.
-  - If a property has no override copy, it still falls back to the shared base template.
 - Old-app visual references provided by product owner are in `old_pics/` at repo root.
   - Use those screenshots as guidance for room-first field UX, not as a strict architecture reference.
-- Inspection UI now supports room/task/photo interaction, but offline outbox support is still create-checklist-first.
-- Job status flow is now linked to checklist completion, but admin override flow for incomplete checklists is not implemented.
-- The product now supports two job-input models:
+- Offline replay currently distinguishes retryable failures from `CONFLICT`, but deeper field-resolution policy is still open.
+- Issue capture now exists at the task level, but richer downstream reporting/aggregation has not been built yet.
+- Job status flow is linked to checklist completion; admin override flow for incomplete checklists is not implemented.
+- The product supports two job-input models:
   - recurring service plans for predictable work
   - manual admin-created jobs for turnover work arriving by email/text
 
@@ -217,339 +235,106 @@ Each slice must ship with:
 - auth/permissions
 - smoke tests
 
-## Workstream A - Property Management (Admin)
+## Workstream Snapshot
 
-### Outcome
-Admin can create, edit, search, archive, and assign properties from the app.
+### Workstream A - Property Management (Admin)
+- Outcome status: complete for M1 baseline.
 
-### Backend tasks
-- Extend/confirm `properties` shape for operations use:
-  - `timezone`
-  - `accessInstructions`
-  - `entryMethod`
-  - `serviceNotes`
-  - `isArchived`
-- Add robust admin mutations/queries:
-  - `properties.create`
-  - `properties.update`
-  - `properties.archive`
-  - `properties.listAdmin`
-  - `properties.search`
-- Enforce admin-only writes.
+### Workstream A1 - User Administration (Admin)
+- Outcome status: basic complete.
+- Remaining gap:
+  - invite/reset-password flow
 
-### Web tasks
-- New route: `/admin/properties`
-- Forms:
-  - create property
-  - edit property
-  - archive/unarchive
-- Property detail panel:
-  - metadata
-  - assignment summary
-  - schedule summary (once Workstream B lands)
+### Workstream B - Scheduling Engine (Per Property)
+- Outcome status: basic complete.
+- Remaining gap:
+  - `CUSTOM_RRULE`
 
-### Done criteria
-- Admin can create property and it appears immediately for assignment/scheduling flows.
-- Archived properties are hidden from active job creation.
+### Workstream C - Calendar + Dispatch UX
+- Outcome status: baseline complete with month/week/day views now shipped.
+- Remaining gap:
+  - future performance and UX refinement after real dispatch usage
 
-## Workstream A1 - User Administration (Admin)
+### Workstream D - Checklist/Job Convergence
+- Outcome status: core complete.
+- Remaining gap:
+  - no admin override path for incomplete linked jobs/checklists
 
-### Outcome
-Admin can create staff users and set initial role/status without CLI or external signup workarounds.
+### Workstream E - Offline Field Reliability
+- Outcome status: substantially advanced and close to rollout-ready.
+- Remaining gap:
+  - stronger conflict-resolution policy
+  - stronger operator recovery flow for `CONFLICT`
+  - fully local offline checklist draft creation from offline schedule start
 
-### Backend tasks
-- Add admin-only user creation flow compatible with Convex Auth.
-- Enforce unique email constraints and valid role assignment.
-- Decide creation path explicitly:
-  - invite email flow, or
-  - temporary password/manual credential bootstrap
-- Keep user creation auditable.
+### Workstream F - Competitive Benchmark Hardening
+- Outcome status: matrix exists; most competitive add-ons still open.
+- Remaining gap:
+  - notifications/messaging
+  - richer reporting
+  - differentiated workflows beyond core cleaning/inspection
 
-### Web tasks
-- Extend Admin Console with create-user form.
-- Capture at minimum:
-  - name
-  - email
-  - initial role
-  - activation/invite state
-- New users should appear immediately in assignment/dispatch flows.
-
-### Done criteria
-- Admin can create `CLEANER`, `INSPECTOR`, and `ADMIN` users from the app.
-- No CLI/manual auth-table workaround is required for normal staffing operations.
-
-## Workstream B - Scheduling Engine (Per Property)
-
-### Outcome
-Each property has service plans that generate actionable jobs.
-
-### Proposed schema additions
-- `servicePlans`
-  - `propertyId`
-  - `planType` (`CLEANING`, `INSPECTION`, `DEEP_CLEAN`, optional future `MAINTENANCE`)
-  - `frequency` (`DAILY`, `WEEKLY`, `BIWEEKLY`, `MONTHLY`, `CUSTOM_RRULE`)
-  - `daysOfWeek`
-  - `timeWindowStart`, `timeWindowEnd`
-  - `defaultDurationMinutes`
-  - `defaultAssigneeRole` (`CLEANER`, `INSPECTOR`)
-  - `isActive`
-- `jobs`
-  - `propertyId`
-  - `servicePlanId` (optional for manual jobs)
-  - `jobType`
-  - `scheduledStart`
-  - `scheduledEnd`
-  - `assigneeId` (nullable until assigned)
-  - `status` (`SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`, `BLOCKED`)
-  - `priority`
-  - `notes`
-  - `createdById`
-  - `completedAt`
-  - `linkedInspectionId` (optional when checklist is started/completed)
-- `jobEvents` (audit log)
-  - `jobId`
-  - `eventType`
-  - `actorId`
-  - `metadata`
-  - `createdAt`
-
-### Engine behavior
-- Add idempotent generator function:
-  - `scheduling.generateJobs({ from, to })`
-- Generation rules:
-  - no duplicate jobs per plan/time window
-  - skip archived properties/inactive plans
-  - respect property timezone
-
-### Done criteria
-- Admin can define recurring service plans.
-- Jobs auto-generate for a selected date window.
-
-## Workstream C - Calendar + Dispatch UX
-
-### Outcome
-Admin and field users can see and act on upcoming work in calendar form.
-
-### Web routes
-- `/schedule` (global dispatch board for admin)
-- `/my-schedule` (assignee-focused view for cleaner/inspector)
-
-### UX requirements
-- Month + week + day views.
-- Filters:
-  - role
-  - assignee
-  - property
-  - status
-  - job type
-- Click event -> job drawer with:
-  - property details
-  - notes
-  - checklist start/open action
-- Reassign and reschedule controls for admins.
-
-### Done criteria
-- Cleaner/inspector can see upcoming jobs in time order.
-- Admin can reassign job and assignee calendar updates immediately.
-
-## Workstream D - Checklist/Job Convergence
-
-### Outcome
-Jobs and checklists become one coherent workflow.
-
-### Required behavior
-- Starting a checklist from a scheduled job links `jobs.linkedInspectionId`.
-- Completing inspection transitions job status to `COMPLETED`.
-- Incomplete checklist prevents job completion unless admin override.
-- History shows completed jobs + completed inspections with linkage.
-
-### Done criteria
-- No duplicate "work objects" for the same execution event.
-
-## Workstream E - Offline Field Reliability
-
-### Outcome
-Field execution works reliably with poor connectivity.
-
-### Required upgrades
-- Expand outbox beyond checklist creation:
-  - task completion toggles
-  - notes
-  - photo uploads metadata
-  - job status transitions
-- Add conflict policy for replay:
-  - server wins for schedule ownership fields
-  - client wins for local evidence fields (if timestamps are newer)
-- Add sync status UI on inspection/job pages.
-
-### Done criteria
-- A full room completion can be performed offline and eventually synced.
-
-## Legacy-App Alignment Remaining
-
-### Goal
-Match and exceed the practical field workflow of the old Dazzle Divas app before chasing broader platform expansion.
-
-### What is already at parity or better
-- Generated room-by-room checklist flow now exists in v3.
-- Bedroom and bathroom counts now actually affect checklist shape in v3.
-  - This did not exist in the old app.
-- Room execution now includes:
-  - task completion
-  - proof photo capture
-  - room notes
-  - room completion
-
-### What is still needed to feel fully aligned with the old app
-- Improve mobile room navigation polish.
-  - The old app was very list-driven and quick to scan.
-  - v3 should keep its stronger data model but tighten the tap path and visual hierarchy for field users.
-- Add stronger issue capture for failed inspection items.
-  - Example: flag a room/task issue and preserve it in reporting/history.
-- Tighten test coverage around checklist generation and room completion guardrails.
-
-### Product reference files
-- Old screenshots: `old_pics/`
-- Old legacy app: `dazzle-divas-inspection/`
-
-## Workstream F - Competitive Benchmark (Breezeway + Peers)
-
-### Goal
-Define explicit capability targets and close gaps intentionally, not by guesswork.
-
-### Sources to review
-- Breezeway product + operations resources:
-  - https://www.breezeway.io/
-  - https://help.breezeway.io/
-- Turno:
-  - https://turno.com/
-- Hostaway:
-  - https://www.hostaway.com/
-- ResortCleaning:
-  - https://www.resortcleaning.com/
-
-### Benchmark process
-1. Build a feature matrix with columns:
-   - capability
-   - Breezeway support
-   - peer support
-   - current v3 status
-   - gap severity (P0/P1/P2)
-   - implementation owner
-2. Minimum benchmark categories:
-   - property operations setup
-   - recurring scheduling
-   - dispatch/calendar
-   - mobile execution
-   - inspections + photo proof
-   - messaging/notifications
-   - reporting/audit trail
-3. Define parity level by milestone:
-   - M1: operational baseline
-   - M2: strong parity
-   - M3: differentiated workflows
-
-### Non-negotiable parity baseline
-- Property CRUD and assignment
-- Recurring schedules
-- Calendar dispatch view
-- Mobile-friendly job execution
-- Inspection evidence capture
-- Audit history for operational accountability
-
-## Recommended Next Build Focus After Legacy Alignment
+## Recommended Next Build Focus
 
 ### Priority theme
-Move from "core production access + property standards are in place" to "field reliability and replay are production-safe."
+Move from "major missing workflow gaps" to "deployment safety + field feedback loop."
 
 ### Recommended next slice
-Finish the remaining field-reliability gaps that still block real operational rollout.
+Deployment readiness and field rollout hardening.
 
 ### Concrete next tasks
-1. Expand offline outbox + replay for field execution.
-   - task toggles
-   - room notes
-   - photo metadata
-   - worker job status changes
-2. Implement replay conflict policy + diagnostics UI.
-   - server wins for schedule ownership fields
-   - client wins for newer local evidence fields
-3. Add dispatch ergonomics on `/schedule`.
-   - month view
-   - faster reassignment/reschedule actions
-   - stronger daily staffing flow
-4. Add test coverage for:
-   - schedule generation edge cases
-   - property override checklist generation
-   - job/checklist linkage lifecycle
-   - offline replay conflict resolution
-5. Then evaluate Breezeway-style additions in this order:
-   - messaging/notifications
-   - issue escalation/follow-up tasks
-   - reporting/SLA dashboards
-   - differentiated workflows beyond baseline cleaning + inspection
+1. Finish replay conflict policy + recovery flow.
+   - codify server-owned schedule fields vs client-owned evidence fields
+   - improve user handling of `CONFLICT` items
+2. Add final deployment smoke coverage for:
+   - issue capture persistence in completed history/report output
+   - replay conflict/resolution behavior
+   - job/checklist lifecycle regressions
+3. Perform a production deployment pass and field smoke checklist.
+   - admin can create/assign/reschedule jobs
+   - worker can start/resume checklist
+   - worker can complete room/checklist
+   - worker can capture issue + photo
+   - offline queue replays correctly after reconnect
+4. Then collect live cleaner feedback before building broader platform expansion.
 
 ## Suggested Milestones
 
-### M1 (2-3 weeks): Operational Baseline
-- Workstream A complete
-- Workstream A1 basic
-- Workstream B (basic)
-- Workstream C (week/day view)
-- Workstream D (link job -> inspection)
-Status update (March 6, 2026):
+### M1: Operational Baseline
 - A: complete
-- A1: basic complete (manual bootstrap flow shipped; invite/reset flow still open)
-- B: basic complete (`CUSTOM_RRULE` still pending)
-- C: assignee view complete (`/my-schedule`), admin week/day dispatch complete, manual turnover dispatch complete, month view still open
-- D: core link complete; admin override path still open
+- A1: basic complete
+- B: basic complete (`CUSTOM_RRULE` pending)
+- C: complete for baseline, including admin month/week/day dispatch
+- D: core link complete
 
-### M2 (2 weeks): Field-Ready Reliability
-- Workstream E complete
-- Conflict handling + replay diagnostics
-- Role-based schedule UX polish
-Status update (March 6, 2026):
-- partially started
-- room-by-room field execution shipped
-- offline replay/conflict handling still not started
-- worker schedule/status core flow shipped
-- offline replay/conflict handling still open
+### M2: Field-Ready Reliability
+- Workstream E is substantially advanced.
+- Remaining blockers are replay/conflict hardening and rollout validation.
 
-### M3 (1-2 weeks): Competitive Hardening
-- Workstream F matrix closed for P0/P1 gaps
-- Reporting primitives (job completion rate, SLA misses, photo compliance)
-Status update (March 6, 2026):
-- matrix published; P0/P1 closure and reporting still open
+### M3: Competitive Hardening
+- Reporting, notifications, and differentiated workflows remain open.
 
 ## Technical Guardrails
 - Keep Bun/Convex stack.
 - Preserve role/permission boundaries in backend (never trust client role input).
 - Prefer additive schema changes with migration helpers.
 - Keep admin actions auditable (`jobEvents`, mutation logs).
+- Keep `COMPLETED` tied to checklist completion.
 - Add tests for:
   - permissions
   - schedule generation correctness
-  - offline replay correctness
+  - offline replay/conflict correctness
+  - issue capture persistence
 
 ## Next 72-Hour Task List For Incoming Team
-1. Expand offline outbox beyond checklist creation:
-   - task completion toggles
-   - room notes
-   - photo metadata capture
-   - job status transitions
-2. Implement replay conflict policy + diagnostics UI:
-   - server wins for schedule ownership fields
-   - client wins for newer local evidence fields
-3. Add dispatch polish for admins:
-   - month view
-   - faster reassignment/reschedule interactions
-   - stronger daily staffing workflow
-4. Add test coverage for:
-   - schedule generation edge cases (timezone, biweekly/monthly boundaries)
-   - property-derived + property-override checklist generation
-   - job/checklist linkage lifecycle
-   - offline replay conflict resolution
-5. Add issue capture for failed inspection items and preserve it in history/reporting.
+1. Finish replay conflict policy + manual recovery UX.
+2. Add final deployment smoke scripts/checklists and execute them against production/staging.
+3. Add tests for:
+   - issue capture persistence in history/report output
+   - replay conflict resolution
+   - job/checklist lifecycle integration regressions
+4. Ship any high-signal mobile UX fixes that come directly from cleaner feedback.
+5. Hold broader feature expansion until field validation confirms the workflow is stable.
 
 ## Ready-For-User-Testing Gate
 Proceed to broad user testing only when:
@@ -557,4 +342,5 @@ Proceed to broad user testing only when:
 - Cleaner and inspector have usable upcoming-jobs calendar.
 - Scheduled job lifecycle works through checklist completion.
 - Offline mode covers real field actions, not just checklist creation.
-- P0 issues from benchmark matrix are closed.
+- Replay conflicts are understandable and recoverable by operators.
+- P0 issues from benchmark matrix are closed or explicitly accepted for initial rollout.

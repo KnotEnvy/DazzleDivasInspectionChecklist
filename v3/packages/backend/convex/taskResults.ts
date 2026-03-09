@@ -65,3 +65,21 @@ export const setCompleted = mutation({
   },
 });
 
+export const setIssue = mutation({
+  args: {
+    taskResultId: v.id("taskResults"),
+    hasIssue: v.boolean(),
+    issueNotes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireTaskResultAccess(ctx, args.taskResultId);
+
+    const issueNotes = args.hasIssue ? args.issueNotes?.trim() || undefined : undefined;
+
+    await ctx.db.patch(args.taskResultId, {
+      hasIssue: args.hasIssue,
+      issueNotes,
+    });
+  },
+});
+

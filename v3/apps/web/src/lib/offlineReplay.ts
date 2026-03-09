@@ -57,6 +57,14 @@ async function replayItem(client: ReplayClient, item: OutboxItem) {
       });
       return undefined;
 
+    case "SET_TASK_ISSUE":
+      await client.mutation(api.taskResults.setIssue, {
+        taskResultId: item.payload.taskResultId as Id<"taskResults">,
+        hasIssue: item.payload.hasIssue,
+        issueNotes: item.payload.issueNotes,
+      });
+      return undefined;
+
     case "UPDATE_ROOM_NOTES":
       await client.mutation(api.roomInspections.updateNotes, {
         roomInspectionId: item.payload.roomInspectionId as Id<"roomInspections">,

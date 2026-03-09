@@ -5,8 +5,10 @@ import { api } from "convex/_generated/api";
 type CompletedInspection = {
   _id: string;
   _creationTime: number;
+  completedAt?: number;
   propertyName: string;
   type: string;
+  issueCount?: number;
 };
 
 export function HistoryPage() {
@@ -30,9 +32,16 @@ export function HistoryPage() {
               to={`/checklists/${item._id}`}
               className="block rounded-xl border border-border bg-white p-3 transition hover:border-brand-400"
             >
-              <p className="font-semibold">{item.propertyName}</p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <p className="font-semibold">{item.propertyName}</p>
+                {(item.issueCount ?? 0) > 0 ? (
+                  <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+                    {item.issueCount} issue{item.issueCount === 1 ? "" : "s"}
+                  </span>
+                ) : null}
+              </div>
               <p className="text-sm text-slate-600">
-                {item.type} • {new Date(item._creationTime).toLocaleString()}
+                {item.type} | {new Date(item.completedAt ?? item._creationTime).toLocaleString()}
               </p>
             </Link>
           ))}
