@@ -2,6 +2,7 @@ import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import type { ConvexReactClient } from "convex/react";
 import {
+  describeOutboxItem,
   getPendingOutboxItems,
   setOutboxItemProcessing,
   setOutboxItemResult,
@@ -17,6 +18,15 @@ export type OfflineReplayResult = {
   failed: number;
   conflicts: number;
   stoppedByNetwork: boolean;
+};
+
+export type OutboxOwnership = "SERVER" | "CLIENT";
+
+export type ReplayConflictPolicy = {
+  ownership: OutboxOwnership;
+  summary: string;
+  nextStep: string;
+  canRetry: boolean;
 };
 
 function toErrorMessage(error: unknown) {
@@ -37,6 +47,68 @@ function isLikelyNetworkError(message: string) {
 
 export function classifyReplayFailureStatus(message: string) {
   return isLikelyNetworkError(message) ? "FAILED" : "CONFLICT";
+}
+
+export function getReplayConflictPolicy(item: OutboxItem): ReplayConflictPolicy {
+  switch (item.type) {
+    case "CREATE_INSPECTION":
+      return {
+        ownership: "SERVER",
+        summary:
+          "Checklist start is tied to the live schedule and server job state.",
+        nextStep:
+          "Refresh the schedule, confirm the assigned job still needs a checklist, then start or resume it from the live job card.",
+        canRetry: false,
+      };
+
+    case "UPDATE_MY_JOB_STATUS":
+      return {
+        ownership: "SERVER",
+        summary:
+          "Worker job status is server-owned dispatch state and may have changed while this device was offline.",
+        nextStep:
+          "Refresh My Schedule, confirm the live job status, and then apply the new status again only if it is still correct.",
+        canRetry: false,
+      };
+
+    case "SET_TASK_COMPLETED":
+    case "SET_TASK_ISSUE":
+    case "UPDATE_ROOM_NOTES":
+    case "UPLOAD_PHOTO":
+    case "REMOVE_PHOTO":
+    case "COMPLETE_ROOM":
+    case "COMPLETE_INSPECTION":
+      return {
+        ownership: "CLIENT",
+        summary:
+          "Checklist evidence is client-owned, but this replay could not be applied against the current server checklist state.",
+        nextStep:
+          "Open the checklist, compare the live room state, and retry this item if the field evidence should still be kept. Discard it if the server already has the right result or the checklist changed.",
+        canRetry: true,
+      };
+  }
+}
+
+export function getOutboxReviewHref(item: OutboxItem) {
+  if (item.type === "CREATE_INSPECTION" && item.payload.jobId) {
+    return "/my-schedule";
+  }
+
+  if (item.type === "UPDATE_MY_JOB_STATUS") {
+    return "/my-schedule";
+  }
+
+  if ("inspectionId" in item.payload) {
+    return `/checklists/${item.payload.inspectionId}`;
+  }
+
+  return "/";
+}
+
+export function formatConflictMessage(item: OutboxItem) {
+  const policy = getReplayConflictPolicy(item);
+  const error = item.lastError ? ` Server response: ${item.lastError}.` : "";
+  return `${describeOutboxItem(item)} conflicted. ${policy.summary}${error}`;
 }
 
 async function replayItem(client: ReplayClient, item: OutboxItem) {

@@ -1,51 +1,28 @@
 import { mutation } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { requireTaskResultAccess } from "./lib/permissions";
-
-async function reopenRoomInspectionIfInvalid(
-  roomInspectionId: Id<"roomInspections">,
-  ctx: MutationCtx
-) {
-  const roomInspection = await ctx.db.get(roomInspectionId);
-  if (!roomInspection || roomInspection.status !== "COMPLETED") {
-    return;
-  }
-
-  const [taskResults, photos] = await Promise.all([
-    ctx.db
-      .query("taskResults")
-      .withIndex("by_room_inspection", (q) => q.eq("roomInspectionId", roomInspection._id))
-      .collect(),
-    ctx.db
-      .query("photos")
-      .withIndex("by_room_inspection", (q) => q.eq("roomInspectionId", roomInspection._id))
-      .collect(),
-  ]);
-
-  const isStillComplete =
-    taskResults.every((task) => task.completed) &&
-    photos.length >= roomInspection.requiredPhotoMin;
-
-  if (!isStillComplete) {
-    await ctx.db.patch(roomInspection._id, {
-      status: "PENDING",
-      completedAt: undefined,
-    });
-  }
-}
+import {
+  adjustInspectionIssueCount,
+  adjustRoomInspectionMetrics,
+  reopenRoomInspectionIfInvalid,
+} from "./lib/inspectionMetrics";
 
 export const toggle = mutation({
   args: { taskResultId: v.id("taskResults") },
   handler: async (ctx, args) => {
-    const { taskResult } = await requireTaskResultAccess(ctx, args.taskResultId);
+    const { roomInspection, taskResult } = await requireTaskResultAccess(ctx, args.taskResultId);
+    const nextCompleted = !taskResult.completed;
+    const completedDelta = nextCompleted ? 1 : -1;
 
     await ctx.db.patch(args.taskResultId, {
-      completed: !taskResult.completed,
+      completed: nextCompleted,
     });
 
-    await reopenRoomInspectionIfInvalid(taskResult.roomInspectionId, ctx);
+    const { metrics } = await adjustRoomInspectionMetrics(ctx, taskResult.roomInspectionId, {
+      completedTasks: completedDelta,
+    });
+
+    await reopenRoomInspectionIfInvalid(ctx, roomInspection, metrics);
   },
 });
 
@@ -55,13 +32,21 @@ export const setCompleted = mutation({
     completed: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const { taskResult } = await requireTaskResultAccess(ctx, args.taskResultId);
+    const { roomInspection, taskResult } = await requireTaskResultAccess(ctx, args.taskResultId);
+
+    if (taskResult.completed === args.completed) {
+      return;
+    }
 
     await ctx.db.patch(args.taskResultId, {
       completed: args.completed,
     });
 
-    await reopenRoomInspectionIfInvalid(taskResult.roomInspectionId, ctx);
+    const { metrics } = await adjustRoomInspectionMetrics(ctx, taskResult.roomInspectionId, {
+      completedTasks: args.completed ? 1 : -1,
+    });
+
+    await reopenRoomInspectionIfInvalid(ctx, roomInspection, metrics);
   },
 });
 
@@ -72,14 +57,25 @@ export const setIssue = mutation({
     issueNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireTaskResultAccess(ctx, args.taskResultId);
+    const { inspection, taskResult } = await requireTaskResultAccess(ctx, args.taskResultId);
 
     const issueNotes = args.hasIssue ? args.issueNotes?.trim() || undefined : undefined;
+    const issueDelta =
+      taskResult.hasIssue === args.hasIssue ? 0 : args.hasIssue ? 1 : -1;
 
     await ctx.db.patch(args.taskResultId, {
       hasIssue: args.hasIssue,
       issueNotes,
     });
+
+    if (issueDelta !== 0) {
+      await Promise.all([
+        adjustRoomInspectionMetrics(ctx, taskResult.roomInspectionId, {
+          issueCount: issueDelta,
+        }),
+        adjustInspectionIssueCount(ctx, inspection._id, issueDelta),
+      ]);
+    }
   },
 });
 

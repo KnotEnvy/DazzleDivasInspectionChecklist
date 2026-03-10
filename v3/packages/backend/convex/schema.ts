@@ -46,13 +46,17 @@ const schema = defineSchema({
     accessInstructions: v.optional(v.string()),
     entryMethod: v.optional(v.string()),
     serviceNotes: v.optional(v.string()),
+    activeCleanerAssignments: v.optional(v.number()),
+    activeInspectorAssignments: v.optional(v.number()),
+    activeServicePlans: v.optional(v.number()),
     checklistOverrides: v.optional(propertyChecklistOverrideValidator),
     isArchived: v.optional(v.boolean()),
     isActive: v.boolean(),
   })
     .index("by_active", ["isActive"])
     .index("by_archived", ["isArchived"])
-    .searchIndex("search_name", { searchField: "name" }),
+    .searchIndex("search_name", { searchField: "name" })
+    .searchIndex("search_address", { searchField: "address" }),
 
   propertyAssignments: defineTable({
     propertyId: v.id("properties"),
@@ -147,6 +151,7 @@ const schema = defineSchema({
     .index("by_service_plan", ["servicePlanId"])
     .index("by_service_plan_start", ["servicePlanId", "scheduledStart"])
     .index("by_assignee", ["assigneeId"])
+    .index("by_assignee_start", ["assigneeId", "scheduledStart"])
     .index("by_assignee_status_start", ["assigneeId", "status", "scheduledStart"])
     .index("by_status_start", ["status", "scheduledStart"])
     .index("by_scheduled_start", ["scheduledStart"])
@@ -195,6 +200,7 @@ const schema = defineSchema({
     createdById: v.id("users"),
     status: v.union(v.literal("IN_PROGRESS"), v.literal("COMPLETED")),
     notes: v.optional(v.string()),
+    issueCount: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     sourceInspectionId: v.optional(v.id("inspections")),
   })
@@ -209,6 +215,10 @@ const schema = defineSchema({
     roomName: v.string(),
     status: v.union(v.literal("PENDING"), v.literal("COMPLETED")),
     notes: v.optional(v.string()),
+    totalTasks: v.optional(v.number()),
+    completedTasks: v.optional(v.number()),
+    issueCount: v.optional(v.number()),
+    photoCount: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     requiredPhotoMin: v.number(),
   })
@@ -217,6 +227,7 @@ const schema = defineSchema({
 
   taskResults: defineTable({
     taskId: v.optional(v.id("tasks")),
+    inspectionId: v.optional(v.id("inspections")),
     roomInspectionId: v.id("roomInspections"),
     taskDescription: v.string(),
     completed: v.boolean(),
@@ -224,6 +235,7 @@ const schema = defineSchema({
     issueNotes: v.optional(v.string()),
   })
     .index("by_room_inspection", ["roomInspectionId"])
+    .index("by_inspection", ["inspectionId"])
     .index("by_task", ["taskId"]),
 
   photos: defineTable({

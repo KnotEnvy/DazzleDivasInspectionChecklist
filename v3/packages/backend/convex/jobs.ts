@@ -34,35 +34,53 @@ function requiredAssignmentRoleForJob(
   return servicePlan?.defaultAssigneeRole ?? "CLEANER";
 }
 
-async function hydrateJobs(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
-  return await Promise.all(
-    jobs.map(async (job) => {
-      const [property, servicePlan, assignee] = await Promise.all([
-        ctx.db.get(job.propertyId),
-        job.servicePlanId ? ctx.db.get(job.servicePlanId) : Promise.resolve(null),
-        job.assigneeId ? ctx.db.get(job.assigneeId) : Promise.resolve(null),
-      ]);
-      const checklistType = checklistTypeForJobType(job.jobType);
+function isDefined<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
 
-      return {
-        ...job,
-        propertyName: property?.name ?? "Unknown property",
-        propertyAddress: property?.address ?? "",
-        propertyTimezone: property?.timezone ?? "America/New_York",
-        propertyServiceNotes: property?.serviceNotes ?? "",
-        propertyIsActive: property?.isActive ?? false,
-        propertyIsArchived: property?.isArchived === true,
-        assigneeName: assignee?.name ?? null,
-        servicePlan,
-        checklistType,
-        canStartChecklist:
-          job.assigneeId !== undefined &&
-          job.status !== "COMPLETED" &&
-          job.status !== "CANCELLED" &&
-          checklistType !== null,
-      };
-    })
-  );
+async function hydrateJobs(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
+  const propertyIds = [...new Set(jobs.map((job) => job.propertyId))];
+  const servicePlanIds = [
+    ...new Set(jobs.map((job) => job.servicePlanId).filter(isDefined)),
+  ];
+  const assigneeIds = [...new Set(jobs.map((job) => job.assigneeId).filter(isDefined))];
+
+  const [properties, servicePlans, assignees] = await Promise.all([
+    Promise.all(propertyIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
+    Promise.all(servicePlanIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
+    Promise.all(assigneeIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
+  ]);
+
+  const propertyById = new Map(properties);
+  const servicePlanById = new Map(servicePlans);
+  const assigneeById = new Map(assignees);
+
+  return jobs.map((job) => {
+    const property = propertyById.get(job.propertyId) ?? null;
+    const servicePlan = job.servicePlanId
+      ? (servicePlanById.get(job.servicePlanId) ?? null)
+      : null;
+    const assignee = job.assigneeId ? (assigneeById.get(job.assigneeId) ?? null) : null;
+    const checklistType = checklistTypeForJobType(job.jobType);
+
+    return {
+      ...job,
+      propertyName: property?.name ?? "Unknown property",
+      propertyAddress: property?.address ?? "",
+      propertyTimezone: property?.timezone ?? "America/New_York",
+      propertyServiceNotes: property?.serviceNotes ?? "",
+      propertyIsActive: property?.isActive ?? false,
+      propertyIsArchived: property?.isArchived === true,
+      assigneeName: assignee?.name ?? null,
+      servicePlan,
+      checklistType,
+      canStartChecklist:
+        job.assigneeId !== undefined &&
+        job.status !== "COMPLETED" &&
+        job.status !== "CANCELLED" &&
+        checklistType !== null,
+    };
+  });
 }
 
 async function recordJobEvent(
@@ -203,15 +221,31 @@ async function findAssigneeConflict(
     excludeJobId?: Id<"jobs">;
   }
 ) {
-  const jobs = await ctx.db
-    .query("jobs")
-    .withIndex("by_assignee", (q) => q.eq("assigneeId", params.assigneeId))
-    .collect();
+  const activeStatuses: Array<Doc<"jobs">["status"]> = [
+    "SCHEDULED",
+    "IN_PROGRESS",
+    "BLOCKED",
+  ];
+
+  const jobGroups = await Promise.all(
+    activeStatuses.map((status) =>
+      ctx.db
+        .query("jobs")
+        .withIndex("by_assignee_status_start", (q) =>
+          q
+            .eq("assigneeId", params.assigneeId)
+            .eq("status", status)
+            .lt("scheduledStart", params.scheduledEnd)
+        )
+        .collect()
+    )
+  );
+
+  const jobs = jobGroups.flat();
 
   return jobs.find(
     (job) =>
       job._id !== params.excludeJobId &&
-      isDispatchActiveStatus(job.status) &&
       jobsOverlap(job, {
         scheduledStart: params.scheduledStart,
         scheduledEnd: params.scheduledEnd,
@@ -265,16 +299,10 @@ export const listMyUpcoming = query({
     } else {
       jobs = await ctx.db
         .query("jobs")
-        .withIndex("by_assignee", (q) => q.eq("assigneeId", user._id))
-        .collect()
-        .then((items) =>
-          items.filter(
-            (job) =>
-              job.scheduledStart >= from &&
-              job.scheduledStart <= to &&
-              (includeCompleted ? true : job.status !== "COMPLETED")
-          )
-        );
+        .withIndex("by_assignee_start", (q) =>
+          q.eq("assigneeId", user._id).gte("scheduledStart", from).lte("scheduledStart", to)
+        )
+        .collect();
     }
 
     const filtered = jobs

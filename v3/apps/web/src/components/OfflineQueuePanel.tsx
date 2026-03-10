@@ -1,11 +1,19 @@
 import toast from "react-hot-toast";
+import { Link } from "react-router-dom";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOfflineSync } from "@/app/OfflineSyncProvider";
 import {
   clearResolvedOutboxItems,
+  discardOutboxItem,
   describeOutboxItem,
+  retryOutboxItem,
   type OutboxItem,
 } from "@/lib/offlineOutbox";
+import {
+  formatConflictMessage,
+  getOutboxReviewHref,
+  getReplayConflictPolicy,
+} from "@/lib/offlineReplay";
 
 function statusTone(status: OutboxItem["status"]) {
   switch (status) {
@@ -41,8 +49,12 @@ export function OfflineQueuePanel({
     .slice()
     .sort((left, right) => right.createdAt - left.createdAt)
     .slice(0, maxItems);
-  const unresolvedCount = items.filter((item) => item.status !== "SYNCED").length;
-  const hasResolvedItems = items.some((item) => item.status === "SYNCED" || item.status === "CONFLICT");
+  const actionableCount = items.filter(
+    (item) => item.status === "QUEUED" || item.status === "PROCESSING" || item.status === "FAILED"
+  ).length;
+  const conflictCount = items.filter((item) => item.status === "CONFLICT").length;
+  const syncedCount = items.filter((item) => item.status === "SYNCED").length;
+  const hasSyncedItems = syncedCount > 0;
 
   async function handleSyncNow() {
     if (!isOnline) {
@@ -74,6 +86,45 @@ export function OfflineQueuePanel({
     toast.success("Resolved sync items cleared");
   }
 
+  async function handleRetryConflict(item: OutboxItem) {
+    const policy = getReplayConflictPolicy(item);
+
+    if (!policy.canRetry) {
+      toast.error("Refresh the live schedule before retrying this action");
+      return;
+    }
+
+    if (!isOnline) {
+      toast.error("Reconnect before retrying a conflicted action");
+      return;
+    }
+
+    await retryOutboxItem(item.id);
+    const result = await flushNow();
+
+    if (result.synced > 0) {
+      toast.success("Conflict requeued and synced");
+      return;
+    }
+
+    if (result.conflicts > 0) {
+      toast.error("Conflict still needs manual review");
+      return;
+    }
+
+    if (result.failed > 0) {
+      toast.error("Retry paused because the connection dropped again");
+      return;
+    }
+
+    toast("Conflict requeued for the next sync pass");
+  }
+
+  async function handleDiscardConflict(item: OutboxItem) {
+    await discardOutboxItem(item.id);
+    toast.success("Queued conflict discarded");
+  }
+
   return (
     <section className="rounded-2xl border border-border bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -84,7 +135,7 @@ export function OfflineQueuePanel({
         <div className="flex gap-2">
           <button
             className="field-button secondary px-4"
-            disabled={!isOnline || syncing || unresolvedCount === 0}
+            disabled={!isOnline || syncing || actionableCount === 0}
             onClick={() => void handleSyncNow()}
             type="button"
           >
@@ -92,7 +143,7 @@ export function OfflineQueuePanel({
           </button>
           <button
             className="field-button secondary px-4"
-            disabled={!hasResolvedItems}
+            disabled={!hasSyncedItems}
             onClick={() => void handleClearResolved()}
             type="button"
           >
@@ -103,13 +154,13 @@ export function OfflineQueuePanel({
 
       <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
         <span className="rounded-full bg-brand-50 px-3 py-1 text-brand-700">
-          Open: {unresolvedCount}
+          Open: {actionableCount}
         </span>
         <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">
-          Conflicts: {items.filter((item) => item.status === "CONFLICT").length}
+          Conflicts: {conflictCount}
         </span>
         <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-          Synced: {items.filter((item) => item.status === "SYNCED").length}
+          Synced: {syncedCount}
         </span>
       </div>
 
@@ -128,6 +179,14 @@ export function OfflineQueuePanel({
                   {item.lastError ? (
                     <p className="mt-1 text-xs text-rose-700">{item.lastError}</p>
                   ) : null}
+                  {item.status === "CONFLICT" ? (
+                    <div className="mt-2 space-y-2">
+                      <p className="text-xs text-rose-800">{formatConflictMessage(item)}</p>
+                      <p className="text-xs text-slate-600">
+                        {getReplayConflictPolicy(item).nextStep}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
                 <span
                   className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${statusTone(
@@ -137,6 +196,31 @@ export function OfflineQueuePanel({
                   {item.status}
                 </span>
               </div>
+              {item.status === "CONFLICT" ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    className="field-button secondary px-3"
+                    to={getOutboxReviewHref(item)}
+                  >
+                    Review Live State
+                  </Link>
+                  <button
+                    className="field-button secondary px-3"
+                    disabled={!getReplayConflictPolicy(item).canRetry || !isOnline || syncing}
+                    onClick={() => void handleRetryConflict(item)}
+                    type="button"
+                  >
+                    Retry Replay
+                  </button>
+                  <button
+                    className="field-button secondary px-3"
+                    onClick={() => void handleDiscardConflict(item)}
+                    type="button"
+                  >
+                    Discard Item
+                  </button>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

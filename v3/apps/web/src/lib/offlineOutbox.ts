@@ -160,7 +160,7 @@ function notifyOutboxChanged() {
 }
 
 function isResolvedStatus(status: OutboxItemStatus) {
-  return status === "SYNCED" || status === "CONFLICT";
+  return status === "SYNCED";
 }
 
 function isActionableStatus(status: OutboxItemStatus) {
@@ -562,4 +562,24 @@ export async function resetProcessingItemsToQueued() {
 
 export async function clearResolvedOutboxItems() {
   await deleteMatchingItems((item) => isResolvedStatus(item.status));
+}
+
+export async function retryOutboxItem(id: string) {
+  const items = await listItemsInternal();
+  const item = items.find((candidate) => candidate.id === id);
+
+  if (!item) {
+    return;
+  }
+
+  await putItem({
+    ...item,
+    status: "QUEUED",
+    updatedAt: Date.now(),
+    lastError: undefined,
+  });
+}
+
+export async function discardOutboxItem(id: string) {
+  await deleteItems([id]);
 }

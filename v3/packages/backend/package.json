@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "convex dev",
-    "build": "convex codegen",
+    "dev": "node ../../scripts/run-convex-with-local-tmp.mjs dev",
+    "build": "node ../../scripts/run-convex-with-local-tmp.mjs codegen",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo \"No lint configured for @dazzle/backend\"",
     "setup:auth": "bunx @convex-dev/auth --skip-git-check",
-    "deploy": "convex deploy",
+    "deploy": "node ../../scripts/run-convex-with-local-tmp.mjs deploy",
     "clean": "rmdir /s /q convex\\_generated 2>nul || exit 0"
   },
   "dependencies": {

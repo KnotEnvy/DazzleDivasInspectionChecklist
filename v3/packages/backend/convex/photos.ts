@@ -1,31 +1,12 @@
 import { query, mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { requireInspectionAccess, requireRoomInspectionAccess } from "./lib/permissions";
+import {
+  adjustRoomInspectionMetrics,
+  reopenRoomInspectionIfInvalid,
+} from "./lib/inspectionMetrics";
 import { photoKindValidator } from "./lib/validators";
-
-async function reopenRoomInspectionIfInvalid(
-  ctx: MutationCtx,
-  roomInspectionId: Id<"roomInspections">
-) {
-  const roomInspection = await ctx.db.get(roomInspectionId);
-  if (!roomInspection || roomInspection.status !== "COMPLETED") {
-    return;
-  }
-
-  const photos = await ctx.db
-    .query("photos")
-    .withIndex("by_room_inspection", (q) => q.eq("roomInspectionId", roomInspection._id))
-    .collect();
-
-  if (photos.length < roomInspection.requiredPhotoMin) {
-    await ctx.db.patch(roomInspection._id, {
-      status: "PENDING",
-      completedAt: undefined,
-    });
-  }
-}
 
 export const generateUploadUrl = mutation({
   args: { roomInspectionId: v.id("roomInspections") },
@@ -50,10 +31,16 @@ export const save = mutation({
       args.roomInspectionId
     );
 
-    return await ctx.db.insert("photos", {
+    const photoId = await ctx.db.insert("photos", {
       ...args,
       inspectionId: roomInspection.inspectionId,
     });
+
+    await adjustRoomInspectionMetrics(ctx, roomInspection._id, {
+      photoCount: 1,
+    });
+
+    return photoId;
   },
 });
 
@@ -89,13 +76,20 @@ export const remove = mutation({
       throw new Error("Photo not found");
     }
 
-    const roomInspectionId = photo.roomInspectionId;
+    const roomInspection = await ctx.db.get(photo.roomInspectionId);
 
     await requireInspectionAccess(ctx, photo.inspectionId);
 
     await ctx.storage.delete(photo.storageId);
     await ctx.db.delete(args.photoId);
-    await reopenRoomInspectionIfInvalid(ctx, roomInspectionId);
+
+    const { metrics } = await adjustRoomInspectionMetrics(ctx, photo.roomInspectionId, {
+      photoCount: -1,
+    });
+
+    if (roomInspection) {
+      await reopenRoomInspectionIfInvalid(ctx, roomInspection, metrics);
+    }
   },
 });
 

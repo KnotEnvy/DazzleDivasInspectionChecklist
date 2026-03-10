@@ -7,6 +7,7 @@ import {
   requireAdmin,
   assertPropertyAccessForChecklist,
 } from "./lib/permissions";
+import { getPropertySummaryMetrics } from "./lib/propertySummaries";
 import { propertyTypeValidator } from "./lib/validators";
 
 async function enrichPropertiesForAdmin(
@@ -15,32 +16,16 @@ async function enrichPropertiesForAdmin(
 ) {
   return await Promise.all(
     properties.map(async (property) => {
-      const [assignments, plans] = await Promise.all([
-        ctx.db
-          .query("propertyAssignments")
-          .withIndex("by_property", (q) => q.eq("propertyId", property._id))
-          .collect(),
-        ctx.db
-          .query("servicePlans")
-          .withIndex("by_property", (q) => q.eq("propertyId", property._id))
-          .collect(),
-      ]);
-
-      const activeAssignments = assignments.filter((assignment) => assignment.isActive);
-      const activePlans = plans.filter((plan) => plan.isActive);
+      const metrics = await getPropertySummaryMetrics(ctx, property);
 
       return {
         ...property,
         assignmentSummary: {
-          cleaners: activeAssignments.filter(
-            (assignment) => assignment.assignmentRole === "CLEANER"
-          ).length,
-          inspectors: activeAssignments.filter(
-            (assignment) => assignment.assignmentRole === "INSPECTOR"
-          ).length,
+          cleaners: metrics.activeCleanerAssignments,
+          inspectors: metrics.activeInspectorAssignments,
         },
         scheduleSummary: {
-          activePlans: activePlans.length,
+          activePlans: metrics.activeServicePlans,
         },
       };
     })
@@ -120,18 +105,16 @@ export const search = query({
     }
 
     const includeArchived = args.includeArchived === true;
-    const nameMatches =
-      term.length >= 2
-        ? await ctx.db
-            .query("properties")
-            .withSearchIndex("search_name", (q) => q.search("name", term))
-            .take(50)
-        : [];
-
-    const allProperties = await ctx.db.query("properties").collect();
-    const addressMatches = allProperties.filter((property) =>
-      property.address.toLowerCase().includes(term.toLowerCase())
-    );
+    const [nameMatches, addressMatches] = await Promise.all([
+      ctx.db
+        .query("properties")
+        .withSearchIndex("search_name", (q) => q.search("name", term))
+        .take(50),
+      ctx.db
+        .query("properties")
+        .withSearchIndex("search_address", (q) => q.search("address", term))
+        .take(50),
+    ]);
 
     const candidatesById = new Map(
       [...nameMatches, ...addressMatches].map((property) => [property._id, property])
@@ -193,6 +176,9 @@ export const create = mutation({
     return await ctx.db.insert("properties", {
       ...args,
       timezone: args.timezone ?? "America/New_York",
+      activeCleanerAssignments: 0,
+      activeInspectorAssignments: 0,
+      activeServicePlans: 0,
       isArchived: false,
       isActive: true,
     });

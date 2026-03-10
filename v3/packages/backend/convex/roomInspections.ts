@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { getRoomInspectionMetrics } from "./lib/inspectionMetrics";
 import { requireRoomInspectionAccess } from "./lib/permissions";
 
 export const getById = query({
@@ -64,27 +65,15 @@ export const complete = mutation({
       args.roomInspectionId
     );
 
-    const photos = await ctx.db
-      .query("photos")
-      .withIndex("by_room_inspection", (q) =>
-        q.eq("roomInspectionId", args.roomInspectionId)
-      )
-      .collect();
+    const metrics = await getRoomInspectionMetrics(ctx, roomInspection);
 
-    if (photos.length < roomInspection.requiredPhotoMin) {
+    if (metrics.photoCount < roomInspection.requiredPhotoMin) {
       throw new Error(
         `At least ${roomInspection.requiredPhotoMin} photo(s) are required before completion`
       );
     }
 
-    const taskResults = await ctx.db
-      .query("taskResults")
-      .withIndex("by_room_inspection", (q) =>
-        q.eq("roomInspectionId", args.roomInspectionId)
-      )
-      .collect();
-
-    if (taskResults.some((task) => !task.completed)) {
+    if (metrics.completedTasks < metrics.totalTasks) {
       throw new Error("All tasks in this room must be completed first");
     }
 

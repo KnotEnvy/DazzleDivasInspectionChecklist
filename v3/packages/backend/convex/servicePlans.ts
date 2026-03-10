@@ -3,6 +3,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { requireAdmin } from "./lib/permissions";
+import { adjustPropertySummaryMetrics } from "./lib/propertySummaries";
 import {
   assignmentRoleValidator,
   jobPriorityValidator,
@@ -136,7 +137,7 @@ export const create = mutation({
       defaultAssigneeId: args.defaultAssigneeId,
     });
 
-    return await ctx.db.insert("servicePlans", {
+    const servicePlanId = await ctx.db.insert("servicePlans", {
       propertyId: args.propertyId,
       planType: args.planType,
       frequency: args.frequency,
@@ -152,6 +153,12 @@ export const create = mutation({
       anchorDate: args.anchorDate ?? Date.now(),
       isActive: true,
     });
+
+    await adjustPropertySummaryMetrics(ctx, args.propertyId, {
+      activeServicePlans: 1,
+    });
+
+    return servicePlanId;
   },
 });
 
@@ -256,6 +263,19 @@ export const setActive = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+
+    const plan = await ctx.db.get(args.servicePlanId);
+    if (!plan) {
+      throw new Error("Service plan not found");
+    }
+
+    if (plan.isActive === args.isActive) {
+      return;
+    }
+
     await ctx.db.patch(args.servicePlanId, { isActive: args.isActive });
+    await adjustPropertySummaryMetrics(ctx, plan.propertyId, {
+      activeServicePlans: args.isActive ? 1 : -1,
+    });
   },
 });

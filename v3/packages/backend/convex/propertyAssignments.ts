@@ -1,7 +1,19 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { requireAuth, requireAdmin } from "./lib/permissions";
+import { adjustPropertySummaryMetrics } from "./lib/propertySummaries";
 import { assignmentRoleValidator } from "./lib/validators";
+
+function isDefined<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
+function propertyAssignmentSummaryDelta(role: Doc<"propertyAssignments">["assignmentRole"]) {
+  return role === "CLEANER"
+    ? { activeCleanerAssignments: 1 }
+    : { activeInspectorAssignments: 1 };
+}
 
 export const listByProperty = query({
   args: { propertyId: v.id("properties") },
@@ -13,12 +25,14 @@ export const listByProperty = query({
       .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
       .collect();
 
-    return await Promise.all(
-      assignments.map(async (assignment) => {
-        const user = await ctx.db.get(assignment.userId);
-        return { ...assignment, user };
-      })
-    );
+    const userIds = [...new Set(assignments.map((assignment) => assignment.userId))];
+    const users = await Promise.all(userIds.map(async (id) => [id, await ctx.db.get(id)] as const));
+    const userById = new Map(users);
+
+    return assignments.map((assignment) => ({
+      ...assignment,
+      user: userById.get(assignment.userId) ?? null,
+    }));
   },
 });
 
@@ -43,16 +57,20 @@ export const listMine = query({
       )
       .collect();
 
-    return await Promise.all(
-      assignments.map(async (assignment) => {
-        const property = await ctx.db.get(assignment.propertyId);
-        return { ...assignment, property };
-      })
-    ).then((items) =>
-      items.filter(
-        (item) => item.property && item.property.isActive && item.property.isArchived !== true
-      )
+    const propertyIds = [...new Set(assignments.map((assignment) => assignment.propertyId))];
+    const properties = await Promise.all(
+      propertyIds.map(async (id) => [id, await ctx.db.get(id)] as const)
     );
+    const propertyById = new Map(properties);
+
+    return assignments
+      .map((assignment) => ({
+        ...assignment,
+        property: propertyById.get(assignment.propertyId) ?? null,
+      }))
+      .filter(
+        (item) => item.property && item.property.isActive && item.property.isArchived !== true
+      );
   },
 });
 
@@ -94,11 +112,19 @@ export const assign = mutation({
       throw new Error("User is already assigned in this role");
     }
 
-    return await ctx.db.insert("propertyAssignments", {
+    const assignmentId = await ctx.db.insert("propertyAssignments", {
       ...args,
       startDate: Date.now(),
       isActive: true,
     });
+
+    await adjustPropertySummaryMetrics(
+      ctx,
+      args.propertyId,
+      propertyAssignmentSummaryDelta(args.assignmentRole)
+    );
+
+    return assignmentId;
   },
 });
 
@@ -107,9 +133,24 @@ export const unassign = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
 
+    const assignment = await ctx.db.get(args.assignmentId);
+    if (!assignment) {
+      throw new Error("Assignment not found");
+    }
+
+    if (!assignment.isActive) {
+      return;
+    }
+
     await ctx.db.patch(args.assignmentId, {
       isActive: false,
       endDate: Date.now(),
+    });
+
+    const delta = propertyAssignmentSummaryDelta(assignment.assignmentRole);
+    await adjustPropertySummaryMetrics(ctx, assignment.propertyId, {
+      activeCleanerAssignments: -(delta.activeCleanerAssignments ?? 0),
+      activeInspectorAssignments: -(delta.activeInspectorAssignments ?? 0),
     });
   },
 });

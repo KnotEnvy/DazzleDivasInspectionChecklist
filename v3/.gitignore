@@ -8,6 +8,7 @@ node_modules
 **/.turbo
 
 # Convex
+.convex-tmp
 
 # Env files
 .env

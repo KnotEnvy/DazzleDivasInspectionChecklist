@@ -16,9 +16,17 @@ import {
   loadEffectivePropertyTemplateRooms,
 } from "./lib/checklistTemplates";
 import {
+  getRoomInspectionMetrics,
+  loadInspectionIssueCount,
+  loadInspectionTaskResults,
+} from "./lib/inspectionMetrics";
+import {
+  buildCompletedInspectionHistoryItem,
+  buildInspectionReport,
+} from "./lib/inspectionReporting";
+import {
   assignmentRoleForChecklistType,
   checklistTypeValidator,
-  checklistTypeForJobType,
 } from "./lib/validators";
 
 async function ensureAssigneeIsEligible(
@@ -108,28 +116,12 @@ export const listCompleted = query({
 
     return await Promise.all(
       inspections.map(async (inspection) => {
-        const roomInspections = await ctx.db
-          .query("roomInspections")
-          .withIndex("by_inspection", (q) => q.eq("inspectionId", inspection._id))
-          .collect();
-
-        const roomIssueCounts = await Promise.all(
-          roomInspections.map(async (roomInspection) => {
-            const taskResults = await ctx.db
-              .query("taskResults")
-              .withIndex("by_room_inspection", (q) =>
-                q.eq("roomInspectionId", roomInspection._id)
-              )
-              .collect();
-
-            return taskResults.filter((task) => task.hasIssue).length;
-          })
+        return buildCompletedInspectionHistoryItem(
+          inspection,
+          typeof inspection.issueCount === "number"
+            ? inspection.issueCount
+            : await loadInspectionIssueCount(ctx, inspection._id)
         );
-
-        return {
-          ...inspection,
-          issueCount: roomIssueCounts.reduce((sum, count) => sum + count, 0),
-        };
       })
     );
   },
@@ -147,26 +139,11 @@ export const getById = query({
 
     const roomsWithProgress = await Promise.all(
       roomInspections.map(async (roomInspection) => {
-        const taskResults = await ctx.db
-          .query("taskResults")
-          .withIndex("by_room_inspection", (q) =>
-            q.eq("roomInspectionId", roomInspection._id)
-          )
-          .collect();
-
-        const photos = await ctx.db
-          .query("photos")
-          .withIndex("by_room_inspection", (q) =>
-            q.eq("roomInspectionId", roomInspection._id)
-          )
-          .collect();
+        const metrics = await getRoomInspectionMetrics(ctx, roomInspection);
 
         return {
           ...roomInspection,
-          totalTasks: taskResults.length,
-          completedTasks: taskResults.filter((task) => task.completed).length,
-          issueCount: taskResults.filter((task) => task.hasIssue).length,
-          photoCount: photos.length,
+          ...metrics,
         };
       })
     );
@@ -250,6 +227,7 @@ export const create = mutation({
       assigneeName: assignee.name,
       createdById: actor._id,
       status: "IN_PROGRESS",
+      issueCount: 0,
       sourceInspectionId: args.sourceInspectionId,
     });
 
@@ -281,12 +259,17 @@ export const create = mutation({
           roomId: room.sourceRoomId,
           roomName,
           status: "PENDING",
+          totalTasks: tasks.length,
+          completedTasks: 0,
+          issueCount: 0,
+          photoCount: 0,
           requiredPhotoMin,
         });
 
         for (const task of tasks) {
           await ctx.db.insert("taskResults", {
             taskId: task.sourceTaskId,
+            inspectionId,
             roomInspectionId,
             taskDescription: task.description,
             completed: false,
@@ -382,50 +365,39 @@ export const getFullReport = query({
       .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
       .collect();
 
-    const rooms = await Promise.all(
-      roomInspections.map(async (roomInspection) => {
-        const tasks = await ctx.db
-          .query("taskResults")
-          .withIndex("by_room_inspection", (q) =>
-            q.eq("roomInspectionId", roomInspection._id)
-          )
-          .collect();
+    const [taskResults, photos] = await Promise.all([
+      loadInspectionTaskResults(ctx, args.inspectionId, roomInspections),
+      ctx.db
+        .query("photos")
+        .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
+        .collect(),
+    ]);
 
-        const photos = await ctx.db
-          .query("photos")
-          .withIndex("by_room_inspection", (q) =>
-            q.eq("roomInspectionId", roomInspection._id)
-          )
-          .collect();
+    const tasksByRoomInspectionId = new Map<Id<"roomInspections">, typeof taskResults>();
+    for (const task of taskResults) {
+      const existing = tasksByRoomInspectionId.get(task.roomInspectionId);
+      if (existing) {
+        existing.push(task);
+      } else {
+        tasksByRoomInspectionId.set(task.roomInspectionId, [task]);
+      }
+    }
 
-        return {
-          room_name: roomInspection.roomName,
-          status: roomInspection.status,
-          notes: roomInspection.notes ?? null,
-          required_photo_min: roomInspection.requiredPhotoMin,
-          photo_count: photos.length,
-          tasks: tasks.map((task) => ({
-            description: task.taskDescription,
-            completed: task.completed,
-            has_issue: task.hasIssue ?? false,
-            issue_notes: task.issueNotes ?? null,
-          })),
-        };
-      })
-    );
+    const photoCountByRoomInspectionId = new Map<Id<"roomInspections">, number>();
+    for (const photo of photos) {
+      photoCountByRoomInspectionId.set(
+        photo.roomInspectionId,
+        (photoCountByRoomInspectionId.get(photo.roomInspectionId) ?? 0) + 1
+      );
+    }
 
-    return {
-      property_name: inspection.propertyName,
-      property_address: property?.address ?? "",
-      checklist_type: inspection.type,
-      assignee_name: inspection.assigneeName,
-      inspection_date: inspection.completedAt
-        ? new Date(inspection.completedAt).toISOString()
-        : new Date(inspection._creationTime).toISOString(),
-      status: inspection.status,
-      notes: inspection.notes ?? null,
-      rooms,
-    };
+    return buildInspectionReport({
+      inspection,
+      property,
+      roomInspections,
+      taskResults,
+      photoCountByRoomInspectionId,
+    });
   },
 });
 
