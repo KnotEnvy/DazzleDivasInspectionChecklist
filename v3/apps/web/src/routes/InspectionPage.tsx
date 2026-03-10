@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { Link } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
@@ -19,6 +19,7 @@ import {
   removeQueuedLocalPhoto,
   type PhotoKind,
 } from "@/lib/offlineOutbox";
+import { getNextHydratedDraft } from "@/lib/draftHydration";
 import { applyInspectionOutboxOverlay } from "@/lib/offlineInspectionState";
 
 type RoomSummary = {
@@ -116,6 +117,10 @@ export function InspectionPage() {
   const [removingPhotoId, setRemovingPhotoId] = useState<Id<"photos"> | null>(null);
   const [completingRoomId, setCompletingRoomId] = useState<Id<"roomInspections"> | null>(null);
   const [completingInspection, setCompletingInspection] = useState(false);
+  const lastHydratedRoomNotes = useRef("");
+  const lastHydratedRoomId = useRef<string | null>(null);
+  const lastHydratedInspectionNotes = useRef("");
+  const lastHydratedInspectionId = useRef<string | null>(null);
 
   const inspectionOverlay = useMemo(
     () => applyInspectionOutboxOverlay(inspection, selectedRoom, outboxItems),
@@ -164,10 +169,25 @@ export function InspectionPage() {
   }, [inspectionView, selectedRoomId]);
 
   useEffect(() => {
-    if (selectedRoom) {
-      setRoomNotes(selectedRoom.notes ?? "");
+    if (!selectedRoomView) {
+      setRoomNotes("");
+      lastHydratedRoomNotes.current = "";
+      lastHydratedRoomId.current = null;
+      return;
     }
-  }, [selectedRoom?._id]);
+
+    const nextSourceDraft = selectedRoomView.notes ?? "";
+    const nextDraft = getNextHydratedDraft({
+      currentDraft: roomNotes,
+      lastHydratedDraft: lastHydratedRoomNotes.current,
+      nextSourceDraft,
+      sourceKeyChanged: lastHydratedRoomId.current !== selectedRoomView._id,
+    });
+
+    setRoomNotes(nextDraft);
+    lastHydratedRoomNotes.current = nextSourceDraft;
+    lastHydratedRoomId.current = selectedRoomView._id;
+  }, [roomNotes, selectedRoomView?._id, selectedRoomView?.notes]);
 
   useEffect(() => {
     if (!selectedRoomView) {
@@ -183,10 +203,25 @@ export function InspectionPage() {
   }, [selectedRoomView]);
 
   useEffect(() => {
-    if (inspectionView) {
-      setInspectionNotes(inspectionView.notes ?? "");
+    if (!inspectionView) {
+      setInspectionNotes("");
+      lastHydratedInspectionNotes.current = "";
+      lastHydratedInspectionId.current = null;
+      return;
     }
-  }, [inspectionView?._id]);
+
+    const nextSourceDraft = inspectionView.notes ?? "";
+    const nextDraft = getNextHydratedDraft({
+      currentDraft: inspectionNotes,
+      lastHydratedDraft: lastHydratedInspectionNotes.current,
+      nextSourceDraft,
+      sourceKeyChanged: lastHydratedInspectionId.current !== inspectionView._id,
+    });
+
+    setInspectionNotes(nextDraft);
+    lastHydratedInspectionNotes.current = nextSourceDraft;
+    lastHydratedInspectionId.current = inspectionView._id;
+  }, [inspectionNotes, inspectionView?._id, inspectionView?.notes]);
 
   if (!inspectionId) {
     return <p className="text-slate-600">Missing inspection id.</p>;

@@ -5,6 +5,20 @@ Updated: March 9, 2026
 ## Goal
 Run this after staging or production deploys to validate the rollout-critical field path before broader cleaner feedback.
 
+## Automated Gate
+Run this before the manual deploy smoke so the rollout-critical regressions fail fast:
+
+```bash
+bun run smoke:rollout
+```
+
+This covers the current automated rollout gates for:
+- job/checklist lifecycle guards
+- issue count and report persistence
+- offline replay conflict classification
+- offline checklist overlay behavior
+- draft hydration for queued room/checklist notes after reload
+
 ## Preconditions
 - Admin test account is active.
 - Cleaner test account is active.

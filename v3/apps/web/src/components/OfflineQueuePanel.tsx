@@ -6,6 +6,7 @@ import {
   clearResolvedOutboxItems,
   discardOutboxItem,
   describeOutboxItem,
+  getDiscardedDependentOutboxItemCount,
   retryOutboxItem,
   type OutboxItem,
 } from "@/lib/offlineOutbox";
@@ -121,7 +122,17 @@ export function OfflineQueuePanel({
   }
 
   async function handleDiscardConflict(item: OutboxItem) {
+    const dependentDiscardCount = getDiscardedDependentOutboxItemCount(items, item.id);
     await discardOutboxItem(item.id);
+    if (dependentDiscardCount > 0) {
+      toast.success(
+        `Queued conflict discarded with ${dependentDiscardCount} dependent completion action${
+          dependentDiscardCount === 1 ? "" : "s"
+        }`
+      );
+      return;
+    }
+
     toast.success("Queued conflict discarded");
   }
 
@@ -168,61 +179,75 @@ export function OfflineQueuePanel({
         <p className="mt-4 text-sm text-slate-500">No queued sync activity yet.</p>
       ) : (
         <div className="mt-4 space-y-3">
-          {visibleItems.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-border bg-slate-50 p-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{describeOutboxItem(item)}</p>
-                  <p className="text-xs text-slate-500">
-                    {new Date(item.createdAt).toLocaleString()}
-                  </p>
-                  {item.lastError ? (
-                    <p className="mt-1 text-xs text-rose-700">{item.lastError}</p>
-                  ) : null}
-                  {item.status === "CONFLICT" ? (
-                    <div className="mt-2 space-y-2">
-                      <p className="text-xs text-rose-800">{formatConflictMessage(item)}</p>
-                      <p className="text-xs text-slate-600">
-                        {getReplayConflictPolicy(item).nextStep}
-                      </p>
-                    </div>
-                  ) : null}
+          {visibleItems.map((item) => {
+            const conflictPolicy =
+              item.status === "CONFLICT" ? getReplayConflictPolicy(item) : null;
+            const dependentDiscardCount =
+              item.status === "CONFLICT"
+                ? getDiscardedDependentOutboxItemCount(items, item.id)
+                : 0;
+
+            return (
+              <div key={item.id} className="rounded-2xl border border-border bg-slate-50 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{describeOutboxItem(item)}</p>
+                    <p className="text-xs text-slate-500">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </p>
+                    {item.lastError ? (
+                      <p className="mt-1 text-xs text-rose-700">{item.lastError}</p>
+                    ) : null}
+                    {item.status === "CONFLICT" && conflictPolicy ? (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-xs text-rose-800">{formatConflictMessage(item)}</p>
+                        <p className="text-xs text-slate-600">{conflictPolicy.nextStep}</p>
+                        {dependentDiscardCount > 0 ? (
+                          <p className="text-xs text-amber-700">
+                            Discarding this will also clear {dependentDiscardCount} queued
+                            completion follow-up{dependentDiscardCount === 1 ? "" : "s"} that
+                            depend on it.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${statusTone(
+                      item.status
+                    )}`}
+                  >
+                    {item.status}
+                  </span>
                 </div>
-                <span
-                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${statusTone(
-                    item.status
-                  )}`}
-                >
-                  {item.status}
-                </span>
+                {item.status === "CONFLICT" && conflictPolicy ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Link
+                      className="field-button secondary px-3"
+                      to={getOutboxReviewHref(item)}
+                    >
+                      Review Live State
+                    </Link>
+                    <button
+                      className="field-button secondary px-3"
+                      disabled={!conflictPolicy.canRetry || !isOnline || syncing}
+                      onClick={() => void handleRetryConflict(item)}
+                      type="button"
+                    >
+                      Retry Replay
+                    </button>
+                    <button
+                      className="field-button secondary px-3"
+                      onClick={() => void handleDiscardConflict(item)}
+                      type="button"
+                    >
+                      Discard Item
+                    </button>
+                  </div>
+                ) : null}
               </div>
-              {item.status === "CONFLICT" ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Link
-                    className="field-button secondary px-3"
-                    to={getOutboxReviewHref(item)}
-                  >
-                    Review Live State
-                  </Link>
-                  <button
-                    className="field-button secondary px-3"
-                    disabled={!getReplayConflictPolicy(item).canRetry || !isOnline || syncing}
-                    onClick={() => void handleRetryConflict(item)}
-                    type="button"
-                  >
-                    Retry Replay
-                  </button>
-                  <button
-                    className="field-button secondary px-3"
-                    onClick={() => void handleDiscardConflict(item)}
-                    type="button"
-                  >
-                    Discard Item
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

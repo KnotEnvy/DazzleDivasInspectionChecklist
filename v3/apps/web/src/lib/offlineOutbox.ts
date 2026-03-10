@@ -167,6 +167,10 @@ function isActionableStatus(status: OutboxItemStatus) {
   return status !== "SYNCED" && status !== "CONFLICT";
 }
 
+function isDiscardableStatus(status: OutboxItemStatus) {
+  return status !== "SYNCED";
+}
+
 function normalizeOutboxItem(raw: Partial<OutboxItem> & { id: string; type: OutboxItemType }) {
   const createdAt = raw.createdAt ?? Date.now();
   const status = raw.status ?? "QUEUED";
@@ -301,6 +305,72 @@ export function isOutboxActionable(item: OutboxItem): item is QueueActionableIte
 
 export function isOutboxResolved(item: OutboxItem) {
   return isResolvedStatus(item.status);
+}
+
+function getInspectionIdForItem(item: OutboxItem) {
+  return "inspectionId" in item.payload ? item.payload.inspectionId : undefined;
+}
+
+function getRoomInspectionIdForItem(item: OutboxItem) {
+  return "roomInspectionId" in item.payload ? item.payload.roomInspectionId : undefined;
+}
+
+function shouldCascadeDiscardCompletionItems(item: OutboxItem) {
+  switch (item.type) {
+    case "SET_TASK_COMPLETED":
+    case "UPLOAD_PHOTO":
+    case "REMOVE_PHOTO":
+    case "COMPLETE_ROOM":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function getDiscardedOutboxItemIds(items: OutboxItem[], id: string) {
+  const target = items.find((candidate) => candidate.id === id);
+
+  if (!target) {
+    return [];
+  }
+
+  const discardedIds = new Set<string>([target.id]);
+
+  if (!shouldCascadeDiscardCompletionItems(target)) {
+    return [...discardedIds];
+  }
+
+  const inspectionId = getInspectionIdForItem(target);
+  const roomInspectionId = getRoomInspectionIdForItem(target);
+
+  for (const item of items) {
+    if (!isDiscardableStatus(item.status) || item.id === target.id) {
+      continue;
+    }
+
+    if (
+      roomInspectionId &&
+      item.type === "COMPLETE_ROOM" &&
+      item.payload.roomInspectionId === roomInspectionId
+    ) {
+      discardedIds.add(item.id);
+      continue;
+    }
+
+    if (
+      inspectionId &&
+      item.type === "COMPLETE_INSPECTION" &&
+      item.payload.inspectionId === inspectionId
+    ) {
+      discardedIds.add(item.id);
+    }
+  }
+
+  return [...discardedIds];
+}
+
+export function getDiscardedDependentOutboxItemCount(items: OutboxItem[], id: string) {
+  return Math.max(0, getDiscardedOutboxItemIds(items, id).length - 1);
 }
 
 export function describeOutboxItem(item: OutboxItem) {
@@ -581,5 +651,6 @@ export async function retryOutboxItem(id: string) {
 }
 
 export async function discardOutboxItem(id: string) {
-  await deleteItems([id]);
+  const items = await listItemsInternal();
+  await deleteItems(getDiscardedOutboxItemIds(items, id));
 }

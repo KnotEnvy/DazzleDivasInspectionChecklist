@@ -15,6 +15,7 @@
     "build:web": "bun run --cwd packages/shared build && bun run --cwd apps/web build && bun run check:bundle:web",
     "build:backend": "bun run --cwd packages/backend build",
     "check:bundle:web": "node scripts/check-web-bundle.mjs",
+    "smoke:rollout": "vitest run --config vitest.smoke.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "bun run --cwd packages/shared typecheck && bun run --cwd apps/web typecheck",
