@@ -4,6 +4,8 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import toast from "react-hot-toast";
+import { Users } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
 
 type AdminStats = {
   users: number;
@@ -89,7 +91,7 @@ export function AdminPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="animate-fade-in space-y-5">
       <div>
         <h1 className="text-2xl font-bold">Admin Console</h1>
         <p className="text-sm text-slate-600">
@@ -201,9 +203,17 @@ export function AdminPage() {
         <h2 className="mb-2 text-lg font-bold">Users</h2>
 
         {users === undefined ? (
-          <p className="text-sm text-slate-500">Loading users...</p>
+          <div className="space-y-3">
+            <div className="skeleton h-16 rounded-xl" />
+            <div className="skeleton h-16 rounded-xl" />
+            <div className="skeleton h-16 rounded-xl" />
+          </div>
         ) : sortedUsers.length === 0 ? (
-          <p className="text-sm text-slate-500">No users yet.</p>
+          <EmptyState
+            icon={<Users className="h-8 w-8" />}
+            heading="No staff accounts yet"
+            description="Create your first staff account using the form above."
+          />
         ) : (
           <div className="space-y-2">
             {sortedUsers.map((user) => (
@@ -212,9 +222,20 @@ export function AdminPage() {
                   <div>
                     <p className="font-semibold">{user.name}</p>
                     <p className="text-sm text-slate-600">{user.email}</p>
-                    <p className="text-xs font-semibold text-brand-700">
-                      {user.role} - {user.isActive ? "Active" : "Inactive"}
-                    </p>
+                    <div className="mt-1 flex gap-1.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        user.role === "ADMIN" ? "bg-brand-100 text-brand-700" :
+                        user.role === "CLEANER" ? "bg-cyan-100 text-cyan-700" :
+                        "bg-slate-100 text-slate-600"
+                      }`}>
+                        {user.role}
+                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        user.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                      }`}>
+                        {user.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-500">
                       {user.provisionedByAdmin ? "Admin bootstrap" : "Self-signup"}
                       {user.createdAt

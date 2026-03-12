@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import { Building2, ClipboardList } from "lucide-react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useOutboxCount } from "@/hooks/useOutboxCount";
 import { useOutboxItems } from "@/hooks/useOutboxItems";
 import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
+import { EmptyState } from "@/components/EmptyState";
 
 type ActiveInspection = {
   _id: string;
@@ -34,7 +36,7 @@ export function DashboardPage() {
     | undefined;
 
   return (
-    <div className="space-y-5">
+    <div className="animate-fade-in space-y-5">
       <section className="grid gap-3 lg:grid-cols-3">
         <div className="rounded-2xl border border-border bg-white p-4">
           <p className="text-sm text-slate-500">Current role</p>
@@ -59,9 +61,17 @@ export function DashboardPage() {
       <section className="rounded-2xl border border-border bg-white p-4">
         <h2 className="mb-2 text-lg font-bold">Assigned Properties</h2>
         {mine === undefined ? (
-          <p className="text-sm text-slate-500">Loading assignments...</p>
+          <div className="space-y-3">
+            <div className="skeleton h-16 rounded-xl" />
+            <div className="skeleton h-16 rounded-xl" />
+            <div className="skeleton h-16 rounded-xl" />
+          </div>
         ) : mine.length === 0 ? (
-          <p className="text-sm text-slate-500">No active assignments.</p>
+          <EmptyState
+            icon={<Building2 className="h-8 w-8" />}
+            heading="No properties assigned yet"
+            description="An admin needs to assign you to one or more properties before they appear here."
+          />
         ) : (
           <div className="space-y-2">
             {mine.map((assignment) => (
@@ -74,12 +84,30 @@ export function DashboardPage() {
         )}
       </section>
 
+      <section className="flex flex-wrap gap-3">
+        <Link className="field-button primary px-5" to="/checklists/new">
+          Start New Checklist
+        </Link>
+        <Link className="field-button secondary px-5" to="/my-schedule">
+          View My Schedule
+        </Link>
+      </section>
+
       <section className="rounded-2xl border border-border bg-white p-4">
         <h2 className="mb-2 text-lg font-bold">Active Checklists</h2>
         {active === undefined ? (
-          <p className="text-sm text-slate-500">Loading checklists...</p>
+          <div className="space-y-3">
+            <div className="skeleton h-16 rounded-xl" />
+            <div className="skeleton h-16 rounded-xl" />
+            <div className="skeleton h-16 rounded-xl" />
+          </div>
         ) : active.length === 0 ? (
-          <p className="text-sm text-slate-500">No active checklist in progress.</p>
+          <EmptyState
+            icon={<ClipboardList className="h-8 w-8" />}
+            heading="No active checklists"
+            description="Start a new checklist from the button above or your schedule."
+            action={<Link className="field-button primary px-5" to="/checklists/new">Start New Checklist</Link>}
+          />
         ) : (
           <div className="space-y-2">
             {active.map((inspection) => (

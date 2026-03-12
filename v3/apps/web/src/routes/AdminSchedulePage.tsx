@@ -4,6 +4,7 @@ import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import { statusTone } from "@/lib/statusColors";
 
 type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
 type JobType = "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
@@ -217,20 +218,6 @@ function summarizeTurnoverIntake(job: {
   return parts.length > 0 ? parts.join(" | ") : null;
 }
 
-function statusTone(status: JobStatus) {
-  switch (status) {
-    case "SCHEDULED":
-      return "bg-sky-50 text-sky-700 border-sky-200";
-    case "IN_PROGRESS":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "BLOCKED":
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    case "CANCELLED":
-      return "bg-rose-50 text-rose-700 border-rose-200";
-    case "COMPLETED":
-      return "bg-slate-100 text-slate-600 border-slate-200";
-  }
-}
 
 function summarizeMetadata(metadata?: string) {
   if (!metadata) {
@@ -737,7 +724,7 @@ export function AdminSchedulePage() {
       : formatWindowLabel(windowStart, windowEnd);
 
   return (
-    <div className="space-y-5">
+    <div className="animate-fade-in space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Dispatch Schedule</h1>
@@ -764,7 +751,10 @@ export function AdminSchedulePage() {
 
       <section className="grid gap-3 md:grid-cols-4">
         <SummaryCard label="Jobs In Window" value={summary.total} />
-        <SummaryCard label="Unassigned" value={summary.unassigned} />
+        <div className={`rounded-2xl border p-4 ${summary.unassigned > 0 ? "border-amber-300 bg-amber-50" : "border-border bg-white"}`}>
+          <p className={`text-sm ${summary.unassigned > 0 ? "font-semibold text-amber-700" : "text-slate-500"}`}>Unassigned</p>
+          <p className="text-2xl font-bold">{summary.unassigned}</p>
+        </div>
         <SummaryCard label="In Progress" value={summary.inProgress} />
         <SummaryCard label="Blocked" value={summary.blocked} />
       </section>
@@ -1018,10 +1008,10 @@ export function AdminSchedulePage() {
             <h2 className="text-lg font-bold">Window Controls</h2>
             <p className="text-sm text-slate-600">{windowLabel}</p>
           </div>
-          <div className="inline-flex rounded-2xl border border-border bg-slate-50 p-1">
+          <div className="inline-flex rounded-full border border-border bg-slate-100 p-1 shadow-inner">
             <button
-              className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                viewMode === "month" ? "bg-brand-700 text-white" : "text-slate-600"
+              className={`min-h-[36px] rounded-full px-5 text-sm font-bold transition ${
+                viewMode === "month" ? "bg-brand-700 text-white shadow-sm" : "text-slate-600 hover:text-brand-700"
               }`}
               onClick={() => setViewMode("month")}
               type="button"
@@ -1029,8 +1019,8 @@ export function AdminSchedulePage() {
               Month
             </button>
             <button
-              className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                viewMode === "week" ? "bg-brand-700 text-white" : "text-slate-600"
+              className={`min-h-[36px] rounded-full px-5 text-sm font-bold transition ${
+                viewMode === "week" ? "bg-brand-700 text-white shadow-sm" : "text-slate-600 hover:text-brand-700"
               }`}
               onClick={() => setViewMode("week")}
               type="button"
@@ -1038,8 +1028,8 @@ export function AdminSchedulePage() {
               Week
             </button>
             <button
-              className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                viewMode === "day" ? "bg-brand-700 text-white" : "text-slate-600"
+              className={`min-h-[36px] rounded-full px-5 text-sm font-bold transition ${
+                viewMode === "day" ? "bg-brand-700 text-white shadow-sm" : "text-slate-600 hover:text-brand-700"
               }`}
               onClick={() => setViewMode("day")}
               type="button"
@@ -1536,6 +1526,16 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
   );
 }
 
+function statusLeftBorder(status: JobStatus) {
+  switch (status) {
+    case "SCHEDULED": return "border-l-sky-400";
+    case "IN_PROGRESS": return "border-l-emerald-400";
+    case "BLOCKED": return "border-l-amber-400";
+    case "CANCELLED": return "border-l-rose-400";
+    case "COMPLETED": return "border-l-slate-300";
+  }
+}
+
 function JobCard({
   job,
   isActive,
@@ -1547,7 +1547,7 @@ function JobCard({
 }) {
   return (
     <button
-      className={`w-full rounded-2xl border p-3 text-left transition ${
+      className={`w-full rounded-2xl border border-l-4 p-3 text-left transition ${statusLeftBorder(job.status)} ${
         isActive ? "border-brand-500 bg-brand-50" : "border-border bg-white hover:border-brand-300"
       }`}
       onClick={() => onSelect(job._id)}

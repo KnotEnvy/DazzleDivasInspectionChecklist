@@ -16,7 +16,7 @@ export default defineConfig({
         name: "Dazzle Divas Field Checklist",
         short_name: "DazzleField",
         description: "Offline-ready cleaning and inspection checklists for field teams.",
-        theme_color: "#0f766e",
+        theme_color: "#be185d",
         background_color: "#f8fafc",
         display: "standalone",
         start_url: "/",

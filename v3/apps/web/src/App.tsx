@@ -43,8 +43,14 @@ const NotFoundPage = lazy(() =>
 
 function RouteLoading() {
   return (
-    <div className="rounded-2xl border border-border bg-white p-4 text-sm text-slate-500">
-      Loading...
+    <div className="space-y-4 animate-fade-in">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="skeleton h-20 rounded-2xl" />
+        <div className="skeleton h-20 rounded-2xl" />
+        <div className="skeleton h-20 rounded-2xl" />
+      </div>
+      <div className="skeleton h-40 rounded-2xl" />
+      <div className="skeleton h-24 rounded-2xl" />
     </div>
   );
 }

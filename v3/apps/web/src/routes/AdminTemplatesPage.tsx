@@ -3,6 +3,8 @@ import { useMutation, useQuery } from "convex/react";
 import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
+import { LayoutTemplate, ListChecks } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
 
 type ChecklistType = "CLEANING" | "INSPECTION";
 type RoomGenerationMode = "SINGLE" | "PER_BEDROOM" | "PER_BATHROOM";
@@ -88,6 +90,7 @@ export function AdminTemplatesPage() {
   const updateTask = useMutation(api.templates.updateTask);
   const removeTask = useMutation(api.templates.removeTask);
 
+  const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<Id<"rooms"> | null>(null);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [savingRoom, setSavingRoom] = useState(false);
@@ -342,7 +345,7 @@ export function AdminTemplatesPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="animate-fade-in space-y-5">
       <div>
         <h1 className="text-2xl font-bold">Checklist Templates</h1>
         <p className="text-sm text-slate-600">
@@ -426,24 +429,33 @@ export function AdminTemplatesPage() {
           </form>
 
           {rooms === undefined ? (
-            <p className="text-sm text-slate-500">Loading room templates...</p>
-          ) : rooms.length === 0 ? (
-            <div className="space-y-3 rounded-2xl border border-dashed border-border bg-slate-50 p-3">
-              <p className="text-sm text-slate-500">No room templates exist yet.</p>
-              <button
-                className="field-button primary w-full px-4"
-                disabled={creatingRoom}
-                onClick={() => void handleBootstrapTemplates()}
-                type="button"
-              >
-                {creatingRoom ? "Creating..." : "Create Starter Templates"}
-              </button>
+            <div className="space-y-3">
+              <div className="skeleton h-16 rounded-xl" />
+              <div className="skeleton h-16 rounded-xl" />
+              <div className="skeleton h-16 rounded-xl" />
             </div>
+          ) : rooms.length === 0 ? (
+            <EmptyState
+              icon={<LayoutTemplate className="h-8 w-8" />}
+              heading="No room templates yet"
+              description="Create one above or bootstrap the starter set."
+              action={
+                <button
+                  className="field-button primary px-4"
+                  disabled={creatingRoom}
+                  onClick={() => void handleBootstrapTemplates()}
+                  type="button"
+                >
+                  {creatingRoom ? "Creating..." : "Create Starter Templates"}
+                </button>
+              }
+            />
           ) : (
             <div className="space-y-2">
               {rooms.map((room) => (
                 <button
                   key={room._id}
+                  aria-label={`Select room template: ${room.name}`}
                   className={`w-full rounded-2xl border p-3 text-left transition ${
                     selectedRoomId === room._id
                       ? "border-brand-500 bg-brand-50"
@@ -456,11 +468,18 @@ export function AdminTemplatesPage() {
                     <div>
                       <p className="font-semibold">{room.name}</p>
                       <p className="text-xs text-slate-500">
-                        Sort {room.sortOrder} | {generationModeLabel(room.generationMode ?? "SINGLE")} |{" "}
-                        {room.tasks.length} total tasks
+                        Sort {room.sortOrder} | {generationModeLabel(room.generationMode ?? "SINGLE")}
                       </p>
+                      <div className="mt-1 flex gap-1">
+                        <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700">
+                          {room.tasks.filter((t) => t.checklistType === "CLEANING").length} clean
+                        </span>
+                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
+                          {room.tasks.filter((t) => t.checklistType === "INSPECTION").length} inspect
+                        </span>
+                      </div>
                     </div>
-                    <span className="rounded-full border border-border px-2 py-1 text-[11px] font-semibold text-slate-600">
+                    <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${room.isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
                       {room.isActive ? "ACTIVE" : "INACTIVE"}
                     </span>
                   </div>
@@ -563,14 +582,34 @@ export function AdminTemplatesPage() {
                   >
                     {savingRoom ? "Saving..." : "Save Room"}
                   </button>
-                  <button
-                    className="field-button secondary px-4"
-                    disabled={savingRoom}
-                    onClick={() => void handleRemoveRoom()}
-                    type="button"
-                  >
-                    Remove Room
-                  </button>
+                  {confirmAction === "removeRoom" ? (
+                    <div className="animate-slide-up flex gap-2">
+                      <button
+                        className="field-button danger px-4"
+                        disabled={savingRoom}
+                        onClick={() => { setConfirmAction(null); void handleRemoveRoom(); }}
+                        type="button"
+                      >
+                        Delete Room &amp; Tasks
+                      </button>
+                      <button
+                        className="field-button ghost px-4"
+                        onClick={() => setConfirmAction(null)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="field-button danger px-4"
+                      disabled={savingRoom}
+                      onClick={() => setConfirmAction("removeRoom")}
+                      type="button"
+                    >
+                      Remove Room
+                    </button>
+                  )}
                 </div>
               </section>
 
@@ -657,8 +696,11 @@ export function AdminTemplatesPage() {
 
               <div className="grid gap-4 xl:grid-cols-2">
                 {(["CLEANING", "INSPECTION"] as ChecklistType[]).map((type) => (
-                  <section key={type} className="rounded-2xl border border-border bg-white p-4">
-                    <div className="mb-3">
+                  <section key={type} className={`rounded-2xl border p-4 ${type === "CLEANING" ? "border-brand-200 bg-white" : "border-sky-200 bg-white"}`}>
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${type === "CLEANING" ? "bg-brand-100 text-brand-700" : "bg-sky-100 text-sky-700"}`}>
+                        {type}
+                      </span>
                       <h2 className="text-lg font-bold">{type} Tasks</h2>
                       <p className="text-sm text-slate-600">
                         These tasks appear for {type.toLowerCase()} checklists in this room.
@@ -666,7 +708,11 @@ export function AdminTemplatesPage() {
                     </div>
 
                     {groupedTasks[type].length === 0 ? (
-                      <p className="text-sm text-slate-500">No {type.toLowerCase()} tasks yet.</p>
+                      <EmptyState
+                        icon={<ListChecks className="h-7 w-7" />}
+                        heading={`No ${type.toLowerCase()} tasks yet`}
+                        description="Use the Add Task form above to create one."
+                      />
                     ) : (
                       <div className="space-y-3">
                         {groupedTasks[type].map((task) => {
@@ -734,14 +780,34 @@ export function AdminTemplatesPage() {
                                 >
                                   {savingTaskId === task._id ? "Saving..." : "Save Task"}
                                 </button>
-                                <button
-                                  className="field-button secondary px-4"
-                                  disabled={savingTaskId === task._id}
-                                  onClick={() => void handleRemoveTask(task._id)}
-                                  type="button"
-                                >
-                                  Remove Task
-                                </button>
+                                {confirmAction === `removeTask:${task._id}` ? (
+                                  <div className="animate-slide-up flex gap-2">
+                                    <button
+                                      className="field-button danger px-4"
+                                      disabled={savingTaskId === task._id}
+                                      onClick={() => { setConfirmAction(null); void handleRemoveTask(task._id); }}
+                                      type="button"
+                                    >
+                                      Confirm Delete
+                                    </button>
+                                    <button
+                                      className="field-button ghost px-4"
+                                      onClick={() => setConfirmAction(null)}
+                                      type="button"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    className="field-button danger px-4"
+                                    disabled={savingTaskId === task._id}
+                                    onClick={() => setConfirmAction(`removeTask:${task._id}`)}
+                                    type="button"
+                                  >
+                                    Remove Task
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );

@@ -11,7 +11,27 @@
       "Bash(./node_modules/.bin/tsc:*)",
       "Bash(do echo:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebFetch(domain:dazzledivascleaning.com)",
+      "Bash(grep -h \"className=\" \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src/routes\"/*.tsx | grep -oE \"rounded-[a-z0-9]+\" | sort | uniq)",
+      "Bash(cd \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" && grep -h \"rounded-\" routes/*.tsx components/*.tsx | grep -oE \"rounded-[a-z0-9]+\" | sort | uniq -c | sort -rn)",
+      "Bash(cd \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" && grep -h \"transition\" routes/*.tsx components/*.tsx | head -5)",
+      "Bash(cd \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" && grep -h \"hover:\" routes/*.tsx components/*.tsx | head -10)",
+      "Bash(cd \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" && grep -oh \"text-[a-z0-9]*\" routes/*.tsx components/*.tsx | sort | uniq -c | sort -rn | head -20)",
+      "Bash(cd \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" && grep -oh \"font-[a-z]*\" routes/*.tsx components/*.tsx | sort | uniq -c | sort -rn)",
+      "Bash(cd \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" && grep -oh \"space-y-[0-9]\" routes/*.tsx components/*.tsx | sort | uniq -c | sort -rn)",
+      "Bash(cd \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" && grep -oh \"p-[0-9]\" routes/*.tsx components/*.tsx | sort | uniq -c | sort -rn)",
+      "Bash(cd \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" && grep -oh \"gap-[0-9]\" routes/*.tsx components/*.tsx | sort | uniq -c | sort -rn)",
+      "Bash(grep -r \"statusColors\\\\|statusColor\\\\|status.*color\" \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" --include=\"*.ts\" --include=\"*.tsx\" --include=\"*.js\" 2>/dev/null | head -20)",
+      "Bash(grep -l \"statusColor\\\\|status.*Color\" \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\"/**/*.tsx 2>/dev/null)",
+      "Bash(grep -r \"color\" \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" --include=\"*.tsx\" --include=\"*.ts\" -l 2>/dev/null | head -20)",
+      "Bash(grep -r \"color\" \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" --include=\"*.tsx\" --include=\"*.ts\" -n 2>/dev/null | grep -i \"status\\\\|badge\" | head -20)",
+      "Bash(ls -la \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src/routes/\" | grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(ls -la \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src/components/\" | grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(cd \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web\" && npx vite build 2>&1 | tail -20)",
+      "Bash(find \"D:\\\\Javascript Webapps\\\\DazzleDivasInspectionChecklist\\\\v3\\\\apps\\\\web\\\\src\" -type f -name \"*.tsx\" | xargs grep -l \"confirm\\\\|Dialog\\\\|Modal\" | head -10)",
+      "Bash(find \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" -type f -name \"*.tsx\" | xargs grep -l \"autoFocus\\\\|password.*toggle\\\\|visibility\" 2>/dev/null || true)",
+      "Bash(cd \"D:\\\\Javascript Webapps\\\\DazzleDivasInspectionChecklist\\\\v3\\\\apps\\\\web\" && npx vite build 2>&1)"
     ]
   }
 }

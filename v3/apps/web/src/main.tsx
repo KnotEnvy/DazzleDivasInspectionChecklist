@@ -65,9 +65,10 @@ if (configuredConvexUrl.error || !configuredConvexUrl.url) {
             toastOptions={{
               duration: 2600,
               style: {
-                borderRadius: "12px",
+                borderRadius: "14px",
                 background: "#0f172a",
                 color: "#fff",
+                boxShadow: "0 8px 24px rgba(15, 23, 42, 0.18)",
               },
             }}
           />

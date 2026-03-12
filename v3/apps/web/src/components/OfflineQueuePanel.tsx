@@ -1,7 +1,10 @@
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
+import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOfflineSync } from "@/app/OfflineSyncProvider";
+import { EmptyState } from "@/components/EmptyState";
 import {
   clearResolvedOutboxItems,
   discardOutboxItem,
@@ -15,21 +18,7 @@ import {
   getOutboxReviewHref,
   getReplayConflictPolicy,
 } from "@/lib/offlineReplay";
-
-function statusTone(status: OutboxItem["status"]) {
-  switch (status) {
-    case "QUEUED":
-      return "border-sky-200 bg-sky-50 text-sky-700";
-    case "PROCESSING":
-      return "border-brand-200 bg-brand-50 text-brand-700";
-    case "FAILED":
-      return "border-amber-200 bg-amber-50 text-amber-800";
-    case "CONFLICT":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    case "SYNCED":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-}
+import { outboxStatusTone } from "@/lib/statusColors";
 
 type OfflineQueuePanelProps = {
   title: string;
@@ -44,6 +33,7 @@ export function OfflineQueuePanel({
   items,
   maxItems = 5,
 }: OfflineQueuePanelProps) {
+  const [collapsed, setCollapsed] = useState(false);
   const isOnline = useNetworkStatus();
   const { syncing, flushNow } = useOfflineSync();
   const visibleItems = items
@@ -160,23 +150,39 @@ export function OfflineQueuePanel({
           >
             Clear Resolved
           </button>
+          <button
+            className="field-button ghost px-2"
+            onClick={() => setCollapsed(!collapsed)}
+            type="button"
+            aria-label={collapsed ? "Expand sync panel" : "Collapse sync panel"}
+          >
+            {collapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+          </button>
         </div>
       </div>
 
+      {!collapsed && (
+        <>
       <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
-        <span className="rounded-full bg-brand-50 px-3 py-1 text-brand-700">
+        <span aria-label={`Open items: ${actionableCount}`} className="rounded-full bg-brand-50 px-3 py-1 text-brand-700">
           Open: {actionableCount}
         </span>
-        <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">
+        <span aria-label={`Conflicts: ${conflictCount}`} className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">
           Conflicts: {conflictCount}
         </span>
-        <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+        <span aria-label={`Synced items: ${syncedCount}`} className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
           Synced: {syncedCount}
         </span>
       </div>
 
       {visibleItems.length === 0 ? (
-        <p className="mt-4 text-sm text-slate-500">No queued sync activity yet.</p>
+        <div className="mt-4">
+          <EmptyState
+            icon={<RefreshCw className="h-7 w-7" />}
+            heading="No queued sync activity"
+            description="Actions will appear here when you work offline."
+          />
+        </div>
       ) : (
         <div className="mt-4 space-y-3">
           {visibleItems.map((item) => {
@@ -213,7 +219,7 @@ export function OfflineQueuePanel({
                     ) : null}
                   </div>
                   <span
-                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${statusTone(
+                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${outboxStatusTone(
                       item.status
                     )}`}
                   >
@@ -237,7 +243,7 @@ export function OfflineQueuePanel({
                       Retry Replay
                     </button>
                     <button
-                      className="field-button secondary px-3"
+                      className="field-button danger px-3"
                       onClick={() => void handleDiscardConflict(item)}
                       type="button"
                     >
@@ -249,6 +255,8 @@ export function OfflineQueuePanel({
             );
           })}
         </div>
+      )}
+        </>
       )}
     </section>
   );

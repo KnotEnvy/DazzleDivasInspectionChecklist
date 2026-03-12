@@ -4,15 +4,18 @@ import { useNavigate } from "react-router-dom";
 import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
+import { CalendarDays } from "lucide-react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxItems } from "@/hooks/useOutboxItems";
 import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
+import { EmptyState } from "@/components/EmptyState";
 import {
   queueCreateInspection,
   queueUpdateMyJobStatus,
 } from "@/lib/offlineOutbox";
 import { buildJobStatusOverlay } from "@/lib/offlineInspectionState";
+import { statusTone } from "@/lib/statusColors";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -132,21 +135,6 @@ function summarizeTurnoverIntake(job: {
     parts.push(`Arrival ${new Date(job.arrivalDeadline).toLocaleString()}`);
   }
   return parts.length > 0 ? parts.join(" | ") : null;
-}
-
-function statusTone(status: JobStatus) {
-  switch (status) {
-    case "SCHEDULED":
-      return "border-sky-200 bg-sky-50 text-sky-700";
-    case "IN_PROGRESS":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "BLOCKED":
-      return "border-amber-200 bg-amber-50 text-amber-800";
-    case "CANCELLED":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    case "COMPLETED":
-      return "border-slate-200 bg-slate-100 text-slate-600";
-  }
 }
 
 function checklistActionLabel(job: Pick<ScheduleJob, "linkedInspectionId">) {
@@ -383,7 +371,7 @@ export function MySchedulePage() {
     selectedJobEffectiveStatus === "CANCELLED";
 
   return (
-    <div className="space-y-5">
+    <div className="animate-fade-in space-y-5">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">My Schedule</h1>
         <p className="max-w-2xl text-sm text-slate-600">
@@ -406,7 +394,7 @@ export function MySchedulePage() {
         title="Schedule Sync Status"
       />
 
-      <section className="rounded-3xl border border-border bg-white p-4 shadow-sm">
+      <section className="rounded-3xl border border-border border-l-4 border-l-brand-600 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
@@ -457,7 +445,7 @@ export function MySchedulePage() {
 
             <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(260px,1fr)]">
               <button
-                className="field-button primary w-full px-5"
+                className="field-button primary w-full min-h-[52px] px-5"
                 disabled={
                   startingChecklist ||
                   !selectedListJob.assigneeId ||
@@ -526,9 +514,17 @@ export function MySchedulePage() {
           </div>
 
           {jobs === undefined ? (
-            <p className="text-sm text-slate-500">Loading schedule...</p>
+            <div className="space-y-3">
+              <div className="skeleton h-16 rounded-xl" />
+              <div className="skeleton h-16 rounded-xl" />
+              <div className="skeleton h-16 rounded-xl" />
+            </div>
           ) : upcomingJobs.length === 0 ? (
-            <p className="text-sm text-slate-500">No upcoming jobs in this window.</p>
+            <EmptyState
+              icon={<CalendarDays className="h-8 w-8" />}
+              heading="No jobs in this window"
+              description="Your two-week schedule is clear. Check back when dispatch assigns new work."
+            />
           ) : (
             <div className="space-y-3">
               {upcomingJobs.map((job) => (
@@ -542,10 +538,9 @@ export function MySchedulePage() {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold">{job.propertyName}</p>
-                      <p className="text-sm text-slate-600">{formatJobWindow(job)}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {job.jobType} | Priority: {job.priority ?? "MEDIUM"}
+                      <p className="text-base font-bold">{job.propertyName}</p>
+                      <p className="text-sm text-slate-600">
+                        {formatJobWindow(job)} | {job.jobType} | {job.priority ?? "MEDIUM"}
                       </p>
                       {summarizeTurnoverIntake(job) && (
                         <p className="mt-1 text-xs text-slate-500">{summarizeTurnoverIntake(job)}</p>
@@ -587,6 +582,7 @@ export function MySchedulePage() {
                         : checklistActionLabel(job)}
                     </button>
                     <button
+                      aria-label={`Focus on ${job.propertyName}`}
                       className="field-button secondary w-full px-4 sm:flex-1"
                       onClick={() => setSelectedJobId(job._id)}
                       type="button"
@@ -603,9 +599,17 @@ export function MySchedulePage() {
         <aside className="rounded-3xl border border-border bg-white p-4 shadow-sm">
           <h2 className="mb-3 text-lg font-bold">Job Details</h2>
           {!selectedJobId ? (
-            <p className="text-sm text-slate-500">Choose a job to review field details.</p>
+            <EmptyState
+              icon={<CalendarDays className="h-8 w-8" />}
+              heading="Select a job to see details"
+              description="Pick a job from the list or weekly grid."
+            />
           ) : selectedJob === undefined ? (
-            <p className="text-sm text-slate-500">Loading job details...</p>
+            <div className="space-y-3">
+              <div className="skeleton h-6 w-2/3 rounded" />
+              <div className="skeleton h-4 w-full rounded" />
+              <div className="skeleton h-20 rounded-xl" />
+            </div>
           ) : !selectedJobEffective ? (
             <p className="text-sm text-slate-500">Job not found.</p>
           ) : (
@@ -718,9 +722,11 @@ export function MySchedulePage() {
             Quick scan of the current week while your two-week list stays focused on action.
           </p>
         </div>
-        <div className="grid gap-3 md:grid-cols-7">
-          {weekDays.map((day, index) => (
-            <div key={day.toISOString()} className="rounded-2xl border border-border bg-slate-50 p-3">
+        <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-7 md:overflow-visible md:pb-0">
+          {weekDays.map((day, index) => {
+            const isToday = sameLocalDate(Date.now(), day);
+            return (
+            <div key={day.toISOString()} className={`min-w-[140px] flex-shrink-0 rounded-2xl border bg-slate-50 p-3 md:min-w-0 md:flex-shrink ${isToday ? "border-brand-500 border-t-2" : "border-border"}`}>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
                 {day.toLocaleDateString(undefined, { weekday: "short" })}
               </p>
@@ -732,6 +738,7 @@ export function MySchedulePage() {
                   jobsByDay[index].map((job) => (
                     <button
                       key={job._id}
+                      aria-label={`Select ${job.propertyName} job`}
                       className={`w-full rounded-2xl border p-2 text-left text-xs transition ${
                         selectedJobId === job._id
                           ? "border-brand-500 bg-brand-50"
@@ -753,9 +760,34 @@ export function MySchedulePage() {
                 )}
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       </section>
+
+      {/* Mobile sticky CTA when a job is selected */}
+      {selectedListJob && selectedListJob.canStartChecklist && (
+        <div className="fixed bottom-16 left-0 right-0 z-30 px-4 pb-2 lg:hidden">
+          <button
+            className="field-button primary w-full min-h-[52px] px-5 shadow-lg"
+            disabled={
+              startingChecklist ||
+              !selectedListJob.assigneeId ||
+              selectedListJob.checklistType === null ||
+              selectedListJob.status === "COMPLETED" ||
+              selectedListJob.status === "CANCELLED"
+            }
+            onClick={() => void handleOpenChecklist(selectedListJob)}
+            type="button"
+          >
+            {startingChecklist
+              ? "Opening..."
+              : outboxOverlay.queuedChecklistByJobId.has(selectedListJob._id)
+                ? "Checklist Queued"
+                : checklistActionLabel(selectedListJob)}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

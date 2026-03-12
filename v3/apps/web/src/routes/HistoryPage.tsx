@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import { Clock3 } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
 
 type CompletedInspection = {
   _id: string;
@@ -17,13 +19,21 @@ export function HistoryPage() {
     | undefined;
 
   return (
-    <div className="space-y-4">
+    <div className="animate-fade-in space-y-4">
       <h1 className="text-2xl font-bold">Completed Checklists</h1>
 
       {items === undefined ? (
-        <p className="text-sm text-slate-500">Loading history...</p>
+        <div className="space-y-3">
+          <div className="skeleton h-16 rounded-xl" />
+          <div className="skeleton h-16 rounded-xl" />
+          <div className="skeleton h-16 rounded-xl" />
+        </div>
       ) : items.length === 0 ? (
-        <p className="text-sm text-slate-500">No completed checklist yet.</p>
+        <EmptyState
+          icon={<Clock3 className="h-8 w-8" />}
+          heading="No completed checklists yet"
+          description="Checklists you finish will appear here for review."
+        />
       ) : (
         <div className="space-y-2">
           {items.map((item) => (

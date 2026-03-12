@@ -3,8 +3,10 @@ import { useMutation, useQuery } from "convex/react";
 import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
+import { Building2 } from "lucide-react";
 import { PROPERTY_TYPES } from "@dazzle/shared";
 import { PropertyChecklistOverridesSection } from "@/components/PropertyChecklistOverridesSection";
+import { EmptyState } from "@/components/EmptyState";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 type ChecklistType = "CLEANING" | "INSPECTION";
@@ -172,6 +174,7 @@ function deriveRoomNames(params: {
 }
 
 export function AdminPropertiesPage() {
+  const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPropertyId, setSelectedPropertyId] = useState<Id<"properties"> | null>(null);
@@ -669,7 +672,7 @@ export function AdminPropertiesPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="animate-fade-in space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Property Management</h1>
@@ -832,14 +835,23 @@ export function AdminPropertiesPage() {
           />
 
           {activeList === undefined ? (
-            <p className="text-sm text-slate-500">Loading properties...</p>
+            <div className="space-y-3">
+              <div className="skeleton h-16 rounded-xl" />
+              <div className="skeleton h-16 rounded-xl" />
+              <div className="skeleton h-16 rounded-xl" />
+            </div>
           ) : activeList.length === 0 ? (
-            <p className="text-sm text-slate-500">No properties found.</p>
+            <EmptyState
+              icon={<Building2 className="h-8 w-8" />}
+              heading="No properties found"
+              description="Create your first property using the form above."
+            />
           ) : (
             <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
               {activeList.map((property) => (
                 <button
                   key={property._id}
+                  aria-label={`Select property: ${property.name}`}
                   className={`w-full rounded-xl border p-3 text-left transition ${
                     property._id === selectedPropertyId
                       ? "border-brand-500 bg-brand-50"
@@ -895,14 +907,36 @@ export function AdminPropertiesPage() {
           <div className="space-y-4 rounded-2xl border border-border bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-lg font-bold">Property Detail</h2>
-              <button
-                className="field-button secondary px-3"
-                disabled={isSaving}
-                onClick={() => void handleArchiveToggle(selectedProperty)}
-                type="button"
-              >
-                {selectedProperty.isArchived ? "Unarchive" : "Archive"}
-              </button>
+              {!selectedProperty.isArchived && confirmAction === "archiveProperty" ? (
+                <div className="animate-slide-up flex gap-2">
+                  <button
+                    className="field-button danger px-3"
+                    disabled={isSaving}
+                    onClick={() => { setConfirmAction(null); void handleArchiveToggle(selectedProperty); }}
+                    type="button"
+                  >
+                    Archive Property
+                  </button>
+                  <button
+                    className="field-button ghost px-3"
+                    onClick={() => setConfirmAction(null)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="field-button secondary px-3"
+                  disabled={isSaving}
+                  onClick={() => selectedProperty.isArchived
+                    ? void handleArchiveToggle(selectedProperty)
+                    : setConfirmAction("archiveProperty")}
+                  type="button"
+                >
+                  {selectedProperty.isArchived ? "Unarchive" : "Archive"}
+                </button>
+              )}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1262,12 +1296,17 @@ export function AdminPropertiesPage() {
             ) : (
               <div className="space-y-2">
                 {plans.map((plan) => (
-                  <div key={plan._id} className="rounded-xl border border-border p-3">
+                  <div key={plan._id} className={`rounded-xl border p-3 ${plan.isActive ? "border-emerald-200 bg-white" : "border-slate-200 bg-slate-50 opacity-75"}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-semibold">
-                          {plan.planType} | {plan.frequency}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold">
+                            {plan.planType} | {plan.frequency}
+                          </p>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${plan.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}>
+                            {plan.isActive ? "ACTIVE" : "PAUSED"}
+                          </span>
+                        </div>
                         <p className="text-sm text-slate-600">
                           {plan.timeWindowStart} - {plan.timeWindowEnd} ({plan.defaultDurationMinutes}m)
                         </p>

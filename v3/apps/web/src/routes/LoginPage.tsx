@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import toast from "react-hot-toast";
+import { Eye, EyeOff } from "lucide-react";
 
 function formatAuthErrorMessage(error: unknown) {
   if (!(error instanceof Error)) {
@@ -25,6 +26,7 @@ export function LoginPage() {
   const { signIn } = useAuthActions();
 
   const [pending, setPending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (isLoading) {
     return <div className="p-8 text-center">Loading...</div>;
@@ -69,6 +71,7 @@ export function LoginPage() {
           <label className="block text-sm font-medium text-slate-700">
             Email
             <input
+              autoFocus
               className="input mt-1"
               name="email"
               type="email"
@@ -79,14 +82,24 @@ export function LoginPage() {
 
           <label className="block text-sm font-medium text-slate-700">
             Password
-            <input
-              className="input mt-1"
-              name="password"
-              type="password"
-              required
-              minLength={8}
-              placeholder="********"
-            />
+            <div className="relative mt-1">
+              <input
+                className="input pr-10"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                minLength={8}
+                placeholder="********"
+              />
+              <button
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-500 hover:text-slate-700"
+                onClick={() => setShowPassword(!showPassword)}
+                type="button"
+              >
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
           </label>
 
           <button className="field-button primary w-full" disabled={pending} type="submit">
