@@ -151,6 +151,6 @@ describe("assertAllRoomsCompleted", () => {
         { status: "COMPLETED" },
         { status: "PENDING" },
       ])
-    ).toThrow("All room checklists must be completed first");
+    ).toThrow("Complete the remaining 1 room before finishing the checklist");
   });
 });

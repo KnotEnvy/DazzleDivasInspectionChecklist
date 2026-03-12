@@ -466,6 +466,13 @@ export function InspectionPage() {
       return;
     }
 
+    if (roomsRemaining > 0) {
+      toast.error(
+        `Complete the remaining ${roomsRemaining} room${roomsRemaining === 1 ? "" : "s"} before finishing the checklist`
+      );
+      return;
+    }
+
     setCompletingInspection(true);
     try {
       if (!isOnline) {
@@ -523,6 +530,8 @@ export function InspectionPage() {
   const hasNoRooms = inspectionView.roomInspections.length === 0;
   const nextPendingRoom = inspectionView.roomInspections.find((room) => room.status !== "COMPLETED");
   const roomsRemaining = totals.rooms - totals.completedRooms;
+  const canCompleteInspection =
+    inspectionView.status !== "COMPLETED" && !hasNoRooms && roomsRemaining === 0;
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -1030,6 +1039,12 @@ export function InspectionPage() {
                 Complete the final checklist only after every room is marked complete.
               </p>
             </div>
+            {roomsRemaining > 0 ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                Complete the remaining {roomsRemaining} room{roomsRemaining === 1 ? "" : "s"} before
+                finishing the checklist.
+              </div>
+            ) : null}
             <textarea
               className="input min-h-28"
               disabled={inspectionView.status === "COMPLETED"}
@@ -1041,7 +1056,7 @@ export function InspectionPage() {
               <div className="animate-slide-up mt-3 flex gap-2">
                 <button
                   className="field-button danger flex-1 px-4"
-                  disabled={completingInspection}
+                  disabled={!canCompleteInspection || completingInspection}
                   onClick={() => { setConfirmAction(null); void handleCompleteInspection(); }}
                   type="button"
                 >
@@ -1058,7 +1073,7 @@ export function InspectionPage() {
             ) : (
               <button
                 className="field-button primary mt-3 w-full px-5"
-                disabled={inspectionView.status === "COMPLETED" || completingInspection}
+                disabled={!canCompleteInspection || completingInspection}
                 onClick={() => setConfirmAction("completeInspection")}
                 type="button"
               >
@@ -1073,69 +1088,6 @@ export function InspectionPage() {
         </section>
       </section>
 
-      {/* Mobile sticky completion strip */}
-      {inspectionView.status !== "COMPLETED" && (
-        <div className="fixed bottom-16 left-0 right-0 z-30 flex gap-2 px-4 pb-2 lg:hidden">
-          {canCompleteSelectedRoom && (
-            confirmAction === "mobileCompleteRoom" ? (
-              <div className="animate-slide-up flex flex-1 gap-2">
-                <button
-                  className="field-button danger flex-1 min-h-[48px] px-4 shadow-lg"
-                  disabled={completingRoomId !== null}
-                  onClick={() => { setConfirmAction(null); void handleCompleteRoom(); }}
-                  type="button"
-                >
-                  {completingRoomId ? "Completing..." : "Complete Room"}
-                </button>
-                <button
-                  className="field-button ghost flex-1 min-h-[48px] px-4 shadow-lg"
-                  onClick={() => setConfirmAction(null)}
-                  type="button"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                className="field-button primary flex-1 min-h-[48px] px-4 shadow-lg"
-                disabled={completingRoomId !== null}
-                onClick={() => setConfirmAction("mobileCompleteRoom")}
-                type="button"
-              >
-                {completingRoomId ? "Completing..." : "Mark Room Complete"}
-              </button>
-            )
-          )}
-          {confirmAction === "mobileCompleteInspection" ? (
-            <div className="animate-slide-up flex flex-1 gap-2">
-              <button
-                className="field-button danger flex-1 min-h-[48px] px-4 shadow-lg"
-                disabled={completingInspection}
-                onClick={() => { setConfirmAction(null); void handleCompleteInspection(); }}
-                type="button"
-              >
-                {completingInspection ? "Completing..." : "Complete"}
-              </button>
-              <button
-                className="field-button ghost flex-1 min-h-[48px] px-4 shadow-lg"
-                onClick={() => setConfirmAction(null)}
-                type="button"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              className="field-button primary flex-1 min-h-[48px] px-4 shadow-lg"
-              disabled={completingInspection}
-              onClick={() => setConfirmAction("mobileCompleteInspection")}
-              type="button"
-            >
-              {completingInspection ? "Completing..." : "Complete Checklist"}
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

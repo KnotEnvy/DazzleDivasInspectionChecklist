@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxItems } from "@/hooks/useOutboxItems";
@@ -175,6 +175,7 @@ export function MySchedulePage() {
   const isOnline = useNetworkStatus();
   const { items: outboxItems } = useOutboxItems({ includeResolved: true });
   const [selectedJobId, setSelectedJobId] = useState<Id<"jobs"> | null>(null);
+  const [showAllJobs, setShowAllJobs] = useState(false);
   const [startingChecklist, setStartingChecklist] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<WorkerEditableStatus | null>(null);
   const [scheduleAnchor] = useState(() => Date.now());
@@ -371,43 +372,88 @@ export function MySchedulePage() {
     selectedJobEffectiveStatus === "CANCELLED";
 
   return (
-    <div className="animate-fade-in space-y-5">
-      <div className="space-y-2">
+    <div className="animate-fade-in space-y-4">
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-end justify-between gap-2">
         <h1 className="text-2xl font-bold">My Schedule</h1>
-        <p className="max-w-2xl text-sm text-slate-600">
-          Start or resume checklist work directly from your schedule. Job completion still comes
-          from finishing the linked checklist.
-        </p>
+        <div className="flex gap-2 text-xs font-semibold">
+          <span className="rounded-full bg-brand-50 px-3 py-1 text-brand-700">{summary.total} jobs</span>
+          {summary.inProgress > 0 && (
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">{summary.inProgress} active</span>
+          )}
+          {summary.blocked > 0 && (
+            <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">{summary.blocked} blocked</span>
+          )}
+        </div>
       </div>
 
-      <section className="grid gap-3 md:grid-cols-4">
-        <SummaryCard label="Jobs In Window" value={summary.total} />
-        <SummaryCard label="In Progress" value={summary.inProgress} />
-        <SummaryCard label="Blocked" value={summary.blocked} />
-        <SummaryCard label="Checklists Started" value={summary.readyToResume} />
+      {/* ── Weekly grid — primary nav on mobile ── */}
+      <section className="rounded-2xl border border-border bg-white p-3 shadow-sm">
+        <h2 className="mb-2 text-sm font-bold text-slate-600">This Week</h2>
+        <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-7 md:gap-3 md:overflow-visible md:pb-0">
+          {weekDays.map((day, index) => {
+            const isToday = sameLocalDate(Date.now(), day);
+            return (
+              <div
+                key={day.toISOString()}
+                className={`min-w-[120px] flex-shrink-0 rounded-xl border p-2 md:min-w-0 md:flex-shrink ${
+                  isToday ? "border-brand-500 border-t-2 bg-brand-50/40" : "border-border bg-slate-50"
+                }`}
+              >
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                  {day.toLocaleDateString(undefined, { weekday: "short" })}
+                </p>
+                <p className="text-xs font-semibold">
+                  {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                </p>
+                <div className="mt-1.5 space-y-1">
+                  {jobsByDay[index].length === 0 ? (
+                    <p className="text-[11px] text-slate-400">&mdash;</p>
+                  ) : (
+                    jobsByDay[index].map((job) => (
+                      <button
+                        key={job._id}
+                        aria-label={`Select ${job.propertyName} job`}
+                        className={`w-full rounded-lg border px-1.5 py-1 text-left text-[11px] transition ${
+                          selectedJobId === job._id
+                            ? "border-brand-500 bg-brand-100"
+                            : "border-border bg-white hover:border-brand-300"
+                        }`}
+                        onClick={() => setSelectedJobId(job._id)}
+                        type="button"
+                      >
+                        <span className="font-semibold">
+                          {new Date(job.scheduledStart).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        <span className="ml-1 text-slate-600">{job.propertyName}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
-      <OfflineQueuePanel
-        description="Worker status changes and checklist starts can queue locally and replay when the device reconnects."
-        items={scheduleQueueItems}
-        maxItems={4}
-        title="Schedule Sync Status"
-      />
-
-      <section className="rounded-3xl border border-border border-l-4 border-l-brand-600 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* ── Selected job detail (Worker Focus) ── */}
+      <section className="rounded-2xl border border-border border-l-4 border-l-brand-600 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
-              Worker Focus
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-700">
+              {selectedListJob ? "Current Job" : "Worker Focus"}
             </p>
-            <h2 className="text-xl font-bold">
+            <h2 className="text-lg font-bold lg:text-xl">
               {selectedListJob ? selectedListJob.propertyName : "No job selected"}
             </h2>
-            <p className="text-sm text-slate-600">
-              {selectedListJob
-                ? `${selectedListJob.jobType} | ${formatJobWindow(selectedListJob)}`
-                : `Your ${formatScheduleWindow(windowStart, windowEnd)} schedule is clear.`}
-            </p>
+            {selectedListJob && (
+              <p className="text-sm text-slate-600">
+                {selectedListJob.jobType} | {formatJobWindow(selectedListJob)}
+              </p>
+            )}
           </div>
           {selectedListJob && (
             <span
@@ -421,382 +467,277 @@ export function MySchedulePage() {
         </div>
 
         {!selectedListJob ? (
-          <p className="mt-4 text-sm text-slate-500">No jobs scheduled in this two-week window.</p>
+          <p className="mt-3 text-sm text-slate-500">
+            {jobs === undefined
+              ? "Loading schedule..."
+              : `Your ${formatScheduleWindow(windowStart, windowEnd)} window is clear.`}
+          </p>
         ) : (
-          <div className="mt-4 space-y-4">
-            <div className="rounded-2xl border border-border bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">{selectedListJob.propertyAddress}</p>
-              <p className="mt-1 text-sm text-slate-600">
+          <div className="mt-3 space-y-3">
+            <div className="rounded-xl border border-border bg-slate-50 p-3 text-sm">
+              <p className="font-semibold text-slate-900">{selectedListJob.propertyAddress}</p>
+              <p className="mt-1 text-slate-600">
                 Priority: {selectedListJob.priority ?? "MEDIUM"}
-                {selectedListJob.assigneeName ? ` | Assigned to ${selectedListJob.assigneeName}` : ""}
+                {selectedListJob.assigneeName ? ` | ${selectedListJob.assigneeName}` : ""}
               </p>
-              {summarizeTurnoverIntake(selectedListJob) && (
-                <p className="mt-1 text-sm text-slate-600">{summarizeTurnoverIntake(selectedListJob)}</p>
-              )}
               {selectedListJob.notes && (
-                <p className="mt-3 text-sm text-slate-600">{selectedListJob.notes}</p>
+                <p className="mt-2 text-slate-600">{selectedListJob.notes}</p>
               )}
               {selectedListJob.propertyServiceNotes && (
-                <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
                   {selectedListJob.propertyServiceNotes}
                 </p>
               )}
             </div>
 
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(260px,1fr)]">
+            {/* Primary CTA + status controls — always visible */}
+            <button
+              className="field-button go w-full min-h-[52px] px-5"
+              disabled={
+                startingChecklist ||
+                !selectedListJob.assigneeId ||
+                selectedListJob.checklistType === null ||
+                selectedListJob.status === "COMPLETED" ||
+                selectedListJob.status === "CANCELLED"
+              }
+              onClick={() => void handleOpenChecklist(selectedListJob)}
+              type="button"
+            >
+              {startingChecklist
+                ? "Opening Checklist..."
+                : outboxOverlay.queuedChecklistByJobId.has(selectedListJob._id)
+                  ? "Checklist Queued"
+                  : checklistActionLabel(selectedListJob)}
+            </button>
+            <div className="grid gap-2 grid-cols-2">
               <button
-                className="field-button primary w-full min-h-[52px] px-5"
+                className="field-button secondary w-full px-3"
                 disabled={
-                  startingChecklist ||
-                  !selectedListJob.assigneeId ||
-                  selectedListJob.checklistType === null ||
-                  selectedListJob.status === "COMPLETED" ||
-                  selectedListJob.status === "CANCELLED"
+                  statusControlsLocked ||
+                  updatingStatus !== null ||
+                  selectedJobEffectiveStatus === "IN_PROGRESS"
                 }
-                onClick={() => void handleOpenChecklist(selectedListJob)}
+                onClick={() => void handleStatusChange("IN_PROGRESS")}
                 type="button"
               >
-                {startingChecklist
-                  ? "Opening Checklist..."
-                  : outboxOverlay.queuedChecklistByJobId.has(selectedListJob._id)
-                    ? "Checklist Queued"
-                    : checklistActionLabel(selectedListJob)}
+                {updatingStatus === "IN_PROGRESS" ? "Saving..." : "In Progress"}
               </button>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <button
-                  className="field-button secondary w-full px-4"
-                  disabled={
-                    statusControlsLocked ||
-                    updatingStatus !== null ||
-                    selectedJobEffectiveStatus === "IN_PROGRESS"
-                  }
-                  onClick={() => void handleStatusChange("IN_PROGRESS")}
-                  type="button"
-                >
-                  {updatingStatus === "IN_PROGRESS" ? "Saving..." : "Mark In Progress"}
-                </button>
-                <button
-                  className="field-button secondary w-full px-4"
-                  disabled={
-                    statusControlsLocked ||
-                    updatingStatus !== null ||
-                    selectedJobEffectiveStatus === "BLOCKED"
-                  }
-                  onClick={() => void handleStatusChange("BLOCKED")}
-                  type="button"
-                >
-                  {updatingStatus === "BLOCKED" ? "Saving..." : "Mark Blocked"}
-                </button>
-              </div>
+              <button
+                className="field-button secondary w-full px-3"
+                disabled={
+                  statusControlsLocked ||
+                  updatingStatus !== null ||
+                  selectedJobEffectiveStatus === "BLOCKED"
+                }
+                onClick={() => void handleStatusChange("BLOCKED")}
+                type="button"
+              >
+                {updatingStatus === "BLOCKED" ? "Saving..." : "Blocked"}
+              </button>
             </div>
-
-            <p className="text-xs text-slate-500">
-              Use the checklist as the main work surface. Marking the checklist complete is what
-              closes the job.
-            </p>
           </div>
         )}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)]">
-        <div className="rounded-3xl border border-border bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold">Upcoming Jobs</h2>
-              <p className="text-sm text-slate-600">
-                One tap opens the checklist. Use Focus Job for full property details.
-              </p>
-            </div>
-            <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-              {upcomingJobs.length} jobs
-            </span>
+      {/* ── Upcoming jobs — accordion, next job shown, rest collapsed ── */}
+      <section className="rounded-2xl border border-border bg-white shadow-sm">
+        {jobs === undefined ? (
+          <div className="space-y-2 p-4">
+            <div className="skeleton h-14 rounded-xl" />
+            <div className="skeleton h-14 rounded-xl" />
           </div>
-
-          {jobs === undefined ? (
-            <div className="space-y-3">
-              <div className="skeleton h-16 rounded-xl" />
-              <div className="skeleton h-16 rounded-xl" />
-              <div className="skeleton h-16 rounded-xl" />
-            </div>
-          ) : upcomingJobs.length === 0 ? (
+        ) : upcomingJobs.length === 0 ? (
+          <div className="p-4">
             <EmptyState
               icon={<CalendarDays className="h-8 w-8" />}
               heading="No jobs in this window"
-              description="Your two-week schedule is clear. Check back when dispatch assigns new work."
+              description="Check back when dispatch assigns new work."
             />
-          ) : (
-            <div className="space-y-3">
-              {upcomingJobs.map((job) => (
-                <div
-                  key={job._id}
-                  className={`rounded-2xl border p-4 transition ${
-                    selectedJobId === job._id
-                      ? "border-brand-500 bg-brand-50"
-                      : "border-border bg-slate-50"
-                  }`}
+          </div>
+        ) : (
+          <>
+            {/* Next job preview (always visible) */}
+            {upcomingJobs.filter((job) => job._id !== selectedJobId).length > 0 && (
+              <div className="p-3">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Up Next</p>
+                {(() => {
+                  const nextJob = upcomingJobs.find((job) => job._id !== selectedJobId) ?? upcomingJobs[0];
+                  return (
+                    <button
+                      key={nextJob._id}
+                      aria-label={`Focus on ${nextJob.propertyName}`}
+                      className="flex w-full items-center gap-3 rounded-xl border border-border bg-slate-50 p-3 text-left transition hover:border-brand-300"
+                      onClick={() => setSelectedJobId(nextJob._id)}
+                      type="button"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold">{nextJob.propertyName}</p>
+                        <p className="text-xs text-slate-600">
+                          {new Date(nextJob.scheduledStart).toLocaleDateString(undefined, {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })}{" "}
+                          {new Date(nextJob.scheduledStart).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {" | "}
+                          {nextJob.jobType}
+                        </p>
+                      </div>
+                      <span
+                        className={`flex-shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(
+                          nextJob.status
+                        )}`}
+                      >
+                        {nextJob.status}
+                      </span>
+                    </button>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Expand toggle */}
+            {upcomingJobs.length > 1 && (
+              <>
+                <button
+                  className="flex w-full items-center justify-center gap-1.5 border-t border-border px-4 py-2.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-50"
+                  onClick={() => setShowAllJobs(!showAllJobs)}
+                  type="button"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-base font-bold">{job.propertyName}</p>
-                      <p className="text-sm text-slate-600">
-                        {formatJobWindow(job)} | {job.jobType} | {job.priority ?? "MEDIUM"}
-                      </p>
-                      {summarizeTurnoverIntake(job) && (
-                        <p className="mt-1 text-xs text-slate-500">{summarizeTurnoverIntake(job)}</p>
-                      )}
-                    </div>
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
-                        job.status
-                      )}`}
-                    >
-                      {job.status}
-                    </span>
-                  </div>
-
-                  {(job.notes || job.propertyServiceNotes) && (
-                    <div className="mt-3 space-y-2">
-                      {job.notes && <p className="text-sm text-slate-600">{job.notes}</p>}
-                      {job.propertyServiceNotes && (
-                        <p className="text-xs text-amber-800">{job.propertyServiceNotes}</p>
-                      )}
-                    </div>
+                  {showAllJobs ? (
+                    <>Hide full list <ChevronUp className="h-4 w-4" /></>
+                  ) : (
+                    <>Show all {upcomingJobs.length} jobs <ChevronDown className="h-4 w-4" /></>
                   )}
+                </button>
 
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <button
-                      className="field-button primary w-full px-4 sm:flex-1"
-                      disabled={
-                        startingChecklist ||
-                        !job.assigneeId ||
-                        job.checklistType === null ||
-                        job.status === "COMPLETED" ||
-                        job.status === "CANCELLED"
-                      }
-                      onClick={() => void handleOpenChecklist(job)}
-                      type="button"
-                    >
-                      {outboxOverlay.queuedChecklistByJobId.has(job._id)
-                        ? "Checklist Queued"
-                        : checklistActionLabel(job)}
-                    </button>
-                    <button
-                      aria-label={`Focus on ${job.propertyName}`}
-                      className="field-button secondary w-full px-4 sm:flex-1"
-                      onClick={() => setSelectedJobId(job._id)}
-                      type="button"
-                    >
-                      Focus Job
-                    </button>
+                {showAllJobs && (
+                  <div className="space-y-1.5 border-t border-border p-3">
+                    {upcomingJobs.map((job) => (
+                      <button
+                        key={job._id}
+                        aria-label={`Focus on ${job.propertyName}`}
+                        className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                          selectedJobId === job._id
+                            ? "border-brand-500 bg-brand-50"
+                            : "border-border bg-slate-50 hover:border-brand-300"
+                        }`}
+                        onClick={() => setSelectedJobId(job._id)}
+                        type="button"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold">{job.propertyName}</p>
+                          <p className="text-xs text-slate-600">
+                            {new Date(job.scheduledStart).toLocaleDateString(undefined, {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}{" "}
+                            {new Date(job.scheduledStart).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                            {" | "}
+                            {job.jobType}
+                          </p>
+                        </div>
+                        <span
+                          className={`flex-shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(
+                            job.status
+                          )}`}
+                        >
+                          {job.status}
+                        </span>
+                      </button>
+                    ))}
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <aside className="rounded-3xl border border-border bg-white p-4 shadow-sm">
-          <h2 className="mb-3 text-lg font-bold">Job Details</h2>
-          {!selectedJobId ? (
-            <EmptyState
-              icon={<CalendarDays className="h-8 w-8" />}
-              heading="Select a job to see details"
-              description="Pick a job from the list or weekly grid."
-            />
-          ) : selectedJob === undefined ? (
-            <div className="space-y-3">
-              <div className="skeleton h-6 w-2/3 rounded" />
-              <div className="skeleton h-4 w-full rounded" />
-              <div className="skeleton h-20 rounded-xl" />
-            </div>
-          ) : !selectedJobEffective ? (
-            <p className="text-sm text-slate-500">Job not found.</p>
-          ) : (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-border bg-slate-50 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold">{selectedJobEffective.property?.name ?? "Unknown property"}</p>
-                    <p className="text-sm text-slate-600">
-                      {selectedJobEffective.property?.address ?? "No address on file"}
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
-                      selectedJobEffective.status
-                    )}`}
-                  >
-                    {selectedJobEffective.status}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm text-slate-600">
-                  {selectedJobEffective.jobType} | {formatJobWindow(selectedJobEffective)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Priority: {selectedJobEffective.priority ?? "MEDIUM"}
-                  {selectedJobEffective.assignee ? ` | ${selectedJobEffective.assignee.name}` : ""}
-                </p>
-              </div>
-
-              {selectedJobEffective.property?.serviceNotes && (
-                <DetailBlock label="Service Notes" value={selectedJobEffective.property.serviceNotes} />
-              )}
-
-              {selectedJobEffective.property?.accessInstructions && (
-                <DetailBlock
-                  label="Access Instructions"
-                  value={selectedJobEffective.property.accessInstructions}
-                />
-              )}
-
-              {selectedJobEffective.property?.entryMethod && (
-                <DetailBlock label="Entry Method" value={selectedJobEffective.property.entryMethod} />
-              )}
-
-              {selectedJobEffective.intakeSource && (
-                <DetailBlock label="Turnover Source" value={selectedJobEffective.intakeSource} />
-              )}
-
-              {selectedJobEffective.clientLabel && (
-                <DetailBlock label="Client / Account" value={selectedJobEffective.clientLabel} />
-              )}
-
-              {selectedJobEffective.arrivalDeadline && (
-                <DetailBlock
-                  label="Arrival Deadline"
-                  value={formatOptionalDateTime(selectedJobEffective.arrivalDeadline) ?? ""}
-                />
-              )}
-
-              {selectedJobEffective.notes && <DetailBlock label="Job Notes" value={selectedJobEffective.notes} />}
-
-              {!selectedJobIsMine && user?.role !== "ADMIN" && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                  Only the assigned worker can change this job&apos;s status from My Schedule.
-                </div>
-              )}
-
-              <div className="rounded-2xl border border-border p-4">
-                <h3 className="font-semibold">Status Controls</h3>
-                <p className="mt-1 text-sm text-slate-600">
-                  Workers can move jobs between in-progress and blocked here. Completion still comes
-                  from the checklist flow.
-                </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <button
-                    className="field-button secondary w-full px-4"
-                    disabled={
-                    statusControlsLocked ||
-                    updatingStatus !== null ||
-                    selectedJobEffectiveStatus === "IN_PROGRESS"
-                  }
-                  onClick={() => void handleStatusChange("IN_PROGRESS")}
-                    type="button"
-                  >
-                    {updatingStatus === "IN_PROGRESS" ? "Saving..." : "Mark In Progress"}
-                  </button>
-                  <button
-                    className="field-button secondary w-full px-4"
-                    disabled={
-                    statusControlsLocked ||
-                    updatingStatus !== null ||
-                    selectedJobEffectiveStatus === "BLOCKED"
-                  }
-                  onClick={() => void handleStatusChange("BLOCKED")}
-                    type="button"
-                  >
-                    {updatingStatus === "BLOCKED" ? "Saving..." : "Mark Blocked"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </aside>
-      </section>
-
-      <section className="rounded-3xl border border-border bg-white p-4 shadow-sm">
-        <div className="mb-3">
-          <h2 className="text-lg font-bold">This Week</h2>
-          <p className="text-sm text-slate-600">
-            Quick scan of the current week while your two-week list stays focused on action.
-          </p>
-        </div>
-        <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-7 md:overflow-visible md:pb-0">
-          {weekDays.map((day, index) => {
-            const isToday = sameLocalDate(Date.now(), day);
-            return (
-            <div key={day.toISOString()} className={`min-w-[140px] flex-shrink-0 rounded-2xl border bg-slate-50 p-3 md:min-w-0 md:flex-shrink ${isToday ? "border-brand-500 border-t-2" : "border-border"}`}>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                {day.toLocaleDateString(undefined, { weekday: "short" })}
-              </p>
-              <p className="mb-3 text-sm font-semibold">{day.toLocaleDateString()}</p>
-              <div className="space-y-2">
-                {jobsByDay[index].length === 0 ? (
-                  <p className="text-xs text-slate-500">No jobs</p>
-                ) : (
-                  jobsByDay[index].map((job) => (
-                    <button
-                      key={job._id}
-                      aria-label={`Select ${job.propertyName} job`}
-                      className={`w-full rounded-2xl border p-2 text-left text-xs transition ${
-                        selectedJobId === job._id
-                          ? "border-brand-500 bg-brand-50"
-                          : "border-border bg-white hover:border-brand-300"
-                      }`}
-                      onClick={() => setSelectedJobId(job._id)}
-                      type="button"
-                    >
-                      <p className="font-semibold">
-                        {new Date(job.scheduledStart).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                      <p className="mt-1 text-slate-700">{job.propertyName}</p>
-                      <p className="mt-1 text-[11px] text-slate-500">{job.status}</p>
-                    </button>
-                  ))
                 )}
-              </div>
-            </div>
-          );
-          })}
-        </div>
+              </>
+            )}
+          </>
+        )}
       </section>
 
-      {/* Mobile sticky CTA when a job is selected */}
-      {selectedListJob && selectedListJob.canStartChecklist && (
-        <div className="fixed bottom-16 left-0 right-0 z-30 px-4 pb-2 lg:hidden">
-          <button
-            className="field-button primary w-full min-h-[52px] px-5 shadow-lg"
-            disabled={
-              startingChecklist ||
-              !selectedListJob.assigneeId ||
-              selectedListJob.checklistType === null ||
-              selectedListJob.status === "COMPLETED" ||
-              selectedListJob.status === "CANCELLED"
-            }
-            onClick={() => void handleOpenChecklist(selectedListJob)}
-            type="button"
-          >
-            {startingChecklist
-              ? "Opening..."
-              : outboxOverlay.queuedChecklistByJobId.has(selectedListJob._id)
-                ? "Checklist Queued"
-                : checklistActionLabel(selectedListJob)}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
+      {/* ── Job detail — desktop only, extra context for larger screens ── */}
+      <aside className="hidden rounded-2xl border border-border bg-white p-4 shadow-sm xl:block">
+        <h2 className="mb-3 text-sm font-bold text-slate-600">Job Details</h2>
+        {!selectedJobId ? (
+          <EmptyState
+            icon={<CalendarDays className="h-8 w-8" />}
+            heading="Select a job to see details"
+            description="Pick a job from the list or weekly grid."
+          />
+        ) : selectedJob === undefined ? (
+          <div className="space-y-3">
+            <div className="skeleton h-6 w-2/3 rounded" />
+            <div className="skeleton h-4 w-full rounded" />
+            <div className="skeleton h-20 rounded-xl" />
+          </div>
+        ) : !selectedJobEffective ? (
+          <p className="text-sm text-slate-500">Job not found.</p>
+        ) : (
+          <div className="space-y-3 text-sm">
+            <div className="rounded-xl border border-border bg-slate-50 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold">{selectedJobEffective.property?.name ?? "Unknown property"}</p>
+                  <p className="text-slate-600">
+                    {selectedJobEffective.property?.address ?? "No address on file"}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(
+                    selectedJobEffective.status
+                  )}`}
+                >
+                  {selectedJobEffective.status}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {selectedJobEffective.jobType} | Priority: {selectedJobEffective.priority ?? "MEDIUM"}
+                {selectedJobEffective.assignee ? ` | ${selectedJobEffective.assignee.name}` : ""}
+              </p>
+            </div>
 
-function SummaryCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-2xl border border-border bg-white p-4">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="text-2xl font-bold">{value}</p>
+            {selectedJobEffective.property?.serviceNotes && (
+              <DetailBlock label="Service Notes" value={selectedJobEffective.property.serviceNotes} />
+            )}
+            {selectedJobEffective.property?.accessInstructions && (
+              <DetailBlock label="Access Instructions" value={selectedJobEffective.property.accessInstructions} />
+            )}
+            {selectedJobEffective.property?.entryMethod && (
+              <DetailBlock label="Entry Method" value={selectedJobEffective.property.entryMethod} />
+            )}
+            {selectedJobEffective.intakeSource && (
+              <DetailBlock label="Turnover Source" value={selectedJobEffective.intakeSource} />
+            )}
+            {selectedJobEffective.clientLabel && (
+              <DetailBlock label="Client / Account" value={selectedJobEffective.clientLabel} />
+            )}
+            {selectedJobEffective.arrivalDeadline && (
+              <DetailBlock
+                label="Arrival Deadline"
+                value={formatOptionalDateTime(selectedJobEffective.arrivalDeadline) ?? ""}
+              />
+            )}
+            {selectedJobEffective.notes && <DetailBlock label="Job Notes" value={selectedJobEffective.notes} />}
+          </div>
+        )}
+      </aside>
+
+      {/* ── Offline outbox — only visible when offline ── */}
+      {!isOnline && (
+        <OfflineQueuePanel
+          description="Status changes and checklist starts queue locally until connection returns."
+          items={scheduleQueueItems}
+          maxItems={4}
+          title="Offline Queue"
+        />
+      )}
+
     </div>
   );
 }

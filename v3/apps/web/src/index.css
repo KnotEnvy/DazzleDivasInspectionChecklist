@@ -109,6 +109,15 @@ a {
   background: var(--color-brand-50);
 }
 
+.field-button.go {
+  background: #059669;
+  color: white;
+}
+
+.field-button.go:hover:not(:disabled) {
+  background: #047857;
+}
+
 .field-button.danger {
   background: white;
   color: #be123c;

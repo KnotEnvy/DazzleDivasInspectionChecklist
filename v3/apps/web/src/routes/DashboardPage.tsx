@@ -85,7 +85,7 @@ export function DashboardPage() {
       </section>
 
       <section className="flex flex-wrap gap-3">
-        <Link className="field-button primary px-5" to="/checklists/new">
+        <Link className="field-button go px-5" to="/checklists/new">
           Start New Checklist
         </Link>
         <Link className="field-button secondary px-5" to="/my-schedule">
@@ -106,7 +106,7 @@ export function DashboardPage() {
             icon={<ClipboardList className="h-8 w-8" />}
             heading="No active checklists"
             description="Start a new checklist from the button above or your schedule."
-            action={<Link className="field-button primary px-5" to="/checklists/new">Start New Checklist</Link>}
+            action={<Link className="field-button go px-5" to="/checklists/new">Start New Checklist</Link>}
           />
         ) : (
           <div className="space-y-2">

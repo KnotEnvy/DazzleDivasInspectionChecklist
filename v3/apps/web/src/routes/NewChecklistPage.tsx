@@ -113,7 +113,7 @@ export function NewChecklistPage() {
             </select>
           </label>
 
-          <button className="field-button primary px-5" disabled={pending} type="submit">
+          <button className="field-button go px-5" disabled={pending} type="submit">
             {pending ? "Starting..." : isOnline ? "Start Checklist" : "Queue For Sync"}
           </button>
         </form>

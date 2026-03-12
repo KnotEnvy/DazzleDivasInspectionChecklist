@@ -101,7 +101,11 @@ export function validateChecklistStartFromJob<
 export function assertAllRoomsCompleted(
   rooms: Array<{ status: "PENDING" | "COMPLETED" }>
 ) {
-  if (rooms.some((room) => room.status !== "COMPLETED")) {
-    throw new Error("All room checklists must be completed first");
+  const remainingRooms = rooms.filter((room) => room.status !== "COMPLETED").length;
+
+  if (remainingRooms > 0) {
+    throw new Error(
+      `Complete the remaining ${remainingRooms} room${remainingRooms === 1 ? "" : "s"} before finishing the checklist`
+    );
   }
 }
