@@ -5,8 +5,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
-import { Camera, CheckCircle2, Circle } from "lucide-react";
-import { EmptyState } from "@/components/EmptyState";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { InspectionRoomPanel } from "@/components/InspectionRoomPanel";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxItems } from "@/hooks/useOutboxItems";
 import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
@@ -23,7 +23,7 @@ import {
 } from "@/lib/offlineOutbox";
 import { getNextHydratedDraft } from "@/lib/draftHydration";
 import { applyInspectionOutboxOverlay } from "@/lib/offlineInspectionState";
-import { roomStatusTone, stepTone } from "@/lib/statusColors";
+import { roomStatusTone } from "@/lib/statusColors";
 
 type RoomSummary = {
   _id: Id<"roomInspections">;
@@ -67,8 +67,6 @@ type RoomDetail = {
     url: string | null;
   }>;
 };
-
-const photoKinds: PhotoKind[] = ["BEFORE", "AFTER", "ISSUE", "GENERAL"];
 
 export function InspectionPage() {
   const navigate = useNavigate();
@@ -153,7 +151,7 @@ export function InspectionPage() {
     }
 
     if (
-      !selectedRoomId ||
+      selectedRoomId &&
       !inspectionView.roomInspections.some((room) => room._id === selectedRoomId)
     ) {
       setSelectedRoomId(inspectionView.roomInspections[0]._id);
@@ -532,6 +530,7 @@ export function InspectionPage() {
   const roomsRemaining = totals.rooms - totals.completedRooms;
   const canCompleteInspection =
     inspectionView.status !== "COMPLETED" && !hasNoRooms && roomsRemaining === 0;
+  const showChecklistSyncStatus = !isOnline || inspectionQueueItems.length > 0;
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -558,13 +557,6 @@ export function InspectionPage() {
         <SummaryCard label="Selected Room" value={selectedRoomSummary?.roomName ?? "None"} />
       </section>
 
-      <OfflineQueuePanel
-        description="Checklist actions, room notes, room completion, and photo uploads queue locally and replay when connection returns."
-        items={inspectionQueueItems}
-        maxItems={4}
-        title="Checklist Sync Status"
-      />
-
       {!hasNoRooms && nextPendingRoom ? (
         <section className="rounded-2xl border border-border bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -586,12 +578,13 @@ export function InspectionPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(280px,0.95fr)_minmax(0,1.6fr)]">
-        <aside className="rounded-2xl border border-border bg-white p-4">
+      <section className="space-y-4">
+        <section className="rounded-2xl border border-border bg-white p-4">
           <div className="mb-3">
             <h2 className="text-lg font-bold">Rooms</h2>
             <p className="text-sm text-slate-600">
-              Work through each room until tasks and photos meet completion requirements.
+              Select a room to open its tasks, photos, and notes. Selecting a different room closes the
+              current one.
             </p>
           </div>
           {hasNoRooms ? (
@@ -602,436 +595,121 @@ export function InspectionPage() {
                 type. New checklists only include rooms that have tasks configured.
               </p>
               <p className="mt-2">
-                Admins can fix this in <Link className="font-semibold underline" to="/admin/templates">Checklist Templates</Link>.
+                Admins can fix this in{" "}
+                <Link className="font-semibold underline" to="/admin/templates">
+                  Checklist Templates
+                </Link>
+                .
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              {inspectionView.roomInspections.map((room) => (
-                <button
-                  key={room._id}
-                  id={`room-${room._id}`}
-                  className={`w-full rounded-2xl border p-3 text-left transition ${
-                    selectedRoomId === room._id
-                      ? "border-brand-500 bg-brand-50"
-                      : "border-border bg-slate-50 hover:border-brand-300"
-                  }`}
-                  onClick={() => setSelectedRoomId(room._id)}
-                  type="button"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold">{room.roomName}</p>
-                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                        <div
-                          className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                          style={{ width: `${room.totalTasks > 0 ? (room.completedTasks / room.totalTasks) * 100 : 0}%` }}
-                        />
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Tasks {room.completedTasks}/{room.totalTasks} | Photos {room.photoCount}/
-                        {room.requiredPhotoMin}
-                      </p>
-                      {(room.issueCount ?? 0) > 0 ? (
-                        <p className="mt-1 text-xs text-rose-700">
-                          {room.issueCount} issue{room.issueCount === 1 ? "" : "s"} flagged
-                        </p>
-                      ) : null}
-                      {room.status !== "COMPLETED" ? (
-                        <p className="mt-1 text-xs text-amber-700">
-                          {room.totalTasks - room.completedTasks} tasks left and{" "}
-                          {Math.max(0, room.requiredPhotoMin - room.photoCount)} photos still needed
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-xs text-emerald-700">Room completed and ready.</p>
-                      )}
-                    </div>
-                    <span
-                      className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${roomStatusTone(
-                        room.status
-                      )}`}
-                    >
-                      {room.status}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </aside>
+              {inspectionView.roomInspections.map((room) => {
+                const isOpen = selectedRoomId === room._id;
 
-        <section className="space-y-4">
-          <div className="rounded-2xl border border-border bg-white p-4">
-            {!selectedRoomId ? (
-              <p className="text-sm text-slate-500">Select a room to start executing work.</p>
-            ) : selectedRoomView === undefined ? (
-              <div className="space-y-3">
-                <div className="skeleton h-6 w-2/3 rounded" />
-                <div className="skeleton h-4 w-full rounded" />
-                <div className="skeleton h-20 rounded-xl" />
-              </div>
-            ) : !selectedRoomView ? (
-              <p className="text-sm text-slate-500">Room not found.</p>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-bold">{selectedRoomView.roomName}</h2>
-                    <p className="text-sm text-slate-600">
-                      {selectedRoomView.taskResults.filter((task) => task.completed).length}/
-                      {selectedRoomView.taskResults.length} tasks complete |{" "}
-                      {selectedRoomView.taskResults.filter((task) => task.hasIssue).length} issues |{" "}
-                      {selectedRoomView.photos.length}/{selectedRoomView.requiredPhotoMin} required photos
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${roomStatusTone(
-                      selectedRoomView.status
-                    )}`}
-                  >
-                    {selectedRoomView.status}
-                  </span>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className={`rounded-2xl border p-3 ${stepTone(roomTasksComplete)}`}>
-                    <div className="flex items-center gap-2">
-                      {roomTasksComplete ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <Circle className="h-5 w-5 text-slate-400" />}
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 1</p>
-                    </div>
-                    <p className="mt-1 font-semibold">Complete tasks</p>
-                    <p className="mt-1 text-sm">
-                      {selectedRoomView.taskResults.filter((task) => task.completed).length}/
-                      {selectedRoomView.taskResults.length} complete
-                    </p>
-                  </div>
-                  <div className={`rounded-2xl border p-3 ${stepTone(roomHasEnoughPhotos)}`}>
-                    <div className="flex items-center gap-2">
-                      {roomHasEnoughPhotos ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <Circle className="h-5 w-5 text-slate-400" />}
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 2</p>
-                    </div>
-                    <p className="mt-1 font-semibold">Upload proof photos</p>
-                    <p className="mt-1 text-sm">
-                      {selectedRoomView.photos.length}/{selectedRoomView.requiredPhotoMin} required
-                    </p>
-                  </div>
+                return (
                   <div
-                    className={`rounded-2xl border p-3 ${stepTone(
-                      selectedRoomView.status === "COMPLETED"
-                    )}`}
+                    key={room._id}
+                    id={`room-${room._id}`}
+                    className={`overflow-hidden rounded-2xl border transition ${
+                      isOpen ? "border-brand-500 bg-brand-50" : "border-border bg-slate-50"
+                    }`}
                   >
-                    <div className="flex items-center gap-2">
-                      {selectedRoomView.status === "COMPLETED" ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <Circle className="h-5 w-5 text-slate-400" />}
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 3</p>
-                    </div>
-                    <p className="mt-1 font-semibold">Finish room</p>
-                    <p className="mt-1 text-sm">
-                      {selectedRoomView.status === "COMPLETED"
-                        ? "Room is complete"
-                        : "Mark complete after tasks and photos"}
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="mb-2 font-semibold">Step 1: Complete room tasks</h3>
-                  <div className="space-y-2">
-                    {selectedRoomView.taskResults.map((task) => (
-                      <div
-                        key={task._id}
-                        className={`block rounded-2xl border p-3 ${
-                          task.hasIssue
-                            ? "border-rose-200 bg-rose-50"
-                            : "border-border bg-slate-50"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <input
-                            aria-label={`Mark ${task.taskDescription} as ${task.completed ? "incomplete" : "complete"}`}
-                            checked={task.completed}
-                            disabled={inspectionView.status === "COMPLETED" || savingTaskId === task._id}
-                            onChange={(event) =>
-                              void handleTaskToggle(task._id, event.target.checked)
-                            }
-                            type="checkbox"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <span
-                                className={
-                                  task.completed ? "text-slate-500 line-through" : "text-slate-700"
-                                }
-                              >
-                                {task.taskDescription}
-                              </span>
-                              {task.hasIssue ? (
-                                <span className="rounded-full border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700">
-                                  Issue Flagged
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="mt-3 space-y-2">
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  className="field-button secondary px-3"
-                                  disabled={
-                                    inspectionView.status === "COMPLETED" ||
-                                    savingIssueTaskId === task._id ||
-                                    task.hasIssue === true
-                                  }
-                                  onClick={() => void handleTaskIssueSave(task._id, true)}
-                                  type="button"
-                                >
-                                  Flag Issue
-                                </button>
-                                <button
-                                  className="field-button secondary px-3"
-                                  disabled={
-                                    inspectionView.status === "COMPLETED" ||
-                                    savingIssueTaskId === task._id ||
-                                    !task.hasIssue
-                                  }
-                                  onClick={() => void handleTaskIssueSave(task._id, false)}
-                                  type="button"
-                                >
-                                  Clear Issue
-                                </button>
-                              </div>
-                              {task.hasIssue ? (
-                                <div className="space-y-2">
-                                  <textarea
-                                    className="input min-h-24"
-                                    disabled={inspectionView.status === "COMPLETED"}
-                                    onChange={(event) =>
-                                      setTaskIssueDrafts((current) => ({
-                                        ...current,
-                                        [task._id]: event.target.value,
-                                      }))
-                                    }
-                                    placeholder="Describe what was wrong or what needs follow-up"
-                                    value={taskIssueDrafts[task._id] ?? ""}
-                                  />
-                                  <button
-                                    className="field-button secondary px-3"
-                                    disabled={
-                                      inspectionView.status === "COMPLETED" ||
-                                      savingIssueTaskId === task._id
-                                    }
-                                    onClick={() => void handleTaskIssueSave(task._id, true)}
-                                    type="button"
-                                  >
-                                    {savingIssueTaskId === task._id ? "Saving..." : "Save Issue Note"}
-                                  </button>
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-border bg-slate-50 p-4">
-                  <div className="mb-2">
-                    <h3 className="font-semibold">Step 3A: Room notes</h3>
-                    <p className="text-sm text-slate-600">
-                      Capture exceptions, follow-up details, or anything the next shift should know.
-                    </p>
-                  </div>
-                  <textarea
-                    className="input min-h-28"
-                    disabled={inspectionView.status === "COMPLETED"}
-                    onChange={(event) => setRoomNotes(event.target.value)}
-                    value={roomNotes}
-                  />
-                  <button
-                    className="field-button secondary mt-3 px-4"
-                    disabled={inspectionView.status === "COMPLETED" || savingNotes}
-                    onClick={() => void handleSaveNotes()}
-                    type="button"
-                  >
-                    {savingNotes ? "Saving..." : "Save Room Notes"}
-                  </button>
-                </div>
-
-                <div className="rounded-2xl border border-dashed border-brand-300 bg-slate-50 p-4">
-                  <div className="mb-3">
-                    <h3 className="font-semibold">Step 2: Upload proof photos</h3>
-                    <p className="text-sm text-slate-600">
-                      Upload proof photos for this room. Removing a required photo reopens the room.
-                    </p>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
-                    <label className="text-sm font-medium text-slate-700">
-                      Photo Type
-                      <select
-                        aria-label="Select photo category"
-                        className="input mt-1"
-                        disabled={inspectionView.status === "COMPLETED" || uploadingPhotos}
-                        onChange={(event) => setPhotoKind(event.target.value as PhotoKind)}
-                        value={photoKind}
-                      >
-                        {photoKinds.map((kind) => (
-                          <option key={kind} value={kind}>
-                            {kind}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-sm font-medium text-slate-700">
-                      Add Photos
-                      <input
-                        accept="image/*"
-                        aria-label="Choose photos to upload"
-                        className="input mt-1 py-2"
-                        disabled={inspectionView.status === "COMPLETED" || uploadingPhotos}
-                        multiple
-                        onChange={(event) => void handlePhotoUpload(event)}
-                        type="file"
-                      />
-                    </label>
-                  </div>
-
-                  {selectedRoomView.photos.length === 0 ? (
-                    <div className="mt-3">
-                      <EmptyState
-                        icon={<Camera className="h-7 w-7" />}
-                        heading="No photos uploaded yet"
-                        description="Use the file picker above to add proof photos for this room."
-                      />
-                    </div>
-                  ) : (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {selectedRoomView.photos.map((photo) => (
-                        <div
-                          key={photo._id}
-                          className="overflow-hidden rounded-2xl border border-border bg-white"
-                        >
-                          <div className="relative">
-                          {photo.url ? (
-                            <img
-                              alt={photo.fileName}
-                              className="h-40 w-full object-cover"
-                              src={photo.url}
-                            />
-                          ) : (
-                            <div className="flex h-40 items-center justify-center bg-slate-100 text-sm text-slate-500">
-                              {"isPendingUpload" in photo && photo.isPendingUpload
-                                ? "Pending local upload"
-                                : "Preview unavailable"}
-                            </div>
-                          )}
-                          <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                            {photo.kind ?? "GENERAL"}
-                          </span>
-                          </div>
-                          <div className="space-y-2 p-3">
-                            <div>
-                              <p className="text-sm font-semibold">{photo.fileName}</p>
-                              <p className="text-xs text-slate-500">
-                                {photo.kind ?? "GENERAL"}
-                                {"isPendingUpload" in photo && photo.isPendingUpload
-                                  ? " | queued"
-                                  : ""}
-                              </p>
-                            </div>
-                            {confirmAction === `removePhoto:${photo._id}` ? (
-                              <div className="animate-slide-up flex gap-2">
-                                <button
-                                  className="field-button danger flex-1 px-3"
-                                  disabled={removingPhotoId === photo._id}
-                                  onClick={() => { setConfirmAction(null); void handleRemovePhoto(photo); }}
-                                  type="button"
-                                >
-                                  {removingPhotoId === photo._id ? "Removing..." : "Confirm"}
-                                </button>
-                                <button
-                                  className="field-button ghost flex-1 px-3"
-                                  onClick={() => setConfirmAction(null)}
-                                  type="button"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                className="field-button danger w-full px-3"
-                                disabled={
-                                  inspectionView.status === "COMPLETED" ||
-                                  removingPhotoId === photo._id
-                                }
-                                onClick={() => setConfirmAction(`removePhoto:${photo._id}`)}
-                                type="button"
-                              >
-                                {removingPhotoId === photo._id ? "Removing..." : "Remove Photo"}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-2xl border border-border bg-white p-4">
-                  <div className="mb-3">
-                    <h3 className="font-semibold">Step 3B: Finish room</h3>
-                    <p className="text-sm text-slate-600">
-                      A room can only be completed when every task is checked and the photo minimum
-                      is met.
-                    </p>
-                  </div>
-                  {!roomTasksComplete || !roomHasEnoughPhotos ? (
-                    <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      {!roomTasksComplete ? (
-                        <p>Finish all tasks before completing this room.</p>
-                      ) : null}
-                      {!roomHasEnoughPhotos ? (
-                        <p>
-                          Upload at least {selectedRoomView.requiredPhotoMin} photo(s) for this room
-                          before completing it.
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {confirmAction === "completeRoom" ? (
-                    <div className="animate-slide-up flex gap-2">
-                      <button
-                        className="field-button danger flex-1 px-4"
-                        disabled={completingRoomId === selectedRoomView._id}
-                        onClick={() => { setConfirmAction(null); void handleCompleteRoom(); }}
-                        type="button"
-                      >
-                        {completingRoomId === selectedRoomView._id ? "Completing..." : "Complete Room"}
-                      </button>
-                      <button
-                        className="field-button ghost flex-1 px-4"
-                        onClick={() => setConfirmAction(null)}
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
                     <button
-                      className="field-button primary w-full px-5"
-                      disabled={!canCompleteSelectedRoom || completingRoomId === selectedRoomView._id}
-                      onClick={() => setConfirmAction("completeRoom")}
+                      aria-expanded={isOpen}
+                      className={`w-full p-3 text-left transition ${isOpen ? "" : "hover:bg-white"}`}
+                      onClick={() => setSelectedRoomId((current) => (current === room._id ? null : room._id))}
                       type="button"
                     >
-                      {completingRoomId === selectedRoomView._id
-                        ? "Completing Room..."
-                        : selectedRoomView.status === "COMPLETED"
-                          ? "Room Completed"
-                          : "Mark Room Complete"}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold">{room.roomName}</p>
+                            {isOpen ? (
+                              <ChevronUp className="h-4 w-4 text-slate-500" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-slate-500" />
+                            )}
+                          </div>
+                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                              style={{ width: `${room.totalTasks > 0 ? (room.completedTasks / room.totalTasks) * 100 : 0}%` }}
+                            />
+                          </div>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Tasks {room.completedTasks}/{room.totalTasks} | Photos {room.photoCount}/
+                            {room.requiredPhotoMin}
+                          </p>
+                          {(room.issueCount ?? 0) > 0 ? (
+                            <p className="mt-1 text-xs text-rose-700">
+                              {room.issueCount} issue{room.issueCount === 1 ? "" : "s"} flagged
+                            </p>
+                          ) : null}
+                          {room.status !== "COMPLETED" ? (
+                            <p className="mt-1 text-xs text-amber-700">
+                              {room.totalTasks - room.completedTasks} tasks left and{" "}
+                              {Math.max(0, room.requiredPhotoMin - room.photoCount)} photos still needed
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-xs text-emerald-700">Room completed and ready.</p>
+                          )}
+                        </div>
+                        <span
+                          className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${roomStatusTone(
+                            room.status
+                          )}`}
+                        >
+                          {room.status}
+                        </span>
+                      </div>
                     </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
 
+                    {isOpen ? (
+                      <div className="border-t border-brand-100 bg-white p-4">
+                        <InspectionRoomPanel
+                          canCompleteRoom={canCompleteSelectedRoom}
+                          completingRoomId={completingRoomId}
+                          confirmAction={confirmAction}
+                          inspectionStatus={inspectionView.status}
+                          onCompleteRoom={handleCompleteRoom}
+                          onPhotoUpload={handlePhotoUpload}
+                          onRemovePhoto={handleRemovePhoto}
+                          onSaveNotes={handleSaveNotes}
+                          onTaskIssueSave={handleTaskIssueSave}
+                          onTaskToggle={handleTaskToggle}
+                          photoKind={photoKind}
+                          removingPhotoId={removingPhotoId}
+                          room={selectedRoomView}
+                          roomHasEnoughPhotos={roomHasEnoughPhotos}
+                          roomNotes={roomNotes}
+                          roomTasksComplete={roomTasksComplete}
+                          savingIssueTaskId={savingIssueTaskId}
+                          savingNotes={savingNotes}
+                          savingTaskId={savingTaskId}
+                          setConfirmAction={setConfirmAction}
+                          setPhotoKind={setPhotoKind}
+                          setRoomNotes={setRoomNotes}
+                          setTaskIssueDrafts={setTaskIssueDrafts}
+                          taskIssueDrafts={taskIssueDrafts}
+                          uploadingPhotos={uploadingPhotos}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {!selectedRoomId && !hasNoRooms ? (
+          <div className="rounded-2xl border border-dashed border-border bg-white p-4 text-sm text-slate-500">
+            Select a room to open its checklist steps.
+          </div>
+        ) : null}
+
+        <section className="space-y-4">
           <div className="rounded-2xl border border-border bg-white p-4">
             <div className="mb-3">
               <h2 className="text-lg font-bold">Finalize Checklist</h2>
@@ -1086,6 +764,15 @@ export function InspectionPage() {
             )}
           </div>
         </section>
+
+        {showChecklistSyncStatus ? (
+          <OfflineQueuePanel
+            description="Checklist actions, room notes, room completion, and photo uploads queue locally and replay when connection returns."
+            items={inspectionQueueItems}
+            maxItems={4}
+            title="Checklist Sync Status"
+          />
+        ) : null}
       </section>
 
     </div>

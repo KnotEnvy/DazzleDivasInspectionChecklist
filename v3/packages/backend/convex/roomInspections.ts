@@ -1,6 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { getRoomInspectionMetrics } from "./lib/inspectionMetrics";
+import { computeRoomInspectionMetrics } from "./lib/inspectionMetrics";
 import { requireRoomInspectionAccess } from "./lib/permissions";
 
 export const getById = query({
@@ -65,7 +65,7 @@ export const complete = mutation({
       args.roomInspectionId
     );
 
-    const metrics = await getRoomInspectionMetrics(ctx, roomInspection);
+    const metrics = await computeRoomInspectionMetrics(ctx, roomInspection._id);
 
     if (metrics.photoCount < roomInspection.requiredPhotoMin) {
       throw new Error(

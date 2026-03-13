@@ -46,7 +46,7 @@ function clampMetric(value: number) {
   return Math.max(0, value);
 }
 
-async function computeRoomInspectionMetrics(
+export async function computeRoomInspectionMetrics(
   ctx: Ctx,
   roomInspectionId: Id<"roomInspections">
 ): Promise<RoomInspectionMetrics> {
@@ -95,15 +95,14 @@ export async function getRoomInspectionMetrics(
 export async function adjustRoomInspectionMetrics(
   ctx: MutationCtx,
   roomInspectionId: Id<"roomInspections">,
-  deltas: Partial<RoomInspectionMetrics>
+  _deltas: Partial<RoomInspectionMetrics>
 ) {
   const roomInspection = await ctx.db.get(roomInspectionId);
   if (!roomInspection) {
     throw new Error("Room inspection not found");
   }
 
-  const current = await getRoomInspectionMetrics(ctx, roomInspection);
-  const next = applyRoomInspectionMetricDelta(current, deltas);
+  const next = await computeRoomInspectionMetrics(ctx, roomInspectionId);
 
   await ctx.db.patch(roomInspectionId, next);
 
