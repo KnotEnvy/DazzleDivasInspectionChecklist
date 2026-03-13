@@ -101,12 +101,12 @@ export function AppShell() {
           <CalendarDays className="mr-1 inline-block h-4 w-4" /> My Schedule
         </NavLink>
         <NavLink
-          to="/checklists/new"
+          to={isAdmin ? "/checklists/new" : "/checklists/active"}
           className={({ isActive }) =>
             `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
           }
         >
-          <ClipboardList className="mr-1 inline-block h-4 w-4" /> New Checklist
+          <ClipboardList className="mr-1 inline-block h-4 w-4" /> {isAdmin ? "New Checklist" : "Active Inspections"}
         </NavLink>
         <NavLink
           to="/history"
@@ -236,7 +236,11 @@ export function AppShell() {
           <>
             <MobileNavItem to="/" icon={<House className="h-5 w-5" />} label="Dashboard" end />
             <MobileNavItem to="/my-schedule" icon={<CalendarDays className="h-5 w-5" />} label="Schedule" />
-            <MobileNavItem to="/checklists/new" icon={<ClipboardList className="h-5 w-5" />} label="New" />
+            <MobileNavItem
+              to="/checklists/active"
+              icon={<ClipboardList className="h-5 w-5" />}
+              label="Active"
+            />
             <MobileNavItem to="/history" icon={<Clock3 className="h-5 w-5" />} label="History" />
             <button
               className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-brand-50"

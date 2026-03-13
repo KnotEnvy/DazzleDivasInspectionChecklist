@@ -4,7 +4,16 @@ import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import {
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+  Inbox,
+  Plus,
+} from "lucide-react";
 import { statusTone } from "@/lib/statusColors";
+import { EmptyState } from "@/components/EmptyState";
 
 type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
 type JobType = "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
@@ -287,6 +296,8 @@ export function AdminSchedulePage() {
     Record<string, Id<"users"> | "">
   >({});
   const [createForm, setCreateForm] = useState(buildDefaultCreateForm);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<string | null>(null);
 
   const windowStart = useMemo(() => {
     if (viewMode === "month") {
@@ -456,6 +467,7 @@ export function AdminSchedulePage() {
     setScheduledStartInput(toDatetimeLocalValue(selectedJob.scheduledStart));
     setScheduledEndInput(toDatetimeLocalValue(selectedJob.scheduledEnd));
     setStatusInput(selectedJob.status);
+    setConfirmAction(null);
   }, [selectedJob]);
 
   useEffect(() => {
@@ -725,46 +737,90 @@ export function AdminSchedulePage() {
 
   return (
     <div className="animate-fade-in space-y-5">
+      {/* ── Header + nav + view toggle ── */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Dispatch Schedule</h1>
-          <p className="text-sm text-slate-600">
-            Manual turnover dispatch for jobs coming in by email or text, with flexible daily assignment.
-          </p>
+          <p className="text-sm text-slate-600">{windowLabel}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="field-button secondary px-4" onClick={() => shiftWindow(-1)} type="button">
-            Previous
-          </button>
-          <button
-            className="field-button secondary px-4"
-            onClick={() => setAnchorDate(startOfDayLocal(new Date()))}
-            type="button"
-          >
-            Today
-          </button>
-          <button className="field-button secondary px-4" onClick={() => shiftWindow(1)} type="button">
-            Next
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1">
+            <button className="field-button secondary px-3" onClick={() => shiftWindow(-1)} type="button">
+              &larr;
+            </button>
+            <button
+              className="field-button secondary px-3"
+              onClick={() => setAnchorDate(startOfDayLocal(new Date()))}
+              type="button"
+            >
+              Today
+            </button>
+            <button className="field-button secondary px-3" onClick={() => shiftWindow(1)} type="button">
+              &rarr;
+            </button>
+          </div>
+          <div className="inline-flex rounded-full border border-border bg-slate-100 p-1 shadow-inner">
+            {(["month", "week", "day"] as ViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                className={`min-h-[36px] rounded-full px-4 text-sm font-bold capitalize transition ${
+                  viewMode === mode ? "bg-brand-700 text-white shadow-sm" : "text-slate-600 hover:text-brand-700"
+                }`}
+                onClick={() => setViewMode(mode)}
+                type="button"
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <section className="grid gap-3 md:grid-cols-4">
-        <SummaryCard label="Jobs In Window" value={summary.total} />
-        <div className={`rounded-2xl border p-4 ${summary.unassigned > 0 ? "border-amber-300 bg-amber-50" : "border-border bg-white"}`}>
-          <p className={`text-sm ${summary.unassigned > 0 ? "font-semibold text-amber-700" : "text-slate-500"}`}>Unassigned</p>
-          <p className="text-2xl font-bold">{summary.unassigned}</p>
-        </div>
-        <SummaryCard label="In Progress" value={summary.inProgress} />
-        <SummaryCard label="Blocked" value={summary.blocked} />
+      {/* ── Summary pills ── */}
+      <section className="flex flex-wrap gap-2 text-xs font-semibold">
+        <span className="rounded-full bg-brand-50 px-3 py-1.5 text-brand-700">
+          {summary.total} jobs
+        </span>
+        {summary.unassigned > 0 && (
+          <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700">
+            {summary.unassigned} unassigned
+          </span>
+        )}
+        {summary.inProgress > 0 && (
+          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">
+            {summary.inProgress} active
+          </span>
+        )}
+        {summary.blocked > 0 && (
+          <span className="rounded-full bg-rose-50 px-3 py-1.5 text-rose-700">
+            {summary.blocked} blocked
+          </span>
+        )}
       </section>
 
+      {/* ── Quick Add + Unassigned Queue ── */}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-        <section className="rounded-2xl border border-border bg-white p-4">
-          <div className="mb-3">
-            <h2 className="text-lg font-bold">Quick Add Turnover Job</h2>
-            <p className="text-sm text-slate-600">Create a clean for a specific day and assign it now or later.</p>
-          </div>
+        <section className="rounded-2xl border border-border bg-white">
+          <button
+            className="flex w-full items-center justify-between gap-3 p-4 text-left"
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            type="button"
+          >
+            <div className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-brand-600" />
+              <div>
+                <h2 className="text-lg font-bold">Quick Add Turnover Job</h2>
+                <p className="text-sm text-slate-600">Create a clean for a specific day and assign it now or later.</p>
+              </div>
+            </div>
+            {showCreateForm ? (
+              <ChevronUp className="h-5 w-5 flex-shrink-0 text-slate-400" />
+            ) : (
+              <ChevronDown className="h-5 w-5 flex-shrink-0 text-slate-400" />
+            )}
+          </button>
+          {showCreateForm && (
+          <div className="border-t border-border p-4">
           <div className="grid gap-3 lg:grid-cols-2">
             <label className="text-sm font-medium text-slate-700">
               Property
@@ -930,6 +986,8 @@ export function AdminSchedulePage() {
               {savingAction === "create" ? "Creating..." : "Create Dispatch Job"}
             </button>
           </div>
+          </div>
+          )}
         </section>
 
         <section className="rounded-2xl border border-border bg-white p-4">
@@ -943,9 +1001,16 @@ export function AdminSchedulePage() {
             </span>
           </div>
           {jobs === undefined ? (
-            <p className="text-sm text-slate-500">Loading queue...</p>
+            <div className="space-y-2">
+              <div className="skeleton h-20 rounded-xl" />
+              <div className="skeleton h-20 rounded-xl" />
+            </div>
           ) : unassignedJobs.length === 0 ? (
-            <p className="text-sm text-slate-500">No unassigned jobs in this window.</p>
+            <EmptyState
+              icon={<Inbox className="h-8 w-8" />}
+              heading="Queue is clear"
+              description="All jobs in this window have been assigned."
+            />
           ) : (
             <div className="space-y-2">
               {unassignedJobs.slice(0, 8).map((job) => (
@@ -1002,43 +1067,10 @@ export function AdminSchedulePage() {
         </section>
       </section>
 
+      {/* ── Filters ── */}
       <section className="rounded-2xl border border-border bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold">Window Controls</h2>
-            <p className="text-sm text-slate-600">{windowLabel}</p>
-          </div>
-          <div className="inline-flex rounded-full border border-border bg-slate-100 p-1 shadow-inner">
-            <button
-              className={`min-h-[36px] rounded-full px-5 text-sm font-bold transition ${
-                viewMode === "month" ? "bg-brand-700 text-white shadow-sm" : "text-slate-600 hover:text-brand-700"
-              }`}
-              onClick={() => setViewMode("month")}
-              type="button"
-            >
-              Month
-            </button>
-            <button
-              className={`min-h-[36px] rounded-full px-5 text-sm font-bold transition ${
-                viewMode === "week" ? "bg-brand-700 text-white shadow-sm" : "text-slate-600 hover:text-brand-700"
-              }`}
-              onClick={() => setViewMode("week")}
-              type="button"
-            >
-              Week
-            </button>
-            <button
-              className={`min-h-[36px] rounded-full px-5 text-sm font-bold transition ${
-                viewMode === "day" ? "bg-brand-700 text-white shadow-sm" : "text-slate-600 hover:text-brand-700"
-              }`}
-              onClick={() => setViewMode("day")}
-              type="button"
-            >
-              Day
-            </button>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <h2 className="mb-3 text-sm font-bold text-slate-600">Filters</h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm font-medium text-slate-700">
             Assignee
             <select
@@ -1122,9 +1154,17 @@ export function AdminSchedulePage() {
               </span>
             </div>
             {jobs === undefined ? (
-              <p className="text-sm text-slate-500">Loading dispatch board...</p>
+              <div className="space-y-3">
+                <div className="skeleton h-24 rounded-xl" />
+                <div className="skeleton h-24 rounded-xl" />
+                <div className="skeleton h-24 rounded-xl" />
+              </div>
             ) : filteredJobs.length === 0 ? (
-              <p className="text-sm text-slate-500">No jobs match the current filters.</p>
+              <EmptyState
+                icon={<CalendarDays className="h-8 w-8" />}
+                heading="No jobs match filters"
+                description="Adjust the filters above or change the date window."
+              />
             ) : viewMode === "month" ? (
               <div className="grid gap-3 lg:grid-cols-7">
                 {monthWeeks.flat().map((day, index) => {
@@ -1246,9 +1286,17 @@ export function AdminSchedulePage() {
           <section className="rounded-2xl border border-border bg-white p-4">
             <h2 className="mb-3 text-lg font-bold">Filtered Job List</h2>
             {jobs === undefined ? (
-              <p className="text-sm text-slate-500">Loading jobs...</p>
+              <div className="space-y-2">
+                <div className="skeleton h-16 rounded-xl" />
+                <div className="skeleton h-16 rounded-xl" />
+                <div className="skeleton h-16 rounded-xl" />
+              </div>
             ) : listJobs.length === 0 ? (
-              <p className="text-sm text-slate-500">No dispatch jobs in this window.</p>
+              <EmptyState
+                icon={<ClipboardList className="h-8 w-8" />}
+                heading="No dispatch jobs"
+                description="Create a job above or adjust the date window."
+              />
             ) : (
               <div className="space-y-2">
                 {listJobs.map((job) => (
@@ -1264,12 +1312,21 @@ export function AdminSchedulePage() {
           </section>
         </div>
 
-        <aside className="rounded-2xl border border-border bg-white p-4">
+        <aside className="xl:sticky xl:top-4 xl:self-start rounded-2xl border border-border bg-white p-4">
           <h2 className="mb-3 text-lg font-bold">Dispatch Drawer</h2>
           {!selectedJobId ? (
-            <p className="text-sm text-slate-500">Select a job to manage staffing and timing.</p>
+            <EmptyState
+              icon={<CalendarDays className="h-8 w-8" />}
+              heading="Select a job"
+              description="Pick a job from the board or list to manage staffing and timing."
+            />
           ) : selectedJob === undefined ? (
-            <p className="text-sm text-slate-500">Loading job details...</p>
+            <div className="space-y-3">
+              <div className="skeleton h-24 rounded-xl" />
+              <div className="skeleton h-6 w-2/3 rounded" />
+              <div className="skeleton h-10 rounded-xl" />
+              <div className="skeleton h-10 rounded-xl" />
+            </div>
           ) : !selectedJob ? (
             <p className="text-sm text-slate-500">Job not found.</p>
           ) : (
@@ -1455,7 +1512,7 @@ export function AdminSchedulePage() {
               <section className="rounded-2xl border border-border p-4">
                 <div className="mb-2">
                   <h3 className="font-semibold">Status</h3>
-                  <p className="text-sm text-slate-600">Dispatch controls everything except `COMPLETED`.</p>
+                  <p className="text-sm text-slate-600">Dispatch controls everything except COMPLETED.</p>
                 </div>
                 <label className="text-sm font-medium text-slate-700">
                   Status
@@ -1463,7 +1520,10 @@ export function AdminSchedulePage() {
                     className="input mt-1"
                     disabled={controlsLocked || selectedJob.status === "COMPLETED"}
                     value={statusInput}
-                    onChange={(event) => setStatusInput(event.target.value as JobStatus)}
+                    onChange={(event) => {
+                      setStatusInput(event.target.value as JobStatus);
+                      setConfirmAction(null);
+                    }}
                   >
                     {selectedJob.status === "COMPLETED" && <option value="COMPLETED">COMPLETED</option>}
                     {dispatchStatuses.map((status) => (
@@ -1473,25 +1533,57 @@ export function AdminSchedulePage() {
                     ))}
                   </select>
                 </label>
-                <button
-                  className="field-button secondary mt-3 w-full px-4"
-                  disabled={
-                    controlsLocked ||
-                    savingAction === "status" ||
-                    selectedJob.status === "COMPLETED" ||
-                    statusInput === selectedJob.status
-                  }
-                  onClick={() => void handleStatusSave()}
-                  type="button"
-                >
-                  {savingAction === "status" ? "Saving..." : "Save Status"}
-                </button>
+                {confirmAction === "cancelStatus" ? (
+                  <div className="animate-slide-up mt-3 flex gap-2">
+                    <button
+                      className="field-button danger flex-1 px-4"
+                      disabled={savingAction === "status"}
+                      onClick={() => {
+                        setConfirmAction(null);
+                        void handleStatusSave();
+                      }}
+                      type="button"
+                    >
+                      {savingAction === "status" ? "Saving..." : "Confirm Cancel"}
+                    </button>
+                    <button
+                      className="field-button ghost flex-1 px-4"
+                      onClick={() => {
+                        setConfirmAction(null);
+                        setStatusInput(selectedJob.status);
+                      }}
+                      type="button"
+                    >
+                      Nevermind
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="field-button secondary mt-3 w-full px-4"
+                    disabled={
+                      controlsLocked ||
+                      savingAction === "status" ||
+                      selectedJob.status === "COMPLETED" ||
+                      statusInput === selectedJob.status
+                    }
+                    onClick={() => {
+                      if (statusInput === "CANCELLED") {
+                        setConfirmAction("cancelStatus");
+                        return;
+                      }
+                      void handleStatusSave();
+                    }}
+                    type="button"
+                  >
+                    {savingAction === "status" ? "Saving..." : "Save Status"}
+                  </button>
+                )}
               </section>
 
               <section>
                 <h3 className="mb-2 font-semibold">Recent Events</h3>
                 {selectedJob.events.length === 0 ? (
-                  <p className="text-sm text-slate-500">No job events recorded yet.</p>
+                  <p className="text-xs text-slate-400">No events recorded yet.</p>
                 ) : (
                   <div className="space-y-2">
                     {selectedJob.events.slice(0, 8).map((event) => {
@@ -1513,15 +1605,6 @@ export function AdminSchedulePage() {
           )}
         </aside>
       </section>
-    </div>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-2xl border border-border bg-white p-4">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="text-2xl font-bold">{value}</p>
     </div>
   );
 }

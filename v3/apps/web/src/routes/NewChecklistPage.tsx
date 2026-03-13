@@ -6,6 +6,7 @@ import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
 import { Building2 } from "lucide-react";
 import { CHECKLIST_TYPES } from "@dazzle/shared";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { queueCreateInspection } from "@/lib/offlineOutbox";
 import { useOutboxCount } from "@/hooks/useOutboxCount";
@@ -18,6 +19,7 @@ type PropertyOption = {
 
 export function NewChecklistPage() {
   const navigate = useNavigate();
+  const { isAdmin, isLoading } = useCurrentUser();
   const isOnline = useNetworkStatus();
   const { refresh } = useOutboxCount();
 
@@ -29,6 +31,27 @@ export function NewChecklistPage() {
   const [propertyId, setPropertyId] = useState("");
   const [type, setType] = useState<(typeof CHECKLIST_TYPES)[number]>("CLEANING");
   const [pending, setPending] = useState(false);
+
+  if (!isLoading && !isAdmin) {
+    return (
+      <div className="animate-fade-in max-w-2xl space-y-4">
+        <EmptyState
+          icon={<Building2 className="h-8 w-8" />}
+          heading="Start checklist from a job"
+          description="Cleaners and inspectors should start checklists from My Schedule so the inspection stays tied to the assigned job."
+          action={
+            <button
+              className="field-button primary px-5"
+              onClick={() => navigate("/my-schedule")}
+              type="button"
+            >
+              Open My Schedule
+            </button>
+          }
+        />
+      </div>
+    );
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

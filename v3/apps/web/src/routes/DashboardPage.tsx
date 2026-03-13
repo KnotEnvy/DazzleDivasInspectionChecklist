@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { Building2, ClipboardList } from "lucide-react";
+import { Building2, CalendarDays, ClipboardList } from "lucide-react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useOutboxCount } from "@/hooks/useOutboxCount";
 import { useOutboxItems } from "@/hooks/useOutboxItems";
@@ -24,19 +24,29 @@ type AssignedProperty = {
 };
 
 export function DashboardPage() {
-  const { user } = useCurrentUser();
+  const { user, isAdmin } = useCurrentUser();
   const { count } = useOutboxCount();
   const { items } = useOutboxItems({ includeResolved: true });
 
-  const active = useQuery(api.inspections.listActive) as
-    | ActiveInspection[]
-    | undefined;
-  const mine = useQuery(api.propertyAssignments.listMine) as
-    | AssignedProperty[]
-    | undefined;
+  const active = useQuery(api.inspections.listActive) as ActiveInspection[] | undefined;
+  const mine = useQuery(api.propertyAssignments.listMine) as AssignedProperty[] | undefined;
 
   return (
     <div className="animate-fade-in space-y-5">
+      <section className="rounded-2xl border border-border bg-white p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
+          Welcome Back
+        </p>
+        <h1 className="mt-2 text-2xl font-bold">
+          {user?.name ? `Hi, ${user.name}` : "Welcome"}
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          {isAdmin
+            ? "Use this dashboard to monitor active checklist work, sync health, and assigned properties."
+            : "Start from your assigned jobs, resume active inspections, and keep an eye on sync status while you work."}
+        </p>
+      </section>
+
       <section className="grid gap-3 lg:grid-cols-3">
         <div className="rounded-2xl border border-border bg-white p-4">
           <p className="text-sm text-slate-500">Current role</p>
@@ -85,16 +95,30 @@ export function DashboardPage() {
       </section>
 
       <section className="flex flex-wrap gap-3">
-        <Link className="field-button go px-5" to="/checklists/new">
-          Start New Checklist
-        </Link>
+        {isAdmin ? (
+          <Link className="field-button primary px-5" to="/checklists/new">
+            Start New Checklist
+          </Link>
+        ) : (
+          <Link className="field-button primary px-5" to="/my-schedule">
+            <CalendarDays className="mr-2 inline-block h-4 w-4" />
+            Open My Schedule
+          </Link>
+        )}
         <Link className="field-button secondary px-5" to="/my-schedule">
           View My Schedule
         </Link>
+        {!isAdmin ? (
+          <Link className="field-button secondary px-5" to="/checklists/active">
+            View Active Inspections
+          </Link>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-border bg-white p-4">
-        <h2 className="mb-2 text-lg font-bold">Active Checklists</h2>
+        <h2 className="mb-2 text-lg font-bold">
+          {isAdmin ? "Active Checklists" : "Current Active Inspections"}
+        </h2>
         {active === undefined ? (
           <div className="space-y-3">
             <div className="skeleton h-16 rounded-xl" />
@@ -105,8 +129,22 @@ export function DashboardPage() {
           <EmptyState
             icon={<ClipboardList className="h-8 w-8" />}
             heading="No active checklists"
-            description="Start a new checklist from the button above or your schedule."
-            action={<Link className="field-button go px-5" to="/checklists/new">Start New Checklist</Link>}
+            description={
+              isAdmin
+                ? "Start a new checklist from the button above or your schedule."
+                : "You do not have any active inspections right now. Start one from My Schedule when a job is ready."
+            }
+            action={
+              isAdmin ? (
+                <Link className="field-button primary px-5" to="/checklists/new">
+                  Start New Checklist
+                </Link>
+              ) : (
+                <Link className="field-button primary px-5" to="/my-schedule">
+                  Go To My Schedule
+                </Link>
+              )
+            }
           />
         ) : (
           <div className="space-y-2">
@@ -118,7 +156,7 @@ export function DashboardPage() {
               >
                 <p className="font-semibold">{inspection.propertyName}</p>
                 <p className="text-sm text-slate-500">
-                  {inspection.type} • {inspection.status}
+                  {inspection.type} | {inspection.status}
                 </p>
               </Link>
             ))}

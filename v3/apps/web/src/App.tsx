@@ -14,6 +14,11 @@ const DashboardPage = lazy(() =>
 const NewChecklistPage = lazy(() =>
   import("@/routes/NewChecklistPage").then((module) => ({ default: module.NewChecklistPage }))
 );
+const ActiveInspectionsPage = lazy(() =>
+  import("@/routes/ActiveInspectionsPage").then((module) => ({
+    default: module.ActiveInspectionsPage,
+  }))
+);
 const InspectionPage = lazy(() =>
   import("@/routes/InspectionPage").then((module) => ({ default: module.InspectionPage }))
 );
@@ -75,6 +80,7 @@ export default function App() {
       >
         <Route index element={withSuspense(<DashboardPage />)} />
         <Route path="checklists/new" element={withSuspense(<NewChecklistPage />)} />
+        <Route path="checklists/active" element={withSuspense(<ActiveInspectionsPage />)} />
         <Route
           path="checklists/:inspectionId"
           element={withSuspense(<InspectionPage />)}
@@ -119,4 +125,3 @@ export default function App() {
     </Routes>
   );
 }
-
