@@ -447,10 +447,12 @@ export function InspectionPage() {
         (room) => room._id !== selectedRoomView._id && room.status !== "COMPLETED"
       );
       if (nextPendingRoom) {
-        setSelectedRoomId(nextPendingRoom._id);
+        setSelectedRoomId(null);
         requestAnimationFrame(() =>
           document.getElementById(`room-${nextPendingRoom._id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" })
         );
+      } else {
+        setSelectedRoomId(null);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to complete room");
@@ -530,7 +532,7 @@ export function InspectionPage() {
   const roomsRemaining = totals.rooms - totals.completedRooms;
   const canCompleteInspection =
     inspectionView.status !== "COMPLETED" && !hasNoRooms && roomsRemaining === 0;
-  const showChecklistSyncStatus = !isOnline || inspectionQueueItems.length > 0;
+  const showChecklistSyncStatus = !isOnline;
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -681,9 +683,7 @@ export function InspectionPage() {
                           photoKind={photoKind}
                           removingPhotoId={removingPhotoId}
                           room={selectedRoomView}
-                          roomHasEnoughPhotos={roomHasEnoughPhotos}
                           roomNotes={roomNotes}
-                          roomTasksComplete={roomTasksComplete}
                           savingIssueTaskId={savingIssueTaskId}
                           savingNotes={savingNotes}
                           savingTaskId={savingTaskId}

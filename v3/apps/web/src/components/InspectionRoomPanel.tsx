@@ -1,10 +1,10 @@
 import { ChangeEvent } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Id } from "convex/_generated/dataModel";
-import { Camera, CheckCircle2, Circle } from "lucide-react";
+import { Camera } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 import type { PhotoKind } from "@/lib/offlineOutbox";
-import { roomStatusTone, stepTone } from "@/lib/statusColors";
+import { roomStatusTone } from "@/lib/statusColors";
 
 type RoomDetail = {
   _id: Id<"roomInspections">;
@@ -32,8 +32,6 @@ type RoomDetail = {
 type InspectionRoomPanelProps = {
   inspectionStatus: "IN_PROGRESS" | "COMPLETED";
   room: RoomDetail | null | undefined;
-  roomTasksComplete: boolean;
-  roomHasEnoughPhotos: boolean;
   taskIssueDrafts: Record<string, string>;
   roomNotes: string;
   photoKind: PhotoKind;
@@ -61,8 +59,6 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
   const {
     inspectionStatus,
     room,
-    roomTasksComplete,
-    roomHasEnoughPhotos,
     taskIssueDrafts,
     roomNotes,
     photoKind,
@@ -100,6 +96,9 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
     return <p className="text-sm text-slate-500">Room not found.</p>;
   }
 
+  const roomTasksComplete = room.taskResults.every((task) => task.completed);
+  const roomHasEnoughPhotos = room.photos.length >= room.requiredPhotoMin;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -118,51 +117,6 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
         >
           {room.status}
         </span>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className={`rounded-2xl border p-3 ${stepTone(roomTasksComplete)}`}>
-          <div className="flex items-center gap-2">
-            {roomTasksComplete ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            ) : (
-              <Circle className="h-5 w-5 text-slate-400" />
-            )}
-            <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 1</p>
-          </div>
-          <p className="mt-1 font-semibold">Complete tasks</p>
-          <p className="mt-1 text-sm">
-            {room.taskResults.filter((task) => task.completed).length}/{room.taskResults.length} complete
-          </p>
-        </div>
-        <div className={`rounded-2xl border p-3 ${stepTone(roomHasEnoughPhotos)}`}>
-          <div className="flex items-center gap-2">
-            {roomHasEnoughPhotos ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            ) : (
-              <Circle className="h-5 w-5 text-slate-400" />
-            )}
-            <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 2</p>
-          </div>
-          <p className="mt-1 font-semibold">Upload proof photos</p>
-          <p className="mt-1 text-sm">
-            {room.photos.length}/{room.requiredPhotoMin} required
-          </p>
-        </div>
-        <div className={`rounded-2xl border p-3 ${stepTone(room.status === "COMPLETED")}`}>
-          <div className="flex items-center gap-2">
-            {room.status === "COMPLETED" ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            ) : (
-              <Circle className="h-5 w-5 text-slate-400" />
-            )}
-            <p className="text-xs font-semibold uppercase tracking-[0.16em]">Step 3</p>
-          </div>
-          <p className="mt-1 font-semibold">Finish room</p>
-          <p className="mt-1 text-sm">
-            {room.status === "COMPLETED" ? "Room is complete" : "Mark complete after tasks and photos"}
-          </p>
-        </div>
       </div>
 
       <div>
