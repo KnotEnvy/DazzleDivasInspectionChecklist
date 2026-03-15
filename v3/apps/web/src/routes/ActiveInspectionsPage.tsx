@@ -1,8 +1,7 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { ClipboardList } from "lucide-react";
-import { EmptyState } from "@/components/EmptyState";
+import { ButterflyEmptyState } from "@/components/ButterflyEmptyState";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 type ActiveInspection = {
@@ -14,19 +13,44 @@ type ActiveInspection = {
 };
 
 export function ActiveInspectionsPage() {
-  const { user } = useCurrentUser();
+  const { user, isCleaner, isInspector } = useCurrentUser();
   const items = useQuery(api.inspections.listActive) as ActiveInspection[] | undefined;
+
+  const copy = isCleaner
+    ? {
+        eyebrow: "Active Checklists",
+        title: "Current Active Checklists",
+        description: "Resume in-progress clean checklists from here. New clean checklists should start from assigned cleans.",
+        emptyHeading: "No active checklists",
+        emptyDescription: "Your active clean checklists will show up here once a clean is underway.",
+        cta: "Open Checklist",
+      }
+    : isInspector
+      ? {
+          eyebrow: "Active Inspections",
+          title: "Current Active Inspections",
+          description: "Resume in-progress inspections from here. New inspections should start from assigned jobs.",
+          emptyHeading: "No active inspections",
+          emptyDescription: "Your active inspections will show up here once an inspection job is underway.",
+          cta: "Open Inspection",
+        }
+      : {
+          eyebrow: "Active Work",
+          title: "Current Active Inspections",
+          description: "Resume in-progress inspections from here. New work should start from the schedule.",
+          emptyHeading: "No active work",
+          emptyDescription: "Start a checklist from dispatch or the schedule when one is ready.",
+          cta: "Open Inspection",
+        };
 
   return (
     <div className="animate-fade-in space-y-5">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
-          Active Work
+          {copy.eyebrow}
         </p>
-        <h1 className="text-2xl font-bold">Current Active Inspections</h1>
-        <p className="text-sm text-slate-600">
-          Resume in-progress inspections from here. New checklists should start from assigned jobs.
-        </p>
+        <h1 className="text-2xl font-bold">{copy.title}</h1>
+        <p className="text-sm text-slate-600">{copy.description}</p>
       </div>
 
       {items === undefined ? (
@@ -36,14 +60,10 @@ export function ActiveInspectionsPage() {
           <div className="skeleton h-20 rounded-2xl" />
         </div>
       ) : items.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardList className="h-8 w-8" />}
-          heading="No active inspections"
-          description={
-            user?.role === "ADMIN"
-              ? "Start a checklist from dispatch or create one manually if needed."
-              : "You do not have any active inspections right now. Start one from My Schedule when a job is ready."
-          }
+        <ButterflyEmptyState
+          description={copy.emptyDescription}
+          heading={copy.emptyHeading}
+          eyebrow={copy.eyebrow}
           action={
             <Link
               className="field-button primary px-5"
@@ -74,7 +94,7 @@ export function ActiveInspectionsPage() {
                   ) : null}
                 </div>
                 <span className="rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-                  Open Inspection
+                  {copy.cta}
                 </span>
               </div>
             </Link>

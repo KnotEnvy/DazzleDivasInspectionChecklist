@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { Building2, CalendarDays, ClipboardList, Clock3, MapPin } from "lucide-react";
+import { ButterflyEmptyState } from "@/components/ButterflyEmptyState";
 import { EmptyState } from "@/components/EmptyState";
 import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -56,10 +57,10 @@ function formatJobWindow(job: Pick<ScheduleJob, "scheduledStart" | "scheduledEnd
   return `${start.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
-  })} · ${start.toLocaleTimeString([], {
+  })} - ${start.toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
-  })} - ${end.toLocaleTimeString([], {
+  })} to ${end.toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
   })}`;
@@ -86,7 +87,7 @@ function workerChecklistRank(job: ScheduleJob) {
 }
 
 export function DashboardPage() {
-  const { user, isAdmin } = useCurrentUser();
+  const { user, isAdmin, isCleaner, isInspector } = useCurrentUser();
   const isOnline = useNetworkStatus();
   const { items } = useOutboxItems({ includeResolved: true });
 
@@ -124,6 +125,14 @@ export function DashboardPage() {
           </p>
         </section>
 
+        {!isOnline ? (
+          <OfflineQueuePanel
+            description="Field actions queue locally and replay when the device reconnects."
+            items={items}
+            title="Offline Outbox"
+          />
+        ) : null}
+
         <section className="grid gap-3 lg:grid-cols-3">
           <div className="rounded-2xl border border-border bg-white p-4">
             <p className="text-sm text-slate-500">Current role</p>
@@ -138,52 +147,49 @@ export function DashboardPage() {
             <p className="text-xl font-bold">{mine?.length ?? "..."}</p>
           </div>
         </section>
-
-        {!isOnline ? (
-          <OfflineQueuePanel
-            description="Field actions queue locally and replay when the device reconnects."
-            items={items}
-            title="Offline Outbox"
-          />
-        ) : null}
-
-        <section className="flex flex-wrap gap-3">
-          <Link className="field-button primary px-5" to="/checklists/new">
-            Start New Checklist
-          </Link>
-          <Link className="field-button secondary px-5" to="/my-schedule">
-            View Schedule
-          </Link>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-white p-4">
-          <h2 className="mb-2 text-lg font-bold">Assigned Properties</h2>
-          {mine === undefined ? (
-            <div className="space-y-3">
-              <div className="skeleton h-16 rounded-xl" />
-              <div className="skeleton h-16 rounded-xl" />
-              <div className="skeleton h-16 rounded-xl" />
-            </div>
-          ) : mine.length === 0 ? (
-            <EmptyState
-              icon={<Building2 className="h-8 w-8" />}
-              heading="No properties assigned yet"
-              description="Assign at least one property to see it here."
-            />
-          ) : (
-            <div className="space-y-2">
-              {mine.map((assignment) => (
-                <div key={assignment._id} className="rounded-xl border border-border p-3">
-                  <p className="font-semibold">{assignment.property?.name ?? "Unknown property"}</p>
-                  <p className="text-sm text-slate-500">{assignment.property?.address ?? ""}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
       </div>
     );
   }
+
+  const copy = isCleaner
+    ? {
+        heroDescription:
+          "Start from your next clean, then use the schedule snapshot to see the rest of your day.",
+        nextEyebrow: "Up Next",
+        nextEmptyHeading: "No cleans lined up yet",
+        nextEmptyDescription:
+          "When your next clean is ready to start, it will show up here.",
+        primaryAction: "Resume Checklist",
+        secondaryAction: "Open In Schedule",
+        scheduleEyebrow: "Clean Snapshot",
+        scheduleSummary: `${todayJobs.length} clean${todayJobs.length === 1 ? "" : "s"} scheduled today.`,
+        scheduleEmptyHeading: "No cleans today",
+        scheduleEmptyDescription: "Take a breather. Your next assigned clean will show up in the schedule.",
+        activeHeading: "Active Checklists",
+        activeEmptyHeading: "No active checklists",
+        activeEmptyDescription: "Start from My Schedule when your next clean is ready.",
+        activeCta: "Open Checklist",
+        nextButterflyHeading: "No cleans waiting",
+      }
+    : {
+        heroDescription:
+          "Start from your next inspection job, then use the schedule snapshot to see the rest of your jobs.",
+        nextEyebrow: "Up Next",
+        nextEmptyHeading: "No inspection jobs lined up yet",
+        nextEmptyDescription:
+          "Your next inspection job will show up here when it is ready to work.",
+        primaryAction: "Resume Inspection",
+        secondaryAction: "Open Job In Schedule",
+        scheduleEyebrow: "Inspection Snapshot",
+        scheduleSummary: `${todayJobs.length} job${todayJobs.length === 1 ? "" : "s"} scheduled today.`,
+        scheduleEmptyHeading: "No inspections today",
+        scheduleEmptyDescription: "You are clear for now. Check the schedule for upcoming jobs later this week.",
+        activeHeading: "Active Inspections",
+        activeEmptyHeading: "No active inspections",
+        activeEmptyDescription: "Start from My Schedule when your next inspection job is ready.",
+        activeCta: "Open Inspection",
+        nextButterflyHeading: "No inspection jobs waiting",
+      };
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -194,10 +200,7 @@ export function DashboardPage() {
         <h1 className="mt-2 text-2xl font-bold">
           {user?.name ? `Hi, ${user.name}` : "Welcome"}
         </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Start from your next checklist-ready job, then use the schedule snapshot to see the rest of
-          your day.
-        </p>
+        <p className="mt-2 text-sm text-slate-600">{copy.heroDescription}</p>
       </section>
 
       <section className="grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
@@ -205,15 +208,15 @@ export function DashboardPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">
-                Next Job Checklists
+                {copy.nextEyebrow}
               </p>
               <h2 className="mt-1 text-xl font-bold">
-                {nextJob ? nextJob.propertyName : "Nothing checklist-ready right now"}
+                {nextJob ? nextJob.propertyName : copy.nextEmptyHeading}
               </h2>
               <p className="mt-2 text-sm text-slate-600">
                 {nextJob
                   ? `${nextJob.jobType} scheduled ${formatJobWindow(nextJob)}`
-                  : "When your next assigned job is ready, it will appear here with a direct path back into the work."}
+                  : copy.nextEmptyDescription}
               </p>
             </div>
             <ClipboardList className="h-6 w-6 text-brand-700" />
@@ -221,13 +224,13 @@ export function DashboardPage() {
 
           {nextChecklistJobs.length === 0 ? (
             <div className="mt-4">
-              <EmptyState
-                icon={<ClipboardList className="h-8 w-8" />}
-                heading="No checklist-ready jobs queued up"
-                description="Use My Schedule to review upcoming work and start the next checklist when the job is ready."
+              <ButterflyEmptyState
+                description={copy.nextEmptyDescription}
+                heading={copy.nextButterflyHeading}
+                eyebrow={copy.nextEyebrow}
                 action={
                   <Link className="field-button primary px-5" to="/my-schedule">
-                    Open My Schedule
+                    View Schedule
                   </Link>
                 }
               />
@@ -254,11 +257,11 @@ export function DashboardPage() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {job.linkedInspectionId ? (
                       <Link className="field-button primary px-4" to={`/checklists/${job.linkedInspectionId}`}>
-                        Resume Checklist
+                        {copy.primaryAction}
                       </Link>
                     ) : (
                       <Link className="field-button primary px-4" to="/my-schedule">
-                        Open In Schedule
+                        {copy.secondaryAction}
                       </Link>
                     )}
                     <Link className="field-button secondary px-4" to="/my-schedule">
@@ -275,12 +278,10 @@ export function DashboardPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">
-                Schedule Snapshot
+                {copy.scheduleEyebrow}
               </p>
               <h2 className="mt-1 text-xl font-bold">Today</h2>
-              <p className="mt-2 text-sm text-slate-600">
-                {todayJobs.length} job{todayJobs.length === 1 ? "" : "s"} scheduled today.
-              </p>
+              <p className="mt-2 text-sm text-slate-600">{copy.scheduleSummary}</p>
             </div>
             <CalendarDays className="h-6 w-6 text-brand-700" />
           </div>
@@ -292,11 +293,18 @@ export function DashboardPage() {
               <div className="skeleton h-16 rounded-xl" />
             </div>
           ) : todayJobs.length === 0 ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-border bg-slate-50 p-4">
-              <p className="font-semibold text-slate-800">No jobs scheduled today</p>
-              <p className="mt-1 text-sm text-slate-600">
-                Check your full schedule for upcoming assignments later this week.
-              </p>
+            <div className="mt-4">
+              <ButterflyEmptyState
+                animated
+                description={copy.scheduleEmptyDescription}
+                heading={copy.scheduleEmptyHeading}
+                eyebrow={copy.scheduleEyebrow}
+                action={
+                  <Link className="field-button secondary px-5" to="/my-schedule">
+                    View Full Schedule
+                  </Link>
+                }
+              />
             </div>
           ) : (
             <div className="mt-4 space-y-3">
@@ -331,17 +339,17 @@ export function DashboardPage() {
       ) : null}
 
       <section className="rounded-2xl border border-border bg-white p-4">
-        <h2 className="mb-2 text-lg font-bold">Active Inspections</h2>
+        <h2 className="mb-2 text-lg font-bold">{copy.activeHeading}</h2>
         {active === undefined ? (
           <div className="space-y-3">
             <div className="skeleton h-16 rounded-xl" />
             <div className="skeleton h-16 rounded-xl" />
           </div>
         ) : active.length === 0 ? (
-          <EmptyState
-            icon={<ClipboardList className="h-8 w-8" />}
-            heading="No active inspections right now"
-            description="Start from My Schedule when your next job is ready."
+          <ButterflyEmptyState
+            description={copy.activeEmptyDescription}
+            heading={copy.activeEmptyHeading}
+            eyebrow={copy.activeHeading}
             action={
               <Link className="field-button primary px-5" to="/my-schedule">
                 Go To My Schedule
@@ -360,36 +368,41 @@ export function DashboardPage() {
                 <p className="text-sm text-slate-500">
                   {inspection.type} | {inspection.status}
                 </p>
+                <span className="mt-2 inline-flex rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
+                  {copy.activeCta}
+                </span>
               </Link>
             ))}
           </div>
         )}
       </section>
 
-      <section className="rounded-2xl border border-border bg-white p-4">
-        <h2 className="mb-2 text-lg font-bold">Assigned Properties</h2>
-        {mine === undefined ? (
-          <div className="space-y-3">
-            <div className="skeleton h-16 rounded-xl" />
-            <div className="skeleton h-16 rounded-xl" />
-          </div>
-        ) : mine.length === 0 ? (
-          <EmptyState
-            icon={<Building2 className="h-8 w-8" />}
-            heading="No properties assigned yet"
-            description="An admin needs to assign you to one or more properties before they appear here."
-          />
-        ) : (
-          <div className="space-y-2">
-            {mine.slice(0, 4).map((assignment) => (
-              <div key={assignment._id} className="rounded-xl border border-border p-3">
-                <p className="font-semibold">{assignment.property?.name ?? "Unknown property"}</p>
-                <p className="text-sm text-slate-500">{assignment.property?.address ?? ""}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      {isInspector ? (
+        <section className="rounded-2xl border border-border bg-white p-4">
+          <h2 className="mb-2 text-lg font-bold">Assigned Properties</h2>
+          {mine === undefined ? (
+            <div className="space-y-3">
+              <div className="skeleton h-16 rounded-xl" />
+              <div className="skeleton h-16 rounded-xl" />
+            </div>
+          ) : mine.length === 0 ? (
+            <EmptyState
+              icon={<Building2 className="h-8 w-8" />}
+              heading="No properties assigned yet"
+              description="An admin needs to assign you to one or more properties before they appear here."
+            />
+          ) : (
+            <div className="space-y-2">
+              {mine.slice(0, 4).map((assignment) => (
+                <div key={assignment._id} className="rounded-xl border border-border p-3">
+                  <p className="font-semibold">{assignment.property?.name ?? "Unknown property"}</p>
+                  <p className="text-sm text-slate-500">{assignment.property?.address ?? ""}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }
