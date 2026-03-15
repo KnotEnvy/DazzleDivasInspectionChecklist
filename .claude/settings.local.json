@@ -32,7 +32,10 @@
       "Bash(find \"D:\\\\Javascript Webapps\\\\DazzleDivasInspectionChecklist\\\\v3\\\\apps\\\\web\\\\src\" -type f -name \"*.tsx\" | xargs grep -l \"confirm\\\\|Dialog\\\\|Modal\" | head -10)",
       "Bash(find \"/d/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web/src\" -type f -name \"*.tsx\" | xargs grep -l \"autoFocus\\\\|password.*toggle\\\\|visibility\" 2>/dev/null || true)",
       "Bash(cd \"D:\\\\Javascript Webapps\\\\DazzleDivasInspectionChecklist\\\\v3\\\\apps\\\\web\" && npx vite build 2>&1)",
-      "Bash(cd \"D:\\\\Javascript Webapps\\\\DazzleDivasInspectionChecklist\\\\v3\\\\apps\\\\web\" && npx vite build 2>&1 | tail -5)"
+      "Bash(cd \"D:\\\\Javascript Webapps\\\\DazzleDivasInspectionChecklist\\\\v3\\\\apps\\\\web\" && npx vite build 2>&1 | tail -5)",
+      "Bash(cd \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web\" && npx vite build 2>&1 | tail -10)",
+      "Bash(cd \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web\" && npx vite build 2>&1 | tail -5)",
+      "Bash(cd \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web\" && npx vite build 2>&1 | tail -15)"
     ]
   }
 }
