@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Pilot Deployment Runbook
 
-Updated: March 10, 2026
+Updated: March 15, 2026
 
 ## Pilot Readiness Recommendation
 v3 is ready for a tightly controlled pilot with 1-2 cleaners and 1-2 inspectors if:
@@ -9,6 +9,11 @@ v3 is ready for a tightly controlled pilot with 1-2 cleaners and 1-2 inspectors 
 - the team accepts that invite/reset-password flow is still manual
 
 This is a pilot-only recommendation, not a broad rollout recommendation.
+
+Current note:
+- the app is now in finalization mode
+- the last major product feature is admin completed-checklist review with photo download/export
+- deployment should be treated as the phase immediately after that slice lands
 
 ## Recommended Free Host
 Use Cloudflare Pages for the frontend pilot deployment.
@@ -75,6 +80,7 @@ What the seed adds:
 - keep the pilot group small enough that queue conflicts can be reviewed manually
 - ask cleaners to report any sync warning immediately with a screenshot of the queue panel
 - review completed history and one report per day during the pilot week
+- once completed photo download lands, validate the Breezeway upload workflow daily during pilot week
 
 ## Known Non-Blocking Gaps
 - no invite/reset-password flow yet

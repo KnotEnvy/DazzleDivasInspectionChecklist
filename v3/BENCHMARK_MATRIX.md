@@ -1,41 +1,58 @@
 # Dazzle Divas v3 Competitive Benchmark Matrix
 
-Updated: March 8, 2026
+Updated: March 15, 2026
 
 Legend:
-- Gap severity: `P0` = blocks operational baseline, `P1` = high-value gap, `P2` = polish/optimization.
-- Owner is the suggested workstream owner (assign names as staffing is finalized).
+- `P0`: blocks production finalization
+- `P1`: high-value follow-up after launch
+- `P2`: polish or later optimization
 
-| Capability | Breezeway Support | Peer Support (Turno/Hostaway/ResortCleaning) | v3 Current Status | Gap Severity | Owner |
-| --- | --- | --- | --- | --- | --- |
-| Property CRUD (create/edit/archive) | Yes (baseline) | Yes | Implemented in app via `/admin/properties` with archive/unarchive and operations metadata. | Closed for M1 | Workstream A |
-| Property operations metadata (timezone/access/entry/service notes) | Yes | Yes | Implemented in schema + admin forms. | Closed for M1 | Workstream A |
-| Property assignment visibility | Yes | Yes | Assignment counts surfaced; assignment workflows exist in backend/admin flows. | P1 (UI polish + bulk ops) | Workstream A |
-| Recurring service plans per property | Yes | Yes | Implemented `servicePlans` schema + CRUD. | Closed for M1 (core) | Workstream B |
-| Job generation from plans | Yes | Yes | Implemented `scheduling.generateJobs({from,to})` with idempotency and timezone-aware scheduling. | Closed for M1 (core) | Workstream B |
-| Dispatch calendar (global admin board) | Yes | Yes | Implemented `/schedule` with month/week/day views, manual job creation, unassigned queue, drawer actions, and checklist launch. | Closed for M1 (core) | Workstream C |
-| Assignee schedule calendar/list | Yes | Yes | Implemented `/my-schedule` with worker-focused current-job flow, start/resume checklist CTA, and assignee-safe status controls. | Closed for M1 (core) | Workstream C |
-| Reassign/reschedule jobs in UI | Yes | Yes | Implemented in `/schedule` with overlap guardrails, queue assignment, and save-all dispatch edits. | Closed for M1 (core) | Workstream C |
-| Manual turnover dispatch | Yes | Yes | Implemented manual admin job creation for specific days with optional assignee and unassigned queue flow. | Closed for M1 (core) | Workstream C |
-| Job lifecycle audit trail | Yes | Yes | Implemented `jobEvents` + events for generation/checklist start/checklist completion. | Closed for M1 (core) | Workstream B/D |
-| Job to checklist linkage | Yes | Yes | Implemented via `inspections.create({ jobId })` and linked status transitions. | Closed for M1 | Workstream D |
-| Mobile-friendly job execution | Yes | Yes | Implemented worker-first `/my-schedule` plus room-first checklist execution. | P1 (deeper field UX polish) | Workstream D |
-| Inspection evidence capture (tasks/photos) | Yes | Yes | Implemented with room-first tasks, proof photos, notes, and issue capture. | Closed for M1 | Workstream D |
-| Turnover intake metadata | Yes | Yes | Implemented as first-class source/client/arrival-deadline data on manual jobs and surfaced in schedule UI. | Closed for M1 | Workstream C |
-| Offline reliability beyond checklist creation | Yes | Yes | Partially implemented with generalized outbox + replay for major field actions. | P0 (hardening remaining) | Workstream E |
-| Conflict resolution policy + replay diagnostics | Yes | Yes | Diagnostics UI is shipped and replay failures can surface as `CONFLICT`, but resolution semantics and operator recovery are still incomplete. | P0 | Workstream E |
-| Issue capture for failed inspection items | Yes | Mixed | Implemented at task level with notes and surfaced in history/report output. | Closed for current rollout baseline | Workstream D |
-| Messaging/notifications | Yes | Mixed | Not yet implemented. | P1 | Workstream F |
-| Reporting (completion rate/SLA/photo compliance) | Yes | Mixed | Not yet implemented beyond basic history/report output. | P1 | Workstream F |
+## Summary
+v3 is now close to operational parity for the core cleaner workflow.
 
-## Milestone Parity Snapshot
+The biggest remaining product gap versus the real-world Breezeway workflow is not field execution anymore.
+It is admin post-completion handling:
+- reviewing completed checklist evidence
+- downloading the finished photo set cleanly for client upload
 
-### M1: Operational Baseline
-- Progress: operational baseline is effectively shipped.
-- Remaining `P0`: replay conflict policy and recovery hardening for field rollout confidence.
+## Matrix
 
-### M2: Field-Ready Reliability
-- Primary focus: finish Workstream E hardening and complete deployment smoke validation.
+| Capability | Breezeway / Peer Baseline | v3 Status | Gap Severity |
+| --- | --- | --- | --- |
+| Property CRUD and metadata | Standard | Shipped | Closed |
+| Staffing and role-aware assignments | Standard | Shipped | Closed |
+| Service plans and generated jobs | Standard | Shipped | Closed |
+| Manual turnover job dispatch | Standard | Shipped | Closed |
+| Admin dispatch calendar | Standard | Shipped | Closed |
+| Worker schedule and job flow | Standard | Shipped | Closed |
+| Room-first checklist execution | Strong baseline | Shipped | Closed |
+| Task issue capture with notes | Standard | Shipped | Closed |
+| Proof photo capture | Standard | Shipped | Closed |
+| Offline queue and replay | Strong baseline | Shipped with rollout hardening | Closed for pilot / monitor in production |
+| Completed checklist history list | Standard | Shipped, but basic | P1 |
+| Completed checklist review UX | Standard | Partial, not yet admin-optimized | P0 |
+| Completed photo evidence visibility | Standard | Partial | P0 |
+| Completed photo download/export | Critical for actual admin workflow | Not yet finished | P0 |
+| Breezeway handoff friendliness | Critical for target use case | Not yet finished | P0 |
+| Notifications and messaging | Often present | Not implemented | P1 |
+| Reporting dashboards | Often present | Minimal/basic only | P1 |
+| Invite/reset-password flow | Standard | Not implemented | P1 |
 
-### M3: Competitive Hardening
-- Primary focus: reporting, notifications, and closing high-impact `P1` gaps after field feedback arrives.
+## Current Competitive Read
+
+### Strong Now
+- cleaner mobile workflow
+- schedule-driven operations
+- evidence capture during execution
+- offline field reliability
+
+### Still Weak
+- admin end-of-job review workflow
+- admin evidence export workflow
+- final production deployment readiness
+
+## Finalization Recommendation
+Do not branch into more optional platform features until these are closed:
+1. admin completed checklist review
+2. photo evidence download/export
+3. deployment hardening and release
