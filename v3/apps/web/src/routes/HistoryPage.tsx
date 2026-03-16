@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+﻿import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { Clock3 } from "lucide-react";
@@ -13,14 +13,121 @@ type CompletedInspection = {
   issueCount?: number;
 };
 
+function isSameLocalDay(timestamp: number, referenceDate: Date) {
+  const value = new Date(timestamp);
+
+  return (
+    value.getFullYear() === referenceDate.getFullYear() &&
+    value.getMonth() === referenceDate.getMonth() &&
+    value.getDate() === referenceDate.getDate()
+  );
+}
+
+function formatCompletionTime(timestamp: number, referenceDate: Date) {
+  const completedAt = new Date(timestamp);
+
+  if (isSameLocalDay(timestamp, referenceDate)) {
+    return completedAt.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  return completedAt.toLocaleString();
+}
+
+function HistorySection({
+  heading,
+  description,
+  items,
+  referenceDate,
+}: {
+  heading: string;
+  description: string;
+  items: CompletedInspection[];
+  referenceDate: Date;
+}) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-lg font-bold">{heading}</h2>
+        <p className="text-sm text-slate-600">{description}</p>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-white p-4 text-sm text-slate-500">
+          No completed checklists in this section yet.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => {
+            const completedAt = item.completedAt ?? item._creationTime;
+
+            return (
+              <Link
+                key={item._id}
+                to={`/checklists/${item._id}`}
+                className="block rounded-2xl border border-border bg-white p-4 transition hover:border-brand-400"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{item.propertyName}</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {item.type} | Finished {formatCompletionTime(completedAt, referenceDate)}
+                    </p>
+                  </div>
+                  {(item.issueCount ?? 0) > 0 ? (
+                    <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+                      {item.issueCount} issue{item.issueCount === 1 ? "" : "s"}
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      No issues
+                    </span>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function HistoryPage() {
   const items = useQuery(api.inspections.listCompleted) as
     | CompletedInspection[]
     | undefined;
+  const referenceDate = new Date();
+  const todayLabel = referenceDate.toLocaleDateString([], {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  const todayItems =
+    items?.filter((item) => isSameLocalDay(item.completedAt ?? item._creationTime, referenceDate)) ?? [];
+  const earlierItems =
+    items?.filter((item) => !isSameLocalDay(item.completedAt ?? item._creationTime, referenceDate)) ?? [];
 
   return (
-    <div className="animate-fade-in space-y-4">
-      <h1 className="text-2xl font-bold">Completed Checklists</h1>
+    <div className="animate-fade-in space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Completed Checklists</h1>
+          <p className="text-sm text-slate-600">
+            Start with today&apos;s finished jobs so admin can review photos quickly.
+          </p>
+        </div>
+        {items ? (
+          <div className="rounded-2xl border border-border bg-white px-4 py-3 text-sm text-slate-600">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Today</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900">{todayItems.length}</p>
+            <p>Finished on {todayLabel}</p>
+          </div>
+        ) : null}
+      </div>
 
       {items === undefined ? (
         <div className="space-y-3">
@@ -35,27 +142,20 @@ export function HistoryPage() {
           description="Checklists you finish will appear here for review."
         />
       ) : (
-        <div className="space-y-2">
-          {items.map((item) => (
-            <Link
-              key={item._id}
-              to={`/checklists/${item._id}`}
-              className="block rounded-xl border border-border bg-white p-3 transition hover:border-brand-400"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <p className="font-semibold">{item.propertyName}</p>
-                {(item.issueCount ?? 0) > 0 ? (
-                  <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
-                    {item.issueCount} issue{item.issueCount === 1 ? "" : "s"}
-                  </span>
-                ) : null}
-              </div>
-              <p className="text-sm text-slate-600">
-                {item.type} | {new Date(item.completedAt ?? item._creationTime).toLocaleString()}
-              </p>
-            </Link>
-          ))}
-        </div>
+        <>
+          <HistorySection
+            heading="Finished Today"
+            description="Open any job here to review notes and save the completed photos."
+            items={todayItems}
+            referenceDate={referenceDate}
+          />
+          <HistorySection
+            heading="Earlier Jobs"
+            description="Older completed jobs stay here for follow-up review."
+            items={earlierItems}
+            referenceDate={referenceDate}
+          />
+        </>
       )}
     </div>
   );

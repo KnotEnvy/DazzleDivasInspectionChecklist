@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+﻿import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
@@ -10,6 +10,7 @@ import {
   jobStatusValidator,
   servicePlanTypeValidator,
 } from "./lib/validators";
+import { getJobDeleteBlockReason } from "./lib/jobDeletion";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -621,6 +622,40 @@ export const updateStatus = mutation({
   },
 });
 
+export const remove = mutation({
+  args: {
+    jobId: v.id("jobs"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const job = await ctx.db.get(args.jobId);
+    if (!job) {
+      throw new Error("Job not found");
+    }
+
+    const deleteBlockReason = getJobDeleteBlockReason(job);
+    if (deleteBlockReason) {
+      throw new Error(deleteBlockReason);
+    }
+
+    const events = await ctx.db
+      .query("jobEvents")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+
+    for (const event of events) {
+      await ctx.db.delete(event._id);
+    }
+
+    await ctx.db.delete(job._id);
+
+    return {
+      deletedJobId: job._id,
+      deletedEventCount: events.length,
+    };
+  },
+});
 export const updateMyStatus = mutation({
   args: {
     jobId: v.id("jobs"),
@@ -651,3 +686,4 @@ export const updateMyStatus = mutation({
     return job._id;
   },
 });
+

@@ -17,6 +17,7 @@ import type * as jobs from "../jobs.js";
 import type * as lib_checklistTemplates from "../lib/checklistTemplates.js";
 import type * as lib_inspectionMetrics from "../lib/inspectionMetrics.js";
 import type * as lib_inspectionReporting from "../lib/inspectionReporting.js";
+import type * as lib_jobDeletion from "../lib/jobDeletion.js";
 import type * as lib_jobLifecycle from "../lib/jobLifecycle.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_propertySummaries from "../lib/propertySummaries.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   "lib/checklistTemplates": typeof lib_checklistTemplates;
   "lib/inspectionMetrics": typeof lib_inspectionMetrics;
   "lib/inspectionReporting": typeof lib_inspectionReporting;
+  "lib/jobDeletion": typeof lib_jobDeletion;
   "lib/jobLifecycle": typeof lib_jobLifecycle;
   "lib/permissions": typeof lib_permissions;
   "lib/propertySummaries": typeof lib_propertySummaries;

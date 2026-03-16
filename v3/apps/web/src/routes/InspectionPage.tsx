@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+﻿import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { Link } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
@@ -6,7 +6,9 @@ import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { CompletedInspectionReview } from "@/components/CompletedInspectionReview";
 import { InspectionRoomPanel } from "@/components/InspectionRoomPanel";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxItems } from "@/hooks/useOutboxItems";
 import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
@@ -68,8 +70,48 @@ type RoomDetail = {
   }>;
 };
 
+type CompletedReview = {
+  property_name: string;
+  property_address: string;
+  checklist_type: "CLEANING" | "INSPECTION";
+  assignee_name?: string;
+  inspection_date: string;
+  status: "COMPLETED";
+  notes: string | null;
+  issue_count: number;
+  photo_count: number;
+  rooms: Array<{
+    room_inspection_id: Id<"roomInspections">;
+    room_name: string;
+    status: "PENDING" | "COMPLETED";
+    notes: string | null;
+    required_photo_min: number;
+    issue_count: number;
+    photo_count: number;
+    tasks: Array<{
+      description: string;
+      completed: boolean;
+      has_issue: boolean;
+      issue_notes: string | null;
+    }>;
+    photos: Array<{
+      photo_id: Id<"photos">;
+      room_inspection_id: Id<"roomInspections">;
+      room_name: string;
+      file_name: string;
+      file_size: number;
+      mime_type: string;
+      kind: PhotoKind | null;
+      url: string | null;
+      captured_at: string;
+      export_file_name: string;
+    }>;
+  }>;
+};
+
 export function InspectionPage() {
   const navigate = useNavigate();
+  const { isAdmin } = useCurrentUser();
   const isOnline = useNetworkStatus();
   const params = useParams();
   const inspectionId = params.inspectionId as Id<"inspections"> | undefined;
@@ -81,10 +123,15 @@ export function InspectionPage() {
   const { items: outboxItems } = useOutboxItems({ includeResolved: true });
 
   const [selectedRoomId, setSelectedRoomId] = useState<Id<"roomInspections"> | null>(null);
+  const isCompletedAdminReview = isAdmin && inspection?.status === "COMPLETED";
   const selectedRoom = useQuery(
     api.roomInspections.getById,
-    selectedRoomId ? { roomInspectionId: selectedRoomId } : "skip"
+    !isCompletedAdminReview && selectedRoomId ? { roomInspectionId: selectedRoomId } : "skip"
   ) as RoomDetail | null | undefined;
+  const completedReview = useQuery(
+    api.inspections.getCompletedReview,
+    inspectionId && isCompletedAdminReview ? { inspectionId } : "skip"
+  ) as CompletedReview | null | undefined;
 
   const completeInspection = useMutation(api.inspections.complete);
   const setTaskCompleted = useMutation(api.taskResults.setCompleted);
@@ -511,6 +558,43 @@ export function InspectionPage() {
     return <p className="text-slate-600">Checklist not found.</p>;
   }
 
+  if (isCompletedAdminReview) {
+    if (completedReview === undefined) {
+      return (
+        <div className="space-y-4">
+          <div className="skeleton h-6 w-2/3 rounded" />
+          <div className="skeleton h-4 w-full rounded" />
+          <div className="skeleton h-32 rounded-2xl" />
+        </div>
+      );
+    }
+
+    if (!completedReview) {
+      return <p className="text-slate-600">Completed review not found.</p>;
+    }
+
+    return (
+      <div className="animate-fade-in space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
+              {inspectionView.type}
+            </p>
+            <h1 className="text-2xl font-bold">{inspectionView.propertyName}</h1>
+            <p className="text-sm text-slate-600">
+              Completed checklists stay read-only for admin review and photo saving.
+            </p>
+          </div>
+          <Link className="field-button secondary px-4" to="/history">
+            Back to History
+          </Link>
+        </div>
+
+        <CompletedInspectionReview review={completedReview} />
+      </div>
+    );
+  }
+
   const selectedRoomSummary =
     inspectionView.roomInspections.find((room) => room._id === selectedRoomId) ?? null;
   const roomTasksComplete =
@@ -787,3 +871,6 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+
+

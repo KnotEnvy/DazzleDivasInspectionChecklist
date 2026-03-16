@@ -1,9 +1,10 @@
-import { query, mutation } from "./_generated/server";
+﻿import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import {
   requireAuth,
+  requireAdmin,
   requireInspectionAccess,
   assertPropertyAccessForChecklist,
 } from "./lib/permissions";
@@ -22,6 +23,7 @@ import {
 } from "./lib/inspectionMetrics";
 import {
   buildCompletedInspectionHistoryItem,
+  buildCompletedInspectionReview,
   buildInspectionReport,
 } from "./lib/inspectionReporting";
 import {
@@ -353,6 +355,69 @@ export const complete = mutation({
   },
 });
 
+export const getCompletedReview = query({
+  args: { inspectionId: v.id("inspections") },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const inspection = await ctx.db.get(args.inspectionId);
+    if (!inspection) {
+      throw new Error("Inspection not found");
+    }
+
+    if (inspection.status !== "COMPLETED") {
+      throw new Error("Completed review is only available for completed checklists");
+    }
+
+    const property = await ctx.db.get(inspection.propertyId);
+
+    const roomInspections = (
+      await ctx.db
+        .query("roomInspections")
+        .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
+        .collect()
+    ).sort((a, b) => a._creationTime - b._creationTime);
+
+    const [taskResults, photos] = await Promise.all([
+      loadInspectionTaskResults(ctx, args.inspectionId, roomInspections),
+      ctx.db
+        .query("photos")
+        .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
+        .collect(),
+    ]);
+
+    const roomSortIndex = new Map(
+      roomInspections.map((roomInspection, index) => [roomInspection._id, index])
+    );
+
+    const photosWithUrls = await Promise.all(
+      photos
+        .sort((a, b) => {
+          const roomIndexDelta =
+            (roomSortIndex.get(a.roomInspectionId) ?? Number.MAX_SAFE_INTEGER) -
+            (roomSortIndex.get(b.roomInspectionId) ?? Number.MAX_SAFE_INTEGER);
+
+          if (roomIndexDelta !== 0) {
+            return roomIndexDelta;
+          }
+
+          return a._creationTime - b._creationTime;
+        })
+        .map(async (photo) => ({
+          ...photo,
+          url: await ctx.storage.getUrl(photo.storageId),
+        }))
+    );
+
+    return buildCompletedInspectionReview({
+      inspection,
+      property,
+      roomInspections,
+      taskResults,
+      photos: photosWithUrls,
+    });
+  },
+});
 export const getFullReport = query({
   args: { inspectionId: v.id("inspections") },
   handler: async (ctx, args) => {
@@ -400,4 +465,5 @@ export const getFullReport = query({
     });
   },
 });
+
 

@@ -207,29 +207,6 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-slate-50 p-4">
-        <div className="mb-2">
-          <h3 className="font-semibold">Step 3A: Room notes</h3>
-          <p className="text-sm text-slate-600">
-            Capture exceptions, follow-up details, or anything the next shift should know.
-          </p>
-        </div>
-        <textarea
-          className="input min-h-28"
-          disabled={inspectionStatus === "COMPLETED"}
-          onChange={(event) => setRoomNotes(event.target.value)}
-          value={roomNotes}
-        />
-        <button
-          className="field-button secondary mt-3 px-4"
-          disabled={inspectionStatus === "COMPLETED" || savingNotes}
-          onClick={() => void onSaveNotes()}
-          type="button"
-        >
-          {savingNotes ? "Saving..." : "Save Room Notes"}
-        </button>
-      </div>
-
       <div className="rounded-2xl border border-dashed border-brand-300 bg-slate-50 p-4">
         <div className="mb-3">
           <h3 className="font-semibold">Step 2: Upload proof photos</h3>
@@ -342,6 +319,29 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-slate-50 p-4">
+        <div className="mb-2">
+          <h3 className="font-semibold">Step 3A: Room notes</h3>
+          <p className="text-sm text-slate-600">
+            Capture exceptions, follow-up details, or anything the next shift should know.
+          </p>
+        </div>
+        <textarea
+          className="input min-h-28"
+          disabled={inspectionStatus === "COMPLETED"}
+          onChange={(event) => setRoomNotes(event.target.value)}
+          value={roomNotes}
+        />
+        <button
+          className="field-button secondary mt-3 px-4"
+          disabled={inspectionStatus === "COMPLETED" || savingNotes}
+          onClick={() => void onSaveNotes()}
+          type="button"
+        >
+          {savingNotes ? "Saving..." : "Save Room Notes"}
+        </button>
       </div>
 
       <div className="rounded-2xl border border-border bg-white p-4">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
@@ -28,6 +28,7 @@ type SavingAction =
   | "status"
   | "saveAll"
   | "checklist"
+  | "delete"
   | null;
 
 type DispatchJob = {
@@ -258,6 +259,26 @@ function requiredRoleForJobType(jobType: JobType) {
   return jobType === "INSPECTION" ? "INSPECTOR" : "CLEANER";
 }
 
+function getDeleteBlockReason(job: DispatchDetail | null | undefined) {
+  if (!job) {
+    return "Select a job to delete";
+  }
+
+  if (job.linkedInspectionId) {
+    return "Jobs with linked checklists stay protected. Cancel them instead.";
+  }
+
+  if (job.status === "IN_PROGRESS") {
+    return "In-progress jobs cannot be deleted.";
+  }
+
+  if (job.status === "COMPLETED") {
+    return "Completed jobs are kept for history.";
+  }
+
+  return null;
+}
+
 function buildDefaultCreateForm() {
   const start = new Date();
   start.setMinutes(0, 0, 0);
@@ -333,6 +354,7 @@ export function AdminSchedulePage() {
   const reassignJob = useMutation(api.jobs.reassign);
   const rescheduleJob = useMutation(api.jobs.reschedule);
   const updateStatus = useMutation(api.jobs.updateStatus);
+  const deleteJob = useMutation(api.jobs.remove);
   const createInspection = useMutation(api.inspections.create);
 
   const assigneeUsers = useMemo(
@@ -605,6 +627,26 @@ export function AdminSchedulePage() {
     }
   }
 
+  async function handleDeleteJob() {
+    if (!selectedJob) {
+      return;
+    }
+
+    setSavingAction("delete");
+    try {
+      await deleteJob({
+        jobId: selectedJob._id,
+      });
+      toast.success("Job deleted from dispatch");
+      setConfirmAction(null);
+      setSelectedJobId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete job");
+    } finally {
+      setSavingAction(null);
+    }
+  }
+
   async function handleSaveAllDispatchChanges() {
     if (!selectedJob) {
       return;
@@ -730,6 +772,8 @@ export function AdminSchedulePage() {
       scheduledStartInput !== toDatetimeLocalValue(selectedJob.scheduledStart) ||
       scheduledEndInput !== toDatetimeLocalValue(selectedJob.scheduledEnd) ||
       (selectedJob.status !== "COMPLETED" && statusInput !== selectedJob.status));
+  const deleteBlockReason = getDeleteBlockReason(selectedJob);
+  const canDeleteSelectedJob = !!selectedJob && deleteBlockReason === null;
   const windowLabel =
     viewMode === "month"
       ? anchorDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })
@@ -737,7 +781,7 @@ export function AdminSchedulePage() {
 
   return (
     <div className="animate-fade-in space-y-5">
-      {/* ── Header + nav + view toggle ── */}
+      {/* â”€â”€ Header + nav + view toggle â”€â”€ */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Dispatch Schedule</h1>
@@ -776,7 +820,7 @@ export function AdminSchedulePage() {
         </div>
       </div>
 
-      {/* ── Summary pills ── */}
+      {/* â”€â”€ Summary pills â”€â”€ */}
       <section className="flex flex-wrap gap-2 text-xs font-semibold">
         <span className="rounded-full bg-brand-50 px-3 py-1.5 text-brand-700">
           {summary.total} jobs
@@ -798,7 +842,7 @@ export function AdminSchedulePage() {
         )}
       </section>
 
-      {/* ── Quick Add + Unassigned Queue ── */}
+      {/* â”€â”€ Quick Add + Unassigned Queue â”€â”€ */}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <section className="rounded-2xl border border-border bg-white">
           <button
@@ -1067,7 +1111,7 @@ export function AdminSchedulePage() {
         </section>
       </section>
 
-      {/* ── Filters ── */}
+      {/* â”€â”€ Filters â”€â”€ */}
       <section className="rounded-2xl border border-border bg-white p-4">
         <h2 className="mb-3 text-sm font-bold text-slate-600">Filters</h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1580,6 +1624,49 @@ export function AdminSchedulePage() {
                 )}
               </section>
 
+              <section className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                <div className="mb-2">
+                  <h3 className="font-semibold text-rose-900">Delete Job</h3>
+                  <p className="text-sm text-rose-700">
+                    Remove duplicate or bad dispatch entries before they turn into checklist history.
+                  </p>
+                </div>
+                <p className="text-sm text-rose-800">
+                  {deleteBlockReason ?? "This removes the job and its dispatch event log. Linked, in-progress, and completed jobs stay protected."}
+                </p>
+                {confirmAction === "deleteJob" ? (
+                  <div className="animate-slide-up mt-3 flex gap-2">
+                    <button
+                      className="field-button danger flex-1 px-4"
+                      disabled={!canDeleteSelectedJob || savingAction === "delete"}
+                      onClick={() => {
+                        setConfirmAction(null);
+                        void handleDeleteJob();
+                      }}
+                      type="button"
+                    >
+                      {savingAction === "delete" ? "Deleting..." : "Confirm Delete"}
+                    </button>
+                    <button
+                      className="field-button ghost flex-1 px-4"
+                      onClick={() => setConfirmAction(null)}
+                      type="button"
+                    >
+                      Keep Job
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="field-button danger mt-3 w-full px-4"
+                    disabled={!canDeleteSelectedJob || savingAction === "delete"}
+                    onClick={() => setConfirmAction("deleteJob")}
+                    type="button"
+                  >
+                    {savingAction === "delete" ? "Deleting..." : "Delete Job"}
+                  </button>
+                )}
+              </section>
+
               <section>
                 <h3 className="mb-2 font-semibold">Recent Events</h3>
                 {selectedJob.events.length === 0 ? (
@@ -1694,3 +1781,5 @@ function JobRow({
     </button>
   );
 }
+
+
