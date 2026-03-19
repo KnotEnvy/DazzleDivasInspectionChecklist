@@ -1,71 +1,36 @@
-# Dazzle Divas v3 Finalization And Deployment Handoff
+﻿# Dazzle Divas v3 Finalization And Deployment Handoff
 
-Updated: March 15, 2026
+Updated: March 16, 2026
 
 ## Audience
-This document is for the next engineering team responsible for:
-- finishing the final admin feature
-- validating production readiness
-- deploying the app
+This handoff is for the team executing the deployment and final launch validation.
 
 ## Product State
-The app is no longer in rebuild mode.
-It is in finalization mode.
+v3 is no longer in rebuild mode.
+The app is in deployment-prep mode.
 
 ### Already Shipped
 - admin property management
 - admin staffing and role management
 - checklist templates and property overrides
-- service plans and job generation
-- admin dispatch with month/week/day views
+- service plans, generated jobs, and dispatch scheduling
 - cleaner and inspector worker schedule
 - room-first checklist execution
-- task issue notes
-- proof photo capture
+- issue notes and proof photo capture
 - offline queue, replay, and conflict handling
-- role-specific mobile UX improvements
+- admin completed history with today's finished jobs surfaced first
+- admin completed checklist review with room notes, issue visibility, and photo galleries
+- photo save/download workflow for completed jobs, including iPhone-sized copies
+- admin dispatch job deletion for disposable jobs that have not turned into checklist history
 
-### Still Missing
-- admin-friendly completed checklist review workflow
-- photo evidence download/export workflow
-- final deployment execution and launch signoff
+### Still Remaining
+- production deployment execution
+- launch smoke and signoff
+- invite/reset-password flow is still manual
 
-## Why The Next Feature Matters
-Admin uses cleaner photos in Breezeway for client communication.
-
-That means completed checklist review is not just a “history page polish” task.
-It is an operational requirement.
-
-The next team should optimize for:
-- speed
-- reliability
-- easy photo access
-- easy evidence download
-
-## Expected Finalization Outcome
-By the end of the next team’s work:
-1. Admin can review completed checklist evidence quickly.
-2. Admin can download completed photo evidence for external upload.
-3. Production deployment can proceed with confidence.
-
-## Suggested Delivery Order
-
-### 1. Completed Checklist Review
-- improve completed history usability
-- make completed detail view admin-usable
-- keep issue notes, room notes, and property context visible
-
-### 2. Photo Download / Export
-- make completed photo evidence easy to inspect
-- make single-photo download work cleanly
-- if possible, add checklist-scoped multi-download or zip export
-- keep file naming practical for manual external upload
-
-### 3. Launch Hardening
-- run rollout smoke
-- run manual admin/worker smoke
-- deploy frontend and backend
-- validate production/staging env config
+## Deployment Readiness Read
+Internal user network tests and recent workflow updates have been successful.
+The current app state is strong enough to move from finalization into controlled deployment.
 
 ## Deployment Expectations
 
@@ -73,11 +38,11 @@ By the end of the next team’s work:
 - target host: Cloudflare Pages
 - build command: `bun run build:web`
 - output: `apps/web/dist`
-- env var required: `VITE_CONVEX_URL`
+- required env var: `VITE_CONVEX_URL`
 
 ### Backend
 - deploy via Convex
-- keep generated files current when schema/function surfaces change
+- run backend codegen whenever Convex schema or function surfaces change
 
 ## Required Verification Before Release
 ```bash
@@ -94,6 +59,14 @@ cd packages/backend
 bun run build
 ```
 
+## Launch Checklist
+1. Run the verification commands above on the release branch.
+2. Confirm `VITE_CONVEX_URL` points at the intended Convex deployment.
+3. Deploy the backend.
+4. Deploy the frontend to Cloudflare Pages.
+5. Run the manual smoke below against the deployed environment.
+6. Confirm admin and worker devices can both sign in and sync.
+
 ## Manual Production Smoke
 
 ### Worker
@@ -105,14 +78,15 @@ bun run build
 6. Complete checklist.
 
 ### Admin
-1. Open completed history.
-2. Review completed checklist detail.
-3. Verify notes, issues, and photos.
-4. Download photo evidence.
-5. Confirm the download is usable for Breezeway upload.
+1. Open `/history`.
+2. Confirm today's finished jobs appear first.
+3. Open a completed checklist.
+4. Review notes, issues, and photo evidence.
+5. Save at least one iPhone-sized photo copy.
+6. Delete one disposable scheduled or cancelled job from dispatch.
 
 ### Offline
-1. Put worker offline.
+1. Put a worker device offline.
 2. Capture progress and photos.
 3. Reconnect.
 4. Confirm replay.
@@ -122,12 +96,9 @@ bun run build
 - Keep `COMPLETED` tied to checklist completion.
 - Preserve backend permission boundaries.
 - Preserve offline replay coherence.
-- Do not expand into unrelated features before admin review/download is done.
+- Do not allow deletion of jobs that are in progress, completed, or already linked to checklist history.
 
-## Recommended First Slice For The Next Team
-Implement the smallest admin-complete flow that delivers immediate operational value:
-- better completed checklist detail page
-- visible photo gallery for completed work
-- reliable photo download actions
-
-After that, shift immediately into deployment and launch validation.
+## Immediate Next Work
+1. execute backend and frontend deployment
+2. run launch smoke on the deployed environment
+3. capture launch notes and any environment fixes

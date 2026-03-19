@@ -1,21 +1,18 @@
-# Dazzle Divas v3
+﻿# Dazzle Divas v3
 
-Updated: March 15, 2026
+Updated: March 16, 2026
 
 ## Summary
 v3 is the active Dazzle Divas field operations app built on Bun, React, Vite, and Convex.
 
 The product is already usable for:
-- admin property, staffing, template, and dispatch operations
+- admin property, staffing, template, dispatch, and job cleanup operations
 - cleaner and inspector schedule-driven checklist execution
 - room tasks, notes, issue capture, and proof photo capture
+- admin completed checklist review with photo save/download
 - offline queueing and replay for field work
 
-The main remaining product feature is on the admin side:
-- review completed checklists in a workflow-friendly way
-- download photo evidence cleanly for upload into Breezeway
-
-After that, the app should move into final hardening and deployment.
+The primary remaining work is deployment execution and launch validation.
 
 ## Stack
 - Web app: React 19 + Vite 6 + Tailwind 4 + React Router 7
@@ -46,16 +43,17 @@ v3/
 - Room-first checklist execution
 - Task-level issue capture with notes
 - Proof photo upload/removal
-- Completed checklist history
+- Completed checklist history with today's finished jobs surfaced first
+- Admin completed checklist review with room notes, issue visibility, and photo galleries
+- Photo save/download workflow for completed jobs, including iPhone-sized copies
+- Admin dispatch job deletion for non-linked, non-completed jobs
 - Offline outbox and replay with conflict handling
 - Pilot test property seeding
 - Mobile UX improvements driven by cleaner feedback
 
 ### Still Missing
-- Admin-friendly completed checklist review flow
-- Bulk/clean photo download workflow for Breezeway upload
-- Invite/reset-password flow
-- Final deployment pass and launch checklist execution
+- deployment execution and launch signoff
+- invite/reset-password flow
 
 ## Local Setup
 1. Install dependencies.
@@ -123,13 +121,12 @@ For rollout validation:
 bun run smoke:rollout
 ```
 
-## Current Finalization Focus
-1. Admin completed checklist review workflow.
-2. Photo evidence download/export for completed jobs.
-3. Final deployment hardening and production rollout.
+## Current Focus
+1. Execute backend and frontend deployment.
+2. Run launch smoke on the deployed environment.
+3. Capture final environment fixes and rollout notes.
 
 See:
-- [HANDOFF_TEST_PLAN.md](./HANDOFF_TEST_PLAN.md)
-- [BENCHMARK_MATRIX.md](./BENCHMARK_MATRIX.md)
-- [NEXT_ITERATION_PROMPT.md](./NEXT_ITERATION_PROMPT.md)
+- [PILOT_DEPLOYMENT_RUNBOOK.md](./PILOT_DEPLOYMENT_RUNBOOK.md)
 - [FINALIZATION_DEPLOY_HANDOFF.md](./FINALIZATION_DEPLOY_HANDOFF.md)
+- [HANDOFF_TEST_PLAN.md](./HANDOFF_TEST_PLAN.md)

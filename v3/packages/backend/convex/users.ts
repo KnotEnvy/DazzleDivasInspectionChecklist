@@ -52,6 +52,16 @@ function validatePasswordRequirements(password: string) {
   }
 }
 
+function requireBootstrapSecret(secret: string) {
+  const expected = process.env.ADMIN_BOOTSTRAP_SECRET?.trim();
+  if (!expected) {
+    throw new Error("ADMIN_BOOTSTRAP_SECRET is not configured");
+  }
+  if (secret !== expected) {
+    throw new Error("Invalid bootstrap secret");
+  }
+}
+
 function isAssignmentRole(role: UserRole): role is AssignmentRole {
   return role === "CLEANER" || role === "INSPECTOR";
 }
@@ -125,6 +135,14 @@ export const getByIdInternal = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.userId);
+  },
+});
+
+export const countAllInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    return { count: users.length };
   },
 });
 
@@ -272,6 +290,73 @@ export const createStaffAccount = action({
           provisionedByAdmin: true,
         }),
       });
+
+      return {
+        userId: created.user._id,
+        email,
+        role: created.user.role,
+        isActive: created.user.isActive,
+      };
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message.includes("already exists") ||
+          error.message.includes("Account") ||
+          error.message.includes("duplicate"))
+      ) {
+        throw new Error("A user with this email already exists");
+      }
+
+      throw error;
+    }
+  },
+});
+
+export const bootstrapFirstAdmin = action({
+  args: {
+    name: v.string(),
+    email: v.string(),
+    password: v.string(),
+    bootstrapSecret: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ userId: Id<"users">; email: string; role: UserRole; isActive: boolean }> => {
+    requireBootstrapSecret(args.bootstrapSecret);
+    validatePasswordRequirements(args.password);
+
+    const existingUsers = await ctx.runQuery(internal.users.countAllInternal, {});
+    if (existingUsers.count > 0) {
+      throw new Error("First-admin bootstrap is only allowed when no users exist");
+    }
+
+    const email = normalizeEmail(args.email);
+
+    try {
+      const created = (await createAccount(ctx, {
+        provider: "password",
+        account: {
+          id: email,
+          secret: args.password,
+        },
+        profile: buildUserProfile({
+          name: args.name,
+          email,
+          role: "ADMIN",
+          isActive: true,
+          provisionedByAdmin: true,
+          passwordSetupStatus: "ADMIN_BOOTSTRAP",
+        }),
+        shouldLinkViaEmail: false,
+        shouldLinkViaPhone: false,
+      })) as {
+        user: {
+          _id: Id<"users">;
+          role: UserRole;
+          isActive: boolean;
+        };
+      };
 
       return {
         userId: created.user._id,
