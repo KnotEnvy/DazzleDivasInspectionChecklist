@@ -8,8 +8,10 @@ import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import { getValidatedConvexUrl } from "@/lib/runtimeConfig";
 import "./index.css";
+import { stashPasswordSetupCodeFromUrl } from "@/lib/passwordSetupCode";
 
 registerSW({ immediate: true });
+stashPasswordSetupCodeFromUrl();
 
 function BootstrapError({ message }: { message: string }) {
   return (

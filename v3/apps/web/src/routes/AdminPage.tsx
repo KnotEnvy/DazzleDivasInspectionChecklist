@@ -4,7 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import toast from "react-hot-toast";
-import { Users } from "lucide-react";
+import { Mail, Users } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 
 type AdminStats = {
@@ -15,6 +15,7 @@ type AdminStats = {
 };
 
 type UserRole = "ADMIN" | "CLEANER" | "INSPECTOR";
+type PasswordSetupStatus = "SELF_SIGNUP" | "ADMIN_BOOTSTRAP" | "INVITED" | "PASSWORD_SET";
 
 type AdminUser = {
   _id: Id<"users">;
@@ -24,17 +25,59 @@ type AdminUser = {
   isActive: boolean;
   createdAt?: number;
   provisionedByAdmin?: boolean;
-  passwordSetupStatus?: "SELF_SIGNUP" | "ADMIN_BOOTSTRAP";
+  passwordSetupStatus?: PasswordSetupStatus;
+  inviteSentAt?: number;
+  inviteDeliveryError?: string;
 };
+
+type StaffInviteResult = {
+  userId: Id<"users">;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  inviteSent: boolean;
+  inviteSentAt?: number;
+  inviteError?: string;
+};
+
+function onboardingLabel(status?: PasswordSetupStatus) {
+  switch (status) {
+    case "INVITED":
+      return "Invite Pending";
+    case "PASSWORD_SET":
+      return "Password Set";
+    case "ADMIN_BOOTSTRAP":
+      return "Bootstrap Password";
+    case "SELF_SIGNUP":
+      return "Self-Signup";
+    default:
+      return "Unknown";
+  }
+}
+
+function onboardingTone(status?: PasswordSetupStatus) {
+  switch (status) {
+    case "INVITED":
+      return "bg-amber-100 text-amber-800";
+    case "PASSWORD_SET":
+      return "bg-emerald-100 text-emerald-700";
+    case "ADMIN_BOOTSTRAP":
+      return "bg-brand-100 text-brand-700";
+    default:
+      return "bg-slate-100 text-slate-600";
+  }
+}
 
 export function AdminPage() {
   const stats = useQuery(api.admin.stats) as AdminStats | undefined;
   const users = useQuery(api.users.list) as AdminUser[] | undefined;
   const updateUser = useMutation(api.users.update);
   const createStaffAccount = useAction(api.users.createStaffAccount);
+  const resendStaffInvite = useAction(api.users.resendStaffInvite);
 
   const [savingUserId, setSavingUserId] = useState<Id<"users"> | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
+  const [sendingInviteUserId, setSendingInviteUserId] = useState<Id<"users"> | null>(null);
 
   const sortedUsers = useMemo(() => {
     return (users ?? []).slice().sort((a, b) => a.email.localeCompare(b.email));
@@ -48,8 +91,8 @@ export function AdminPage() {
     const existing = sortedUsers.find((user) => user._id === userId);
     if (
       !existing ||
-      (updates.role === undefined || updates.role === existing.role) &&
-        (updates.isActive === undefined || updates.isActive === existing.isActive)
+      ((updates.role === undefined || updates.role === existing.role) &&
+        (updates.isActive === undefined || updates.isActive === existing.isActive))
     ) {
       return;
     }
@@ -74,19 +117,41 @@ export function AdminPage() {
     const formData = new FormData(form);
 
     try {
-      await createStaffAccount({
+      const result = (await createStaffAccount({
         name: String(formData.get("name") ?? "").trim(),
         email: String(formData.get("email") ?? "").trim(),
-        password: String(formData.get("password") ?? ""),
         role: String(formData.get("role") ?? "CLEANER") as UserRole,
         isActive: String(formData.get("status") ?? "ACTIVE") === "ACTIVE",
-      });
+      })) as StaffInviteResult;
       form.reset();
-      toast.success("Staff account created");
+      toast.success(
+        result.inviteSent
+          ? "Staff account created and invite sent"
+          : "Staff account created"
+      );
+      if (result.inviteError) {
+        toast.error(result.inviteError);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create user");
     } finally {
       setCreatingUser(false);
+    }
+  }
+
+  async function handleResendInvite(user: AdminUser) {
+    setSendingInviteUserId(user._id);
+    try {
+      const result = (await resendStaffInvite({ userId: user._id })) as StaffInviteResult;
+      if (result.inviteSent) {
+        toast.success("Invite email sent");
+      } else {
+        toast.error(result.inviteError ?? "Failed to send invite email");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send invite email");
+    } finally {
+      setSendingInviteUserId(null);
     }
   }
 
@@ -95,7 +160,7 @@ export function AdminPage() {
       <div>
         <h1 className="text-2xl font-bold">Admin Console</h1>
         <p className="text-sm text-slate-600">
-          Starter controls for operations and staffing.
+          Starter controls for operations, staffing, and invite-based onboarding.
         </p>
       </div>
 
@@ -130,21 +195,16 @@ export function AdminPage() {
 
       <section className="rounded-2xl border border-border bg-white p-4">
         <div className="mb-4">
-          <h2 className="text-lg font-bold">Create Staff Account</h2>
+          <h2 className="text-lg font-bold">Invite Staff User</h2>
           <p className="text-sm text-slate-600">
-            Bootstrap cleaner, inspector, and admin accounts without self-signup.
+            Create cleaner, inspector, and admin accounts, then email a password setup link instead of sharing temporary credentials manually.
           </p>
         </div>
 
-        <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-5" onSubmit={handleCreateUser}>
+        <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={handleCreateUser}>
           <label className="text-sm font-medium text-slate-700">
             Full name
-            <input
-              className="input mt-1"
-              name="name"
-              placeholder="Alex Rivera"
-              required
-            />
+            <input className="input mt-1" name="name" placeholder="Alex Rivera" required />
           </label>
 
           <label className="text-sm font-medium text-slate-700">
@@ -154,18 +214,6 @@ export function AdminPage() {
               name="email"
               type="email"
               placeholder="alex@dazzledivas.com"
-              required
-            />
-          </label>
-
-          <label className="text-sm font-medium text-slate-700">
-            Initial password
-            <input
-              className="input mt-1"
-              name="password"
-              type="password"
-              minLength={8}
-              placeholder="At least 8 characters"
               required
             />
           </label>
@@ -187,12 +235,12 @@ export function AdminPage() {
             </select>
           </label>
 
-          <div className="md:col-span-2 xl:col-span-5">
-            <button
-              className="field-button primary px-5"
-              disabled={creatingUser}
-              type="submit"
-            >
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 md:col-span-2 xl:col-span-4">
+            New active users receive an email invite with a secure password setup link. Inactive users are created without sending the invite until you activate them.
+          </div>
+
+          <div className="md:col-span-2 xl:col-span-4">
+            <button className="field-button primary px-5" disabled={creatingUser} type="submit">
               {creatingUser ? "Creating..." : "Create Staff Account"}
             </button>
           </div>
@@ -222,11 +270,13 @@ export function AdminPage() {
                   <div>
                     <p className="font-semibold">{user.name}</p>
                     <p className="text-sm text-slate-600">{user.email}</p>
-                    <div className="mt-1 flex gap-1.5">
+                    <div className="mt-1 flex flex-wrap gap-1.5">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        user.role === "ADMIN" ? "bg-brand-100 text-brand-700" :
-                        user.role === "CLEANER" ? "bg-cyan-100 text-cyan-700" :
-                        "bg-slate-100 text-slate-600"
+                        user.role === "ADMIN"
+                          ? "bg-brand-100 text-brand-700"
+                          : user.role === "CLEANER"
+                            ? "bg-cyan-100 text-cyan-700"
+                            : "bg-slate-100 text-slate-600"
                       }`}>
                         {user.role}
                       </span>
@@ -235,16 +285,33 @@ export function AdminPage() {
                       }`}>
                         {user.isActive ? "Active" : "Inactive"}
                       </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${onboardingTone(user.passwordSetupStatus)}`}>
+                        {onboardingLabel(user.passwordSetupStatus)}
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-500">
-                      {user.provisionedByAdmin ? "Admin bootstrap" : "Self-signup"}
-                      {user.createdAt
-                        ? ` | ${new Date(user.createdAt).toLocaleDateString()}`
-                        : ""}
+                    <p className="mt-1 text-xs text-slate-500">
+                      {user.provisionedByAdmin ? "Admin provisioned" : "Self-signup"}
+                      {user.createdAt ? ` | ${new Date(user.createdAt).toLocaleDateString()}` : ""}
+                      {user.inviteSentAt ? ` | invite sent ${new Date(user.inviteSentAt).toLocaleString()}` : ""}
                     </p>
+                    {user.inviteDeliveryError ? (
+                      <p className="mt-1 text-xs text-rose-600">Last invite error: {user.inviteDeliveryError}</p>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-wrap gap-3">
+                    {user.passwordSetupStatus === "INVITED" ? (
+                      <button
+                        className="field-button secondary mt-6 inline-flex items-center gap-2 px-4"
+                        disabled={sendingInviteUserId === user._id || !user.isActive}
+                        onClick={() => void handleResendInvite(user)}
+                        type="button"
+                      >
+                        <Mail className="h-4 w-4" />
+                        {sendingInviteUserId === user._id ? "Sending..." : "Resend Invite"}
+                      </button>
+                    ) : null}
+
                     <label className="text-sm font-medium text-slate-700">
                       Role
                       <select

@@ -19,6 +19,7 @@ import type * as lib_inspectionMetrics from "../lib/inspectionMetrics.js";
 import type * as lib_inspectionReporting from "../lib/inspectionReporting.js";
 import type * as lib_jobDeletion from "../lib/jobDeletion.js";
 import type * as lib_jobLifecycle from "../lib/jobLifecycle.js";
+import type * as lib_onboardingEmail from "../lib/onboardingEmail.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_propertySummaries from "../lib/propertySummaries.js";
 import type * as lib_validators from "../lib/validators.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inspectionReporting": typeof lib_inspectionReporting;
   "lib/jobDeletion": typeof lib_jobDeletion;
   "lib/jobLifecycle": typeof lib_jobLifecycle;
+  "lib/onboardingEmail": typeof lib_onboardingEmail;
   "lib/permissions": typeof lib_permissions;
   "lib/propertySummaries": typeof lib_propertySummaries;
   "lib/validators": typeof lib_validators;

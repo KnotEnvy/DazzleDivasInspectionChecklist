@@ -8,6 +8,9 @@ import { OfflineSyncProvider } from "@/app/OfflineSyncProvider";
 const LoginPage = lazy(() =>
   import("@/routes/LoginPage").then((module) => ({ default: module.LoginPage }))
 );
+const SetPasswordPage = lazy(() =>
+  import("@/routes/SetPasswordPage").then((module) => ({ default: module.SetPasswordPage }))
+);
 const DashboardPage = lazy(() =>
   import("@/routes/DashboardPage").then((module) => ({ default: module.DashboardPage }))
 );
@@ -68,6 +71,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={withSuspense(<LoginPage />)} />
+      <Route path="/set-password" element={withSuspense(<SetPasswordPage />)} />
 
       <Route
         element={

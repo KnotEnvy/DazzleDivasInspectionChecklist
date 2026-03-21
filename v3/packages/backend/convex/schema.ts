@@ -18,8 +18,15 @@ const schema = defineSchema({
     createdById: v.optional(v.id("users")),
     provisionedByAdmin: v.optional(v.boolean()),
     passwordSetupStatus: v.optional(
-      v.union(v.literal("SELF_SIGNUP"), v.literal("ADMIN_BOOTSTRAP"))
+      v.union(
+        v.literal("SELF_SIGNUP"),
+        v.literal("ADMIN_BOOTSTRAP"),
+        v.literal("INVITED"),
+        v.literal("PASSWORD_SET")
+      )
     ),
+    inviteSentAt: v.optional(v.number()),
+    inviteDeliveryError: v.optional(v.string()),
   })
     .index("by_email", ["email"])
     .index("by_role", ["role"]),
