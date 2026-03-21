@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useConvexAuth, useMutation } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -37,6 +37,7 @@ export function SetPasswordPage() {
   const [searchParams] = useSearchParams();
 
   const [pending, setPending] = useState(false);
+  const [finishingSetup, setFinishingSetup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -49,11 +50,47 @@ export function SetPasswordPage() {
     [searchParams]
   );
 
+  useEffect(() => {
+    if (!finishingSetup || !isAuthenticated) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        await completePasswordSetup({});
+        if (cancelled) {
+          return;
+        }
+        toast.success("Password set. Welcome.");
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Password setup completed, but status sync failed."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setFinishingSetup(false);
+          setPending(false);
+          navigate("/", { replace: true });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [completePasswordSetup, finishingSetup, isAuthenticated, navigate]);
+
   if (isLoading) {
     return <div className="p-8 text-center">Loading...</div>;
   }
 
-  if (isAuthenticated) {
+  if (isAuthenticated && !finishingSetup) {
     return <Navigate to="/" replace />;
   }
 
@@ -83,16 +120,9 @@ export function SetPasswordPage() {
         newPassword: password,
       });
       clearStoredPasswordSetupCode();
-      try {
-        await completePasswordSetup({});
-      } catch {
-        // Do not block sign-in if the status patch lags behind auth token hydration.
-      }
-      toast.success("Password set. Welcome.");
-      navigate("/", { replace: true });
+      setFinishingSetup(true);
     } catch (error) {
       toast.error(formatPasswordSetupError(error));
-    } finally {
       setPending(false);
     }
   }

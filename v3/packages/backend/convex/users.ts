@@ -181,7 +181,7 @@ async function deliverStaffInvite(
   eventType: string
 ): Promise<{ inviteSent: boolean; inviteSentAt?: number; inviteError?: string }> {
   try {
-    const result = await ctx.runAction(api.auth.signIn, {
+    await ctx.runAction(api.auth.signIn, {
       provider: "password",
       params: {
         flow: "reset",
@@ -189,9 +189,6 @@ async function deliverStaffInvite(
         redirectTo: buildPasswordSetupRedirectPath(user.email),
       },
     });
-    if (!result?.started) {
-      throw new Error("Password setup email did not start");
-    }
 
     const inviteSentAt = Date.now();
     await updateInviteState(ctx, {
@@ -576,4 +573,6 @@ export const bootstrapFirstAdmin = action({
     }
   },
 });
+
+
 
