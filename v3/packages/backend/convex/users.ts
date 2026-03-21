@@ -2,20 +2,14 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import type { ActionCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
-import {
-  createAccount,
-  getAuthUserId,
-  retrieveAccount,
-  signInViaProvider,
-} from "@convex-dev/auth/server";
-import { internal } from "./_generated/api";
+import { createAccount, getAuthUserId } from "@convex-dev/auth/server";
+import { api, internal } from "./_generated/api";
 import { requireAuth, requireAdmin } from "./lib/permissions";
 import { userRoleValidator } from "./lib/validators";
 import {
   buildPasswordSetupRedirectPath,
   buildUserProfile,
   normalizeEmail,
-  passwordResetEmailProvider,
   type PasswordSetupStatus,
   type UserRole,
 } from "./auth";
@@ -187,18 +181,17 @@ async function deliverStaffInvite(
   eventType: string
 ): Promise<{ inviteSent: boolean; inviteSentAt?: number; inviteError?: string }> {
   try {
-    const { account } = await retrieveAccount(ctx, {
+    const result = await ctx.runAction(api.auth.signIn, {
       provider: "password",
-      account: { id: user.email },
-    });
-
-    await signInViaProvider(ctx as any, passwordResetEmailProvider, {
-      accountId: account._id,
       params: {
+        flow: "reset",
         email: user.email,
         redirectTo: buildPasswordSetupRedirectPath(user.email),
       },
     });
+    if (!result?.started) {
+      throw new Error("Password setup email did not start");
+    }
 
     const inviteSentAt = Date.now();
     await updateInviteState(ctx, {
@@ -583,3 +576,4 @@ export const bootstrapFirstAdmin = action({
     }
   },
 });
+
