@@ -75,8 +75,6 @@ After running it:
 
 After saving the Convex variables, sign in with:
 
-- Email: dazzle@dazzledivascleaning.com
-- Password: Dazzle!Admin2026#Start
 
 ## 5. If Login Still Fails
 
