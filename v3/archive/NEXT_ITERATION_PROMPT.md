@@ -1,97 +1,56 @@
-# Next Iteration Prompt
+# Dazzle Divas v3 - Next Iteration Prompt
+
+Updated: March 15, 2026
 
 Continue the Dazzle Divas v3 build in `D:\Javascript Webapps\DazzleDivasInspectionChecklist`.
 
-Start by reading:
+## Read First
 - `D:\Javascript Webapps\DazzleDivasInspectionChecklist\v3\HANDOFF_TEST_PLAN.md`
 - `D:\Javascript Webapps\DazzleDivasInspectionChecklist\v3\BENCHMARK_MATRIX.md`
+- `D:\Javascript Webapps\DazzleDivasInspectionChecklist\v3\FINALIZATION_DEPLOY_HANDOFF.md`
 
-These are some of the more important modules we are working with:
-- `v3/apps/web/src/routes/AdminPropertiesPage.tsx`
-- `v3/apps/web/src/components/PropertyChecklistOverridesSection.tsx`
-- `v3/apps/web/src/routes/AdminTemplatesPage.tsx`
-- `v3/apps/web/src/routes/InspectionPage.tsx`
-- `v3/apps/web/src/routes/MySchedulePage.tsx`
-- `v3/apps/web/src/routes/AdminSchedulePage.tsx`
-- `v3/apps/web/src/lib/offlineOutbox.ts`
-- `v3/apps/web/src/lib/offlineReplay.ts`
-- `v3/apps/web/src/lib/offlineInspectionState.ts`
-- `v3/packages/backend/convex/lib/checklistTemplates.ts`
-- `v3/packages/backend/convex/lib/jobLifecycle.ts`
-- `v3/packages/backend/convex/inspections.ts`
-- `v3/packages/backend/convex/templates.ts`
-- `v3/packages/backend/convex/servicePlans.ts`
-- `v3/packages/backend/convex/scheduling.ts`
-- `v3/packages/backend/convex/jobs.ts`
-- `v3/packages/backend/convex/taskResults.ts`
-- `v3/packages/backend/convex/schema.ts`
+## Current Reality To Assume
+- Core property management, templates, staffing, service plans, generated jobs, dispatch, worker schedule, checklist execution, issue capture, photo capture, offline queue/replay, and mobile cleaner UX are already shipped.
+- Scheduling is working.
+- Photo capture is working.
+- The app is now close to production finalization.
+- `COMPLETED` must remain tied to checklist completion.
+- Root Vitest coverage exists and should be preserved or expanded.
 
-## Current State To Assume
+## Main Remaining Product Feature
+The last major app feature is admin-side completed checklist review with usable photo download/export.
 
-- Admin user creation is shipped.
-- Property management is shipped.
-- Service plans and generated jobs are shipped.
-- Default assignee per service plan is shipped.
-- Manual turnover job creation is shipped on `/schedule`.
-- Turnover-intake metadata is shipped on manual jobs and schedule UI.
-- Unassigned-job dispatch flow is shipped.
-- Dispatch can assign any active cleaner/inspector with the required role.
-- `/schedule` month, week, and day views are shipped.
-- `/schedule` now supports faster admin staffing flow:
-  - quick assignment from the unassigned queue
-  - save-all dispatch changes from the drawer
-- Checklist template management is shipped at `/admin/templates`.
-- Property-derived checklist generation from bedroom/bathroom counts is shipped.
-- Property checklist preview is shipped.
-- Per-property checklist overrides are shipped.
-- Room-by-room checklist execution is shipped with tasks, photos, notes, room completion, and checklist completion.
-- Task-level issue capture is shipped:
-  - flag issue on a task
-  - save issue notes
-  - issue counts appear in checklist/history surfaces
-- `/my-schedule` is shipped as the primary worker operating screen with start/resume checklist as the default action.
-- Assignee-safe worker job status controls (`IN_PROGRESS`, `BLOCKED`) are shipped.
-- Open self-signup is disabled and `/login` is now staff-only.
-- Offline outbox + replay is partially shipped for field execution:
-  - checklist starts
-  - task completion toggles
-  - task issue flags/notes
-  - room notes
-  - photo uploads/removals
-  - room completion
-  - checklist completion
-  - worker job status changes
-- Replay diagnostics UI is shipped on dashboard/checklist/schedule surfaces.
-- Inspection creation now uses the effective property checklist library (override or base).
-- Root Vitest harness is shipped with initial coverage for:
-  - checklist derivation
-  - scheduling recurrence rules
-  - job/checklist lifecycle guards
-  - offline replay classification
-  - offline inspection overlay state
+Business reason:
+- Admin uses cleaner photo evidence in Breezeway for client delivery.
+- The app must support that daily operations workflow directly.
 
-## Priority For This Iteration
+## Your First Job
+1. Inspect the current history/report/completed-checklist code paths.
+2. Identify the shortest production-viable slice that gives admins a strong completed-review workflow.
+3. Implement the next best slice directly, prioritizing:
+   - completed checklist admin review UX
+   - photo evidence visibility
+   - photo download/export workflow suitable for Breezeway upload
+4. Keep deployment finalization in mind while you build.
 
-1. Finish deployment readiness and field rollout hardening.
-2. Tighten replay conflict policy and recovery flow.
-   - be explicit about server-owned schedule fields vs client-owned field evidence
-   - improve operator handling of `CONFLICT` items beyond simple surfacing
-3. Add final operational smoke coverage around:
-   - issue capture persistence in history/report output
-   - job/checklist lifecycle regressions
-   - replay conflict and recovery behavior
-4. Polish mobile execution only where it reduces tap count or confusion for real cleaners.
-5. Preserve the existing rule that `COMPLETED` stays tied to checklist completion.
-
-Do not jump to broader Breezeway-style expansion yet unless deployment readiness and real field feedback are covered first.
-
-## Implementation Expectations
-
-- Make code changes directly.
+## Constraints
 - Do not stop at analysis.
-- Verify with Convex codegen when schema/function surfaces change, plus backend typecheck, web typecheck, tests, and production web build.
-- Keep role/permission checks enforced in backend mutations.
-- Keep offline behavior explicit; do not silently weaken conflict handling to make errors disappear.
 - Do not revert unrelated user changes.
+- Keep backend permission checks enforced.
+- Keep offline queue/replay coherent.
+- Keep changes focused on finalization, not broad feature expansion.
 
-- If you find a blocker or ambiguity, resolve it from the codebase and handoff docs rather than asking unless absolutely necessary.
+## Verification
+Run as appropriate:
+- Convex codegen when needed
+- `bun run test`
+- `bun run typecheck`
+- `bun run typecheck:backend`
+- `bun run build:web`
+- `bun run smoke:rollout`
+
+## After The Feature Slice
+If the admin review/download slice is complete, the next work should shift to:
+1. deployment hardening
+2. production smoke validation
+3. launch readiness documentation
