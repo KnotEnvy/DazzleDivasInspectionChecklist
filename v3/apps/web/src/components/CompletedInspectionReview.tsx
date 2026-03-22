@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Id } from "convex/_generated/dataModel";
 import { Download, ExternalLink, Images, MapPin, TriangleAlert, User } from "lucide-react";
 import toast from "react-hot-toast";
@@ -66,6 +66,21 @@ function formatFileSize(bytes: number) {
   }
 
   return `${Math.round(bytes / 104857.6) / 10} MB`;
+}
+
+function isShareAborted(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.name === "AbortError" || error.message.toLowerCase().includes("abort"))
+  );
+}
+
+function supportsNativeFileShare() {
+  return (
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function" &&
+    typeof navigator.canShare === "function"
+  );
 }
 
 function triggerBlobDownload(blob: Blob, fileName: string) {
@@ -148,6 +163,62 @@ async function buildIphoneSizedDownload(photo: ReviewPhoto, sourceBlob: Blob) {
   };
 }
 
+function canShareFiles(files: File[]) {
+  if (!supportsNativeFileShare()) {
+    return false;
+  }
+
+  try {
+    return navigator.canShare({ files });
+  } catch {
+    return false;
+  }
+}
+
+async function buildIphoneSizedFile(photo: ReviewPhoto) {
+  if (!photo.url) {
+    throw new Error("Photo preview is unavailable right now");
+  }
+
+  const response = await fetch(photo.url);
+  if (!response.ok) {
+    throw new Error(`Download failed for ${photo.export_file_name}`);
+  }
+
+  const sourceBlob = await response.blob();
+  const download = await buildIphoneSizedDownload(photo, sourceBlob);
+
+  return new File([download.blob], download.fileName, {
+    type: download.blob.type || getIphoneExportMimeType(photo.mime_type),
+    lastModified: Date.now(),
+  });
+}
+
+async function shareReviewPhotos(
+  photos: ReviewPhoto[],
+  options: {
+    title: string;
+    text: string;
+  }
+) {
+  if (!supportsNativeFileShare()) {
+    return false;
+  }
+
+  const files = await Promise.all(photos.map((photo) => buildIphoneSizedFile(photo)));
+  if (!canShareFiles(files)) {
+    return false;
+  }
+
+  await navigator.share({
+    files,
+    title: options.title,
+    text: options.text,
+  });
+
+  return true;
+}
+
 async function downloadReviewPhoto(photo: ReviewPhoto) {
   if (!photo.url) {
     throw new Error("Photo preview is unavailable right now");
@@ -180,9 +251,22 @@ export function CompletedInspectionReview({
     setDownloadingPhotoId(photo.photo_id);
 
     try {
+      const shared = await shareReviewPhotos([photo], {
+        title: photo.export_file_name,
+        text: `iPhone-sized export from ${review.property_name}`,
+      });
+
+      if (shared) {
+        toast.success(`Opened iPhone share options for ${photo.export_file_name}`);
+        return;
+      }
+
       await downloadReviewPhoto(photo);
       toast.success(`Saved iPhone-sized copy of ${photo.export_file_name}`);
     } catch (error) {
+      if (isShareAborted(error)) {
+        return;
+      }
       toast.error(error instanceof Error ? error.message : "Failed to save photo");
     } finally {
       setDownloadingPhotoId(null);
@@ -193,12 +277,29 @@ export function CompletedInspectionReview({
     setDownloadingAll(true);
 
     try {
+      const shared = await shareReviewPhotos(allPhotos, {
+        title: `${review.property_name} photos`,
+        text: `${allPhotos.length} iPhone-sized photo${allPhotos.length === 1 ? "" : "s"} from ${review.property_name}`,
+      });
+
+      if (shared) {
+        toast.success(
+          `Opened iPhone share options for ${allPhotos.length} photo${allPhotos.length === 1 ? "" : "s"}`
+        );
+        return;
+      }
+
       for (const photo of allPhotos) {
         await downloadReviewPhoto(photo);
       }
 
-      toast.success(`Started ${allPhotos.length} iPhone-sized photo download${allPhotos.length === 1 ? "" : "s"}`);
+      toast.success(
+        `Started ${allPhotos.length} iPhone-sized photo download${allPhotos.length === 1 ? "" : "s"}`
+      );
     } catch (error) {
+      if (isShareAborted(error)) {
+        return;
+      }
       toast.error(error instanceof Error ? error.message : "Failed to save photos");
     } finally {
       setDownloadingAll(false);
@@ -234,7 +335,8 @@ export function CompletedInspectionReview({
             </div>
             <p className="text-sm text-slate-600">
               Completed {formatDateTime(review.inspection_date)}. Open keeps the original view,
-              while Save creates a smaller iPhone-friendly copy.
+              while Save creates a smaller iPhone-friendly copy. On iPhone, Save uses the native
+              share sheet when available so you can send images to Photos.
             </p>
           </div>
           <button

@@ -164,7 +164,7 @@ export function AdminPage() {
         </p>
       </div>
 
-      <section className="grid gap-3 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card label="Users" value={stats?.users} />
         <Card label="Active Properties" value={stats?.activeProperties} />
         <Card label="In Progress" value={stats?.activeInspections} />
@@ -172,24 +172,22 @@ export function AdminPage() {
       </section>
 
       <section className="rounded-2xl border border-border bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold">Operations Setup</h2>
-            <p className="text-sm text-slate-600">
-              Manage property records, recurring service plans, and live dispatch.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link className="field-button secondary px-4 py-2 text-sm" to="/schedule">
-              Open Dispatch Board
-            </Link>
-            <Link className="field-button secondary px-4 py-2 text-sm" to="/admin/templates">
-              Open Checklist Templates
-            </Link>
-            <Link className="field-button primary px-4 py-2 text-sm" to="/admin/properties">
-              Open Property Management
-            </Link>
-          </div>
+        <div className="mb-3">
+          <h2 className="text-lg font-bold">Operations Setup</h2>
+          <p className="text-sm text-slate-600">
+            Manage property records, recurring service plans, and live dispatch.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Link className="field-button secondary px-4 py-2 text-center text-sm" to="/schedule">
+            Open Dispatch Board
+          </Link>
+          <Link className="field-button secondary px-4 py-2 text-center text-sm" to="/admin/templates">
+            Open Checklist Templates
+          </Link>
+          <Link className="field-button primary px-4 py-2 text-center text-sm" to="/admin/properties">
+            Open Property Management
+          </Link>
         </div>
       </section>
 
@@ -266,10 +264,10 @@ export function AdminPage() {
           <div className="space-y-2">
             {sortedUsers.map((user) => (
               <div key={user._id} className="rounded-xl border border-border p-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
                     <p className="font-semibold">{user.name}</p>
-                    <p className="text-sm text-slate-600">{user.email}</p>
+                    <p className="truncate text-sm text-slate-600">{user.email}</p>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                         user.role === "ADMIN"
@@ -299,23 +297,11 @@ export function AdminPage() {
                     ) : null}
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
-                    {user.passwordSetupStatus === "INVITED" ? (
-                      <button
-                        className="field-button secondary mt-6 inline-flex items-center gap-2 px-4"
-                        disabled={sendingInviteUserId === user._id || !user.isActive}
-                        onClick={() => void handleResendInvite(user)}
-                        type="button"
-                      >
-                        <Mail className="h-4 w-4" />
-                        {sendingInviteUserId === user._id ? "Sending..." : "Resend Invite"}
-                      </button>
-                    ) : null}
-
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
                     <label className="text-sm font-medium text-slate-700">
                       Role
                       <select
-                        className="input mt-1 min-w-36"
+                        className="input mt-1"
                         value={user.role}
                         disabled={savingUserId === user._id}
                         onChange={(event) =>
@@ -335,7 +321,7 @@ export function AdminPage() {
                     <label className="text-sm font-medium text-slate-700">
                       Status
                       <select
-                        className="input mt-1 min-w-36"
+                        className="input mt-1"
                         value={user.isActive ? "ACTIVE" : "INACTIVE"}
                         disabled={savingUserId === user._id}
                         onChange={(event) =>
@@ -350,6 +336,18 @@ export function AdminPage() {
                         <option value="INACTIVE">INACTIVE</option>
                       </select>
                     </label>
+
+                    {user.passwordSetupStatus === "INVITED" ? (
+                      <button
+                        className="field-button secondary col-span-2 inline-flex items-center justify-center gap-2 px-4 sm:col-span-1"
+                        disabled={sendingInviteUserId === user._id || !user.isActive}
+                        onClick={() => void handleResendInvite(user)}
+                        type="button"
+                      >
+                        <Mail className="h-4 w-4" />
+                        {sendingInviteUserId === user._id ? "Sending..." : "Resend Invite"}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
