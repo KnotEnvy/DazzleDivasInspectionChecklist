@@ -1,7 +1,8 @@
-import { ChangeEvent } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Id } from "convex/_generated/dataModel";
-import { Camera } from "lucide-react";
+import { Camera, Download } from "lucide-react";
+import toast from "react-hot-toast";
 import { EmptyState } from "@/components/EmptyState";
 import type { PhotoKind } from "@/lib/offlineOutbox";
 import { roomStatusTone } from "@/lib/statusColors";
@@ -26,6 +27,7 @@ type RoomDetail = {
     kind?: PhotoKind;
     url: string | null;
     isPendingUpload?: boolean;
+    blob?: Blob;
   }>;
 };
 
@@ -39,7 +41,6 @@ type InspectionRoomPanelProps = {
   savingTaskId: Id<"taskResults"> | null;
   savingIssueTaskId: Id<"taskResults"> | null;
   savingNotes: boolean;
-  uploadingPhotos: boolean;
   removingPhotoId: Id<"photos"> | null;
   completingRoomId: Id<"roomInspections"> | null;
   canCompleteRoom: boolean;
@@ -55,6 +56,85 @@ type InspectionRoomPanelProps = {
   onCompleteRoom: () => Promise<void>;
 };
 
+function supportsNativeFileShare() {
+  return (
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function" &&
+    typeof navigator.canShare === "function"
+  );
+}
+
+function triggerBlobDownload(blob: Blob, fileName: string) {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+async function savePhotoBackup(photo: { blob?: Blob; fileName: string; mimeType: string }) {
+  if (!photo.blob) {
+    throw new Error("Local photo backup is unavailable right now");
+  }
+
+  const file = new File([photo.blob], photo.fileName, {
+    type: photo.mimeType || photo.blob.type || "application/octet-stream",
+    lastModified: Date.now(),
+  });
+
+  if (supportsNativeFileShare()) {
+    try {
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: photo.fileName,
+          text: "Local checklist photo backup",
+        });
+        return "shared";
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return "cancelled";
+      }
+      throw error;
+    }
+  }
+
+  triggerBlobDownload(photo.blob, photo.fileName);
+  return "downloaded";
+}
+
+function PendingPhotoPreview({ blob, alt }: { blob?: Blob; alt: string }) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!blob) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    setPreviewUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [blob]);
+
+  if (!previewUrl) {
+    return (
+      <div className="flex h-40 items-center justify-center bg-slate-100 text-sm text-slate-500">
+        Preview unavailable
+      </div>
+    );
+  }
+
+  return <img alt={alt} className="h-40 w-full object-cover" src={previewUrl} />;
+}
+
 export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
   const {
     inspectionStatus,
@@ -66,7 +146,6 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
     savingTaskId,
     savingIssueTaskId,
     savingNotes,
-    uploadingPhotos,
     removingPhotoId,
     completingRoomId,
     canCompleteRoom,
@@ -81,6 +160,7 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
     onRemovePhoto,
     onCompleteRoom,
   } = props;
+  const [savingBackupId, setSavingBackupId] = useState<string | null>(null);
 
   if (room === undefined) {
     return (
@@ -98,6 +178,23 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
 
   const roomTasksComplete = room.taskResults.every((task) => task.completed);
   const roomHasEnoughPhotos = room.photos.length >= room.requiredPhotoMin;
+
+  async function handleSaveBackup(photo: RoomDetail["photos"][number]) {
+    setSavingBackupId(String(photo._id));
+
+    try {
+      const result = await savePhotoBackup(photo);
+      if (result === "shared") {
+        toast.success(`Opened save options for ${photo.fileName}`);
+      } else if (result === "downloaded") {
+        toast.success(`Downloaded backup copy of ${photo.fileName}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save backup photo");
+    } finally {
+      setSavingBackupId(null);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -209,9 +306,10 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
 
       <div className="rounded-2xl border border-dashed border-brand-300 bg-slate-50 p-4">
         <div className="mb-3">
-          <h3 className="font-semibold">Step 2: Upload proof photos</h3>
+          <h3 className="font-semibold">Step 2: Add proof photos</h3>
           <p className="text-sm text-slate-600">
-            Upload proof photos for this room. Removing a required photo reopens the room.
+            Use your device's normal photo picker. On phones, this should offer the familiar menu to
+            take a photo or choose one from the library.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
@@ -220,7 +318,7 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
             <select
               aria-label="Select photo category"
               className="input mt-1"
-              disabled={inspectionStatus === "COMPLETED" || uploadingPhotos}
+              disabled={inspectionStatus === "COMPLETED"}
               onChange={(event) => setPhotoKind(event.target.value as PhotoKind)}
               value={photoKind}
             >
@@ -231,26 +329,38 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
               ))}
             </select>
           </label>
-          <label className="text-sm font-medium text-slate-700">
-            Add Photos
-            <input
-              accept="image/*"
-              aria-label="Choose photos to upload"
-              className="input mt-1 py-2"
-              disabled={inspectionStatus === "COMPLETED" || uploadingPhotos}
-              multiple
-              onChange={(event) => void onPhotoUpload(event)}
-              type="file"
-            />
-          </label>
+          <div className="space-y-2 text-sm font-medium text-slate-700">
+            <span className="block">Add Photos</span>
+            <label
+              className={`field-button primary inline-flex cursor-pointer items-center px-4 ${
+                inspectionStatus === "COMPLETED" ? "pointer-events-none opacity-60" : ""
+              }`}
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Add Photo
+              <input
+                accept="image/*"
+                aria-label="Add photo"
+                className="sr-only"
+                disabled={inspectionStatus === "COMPLETED"}
+                multiple
+                onChange={(event) => void onPhotoUpload(event)}
+                type="file"
+              />
+            </label>
+            <p className="text-xs font-normal text-slate-500">
+              Pending local photos can be backed up to Photos or Files below if you need a manual
+              fallback.
+            </p>
+          </div>
         </div>
 
         {room.photos.length === 0 ? (
           <div className="mt-3">
             <EmptyState
               icon={<Camera className="h-7 w-7" />}
-              heading="No photos uploaded yet"
-              description="Use the file picker above to add proof photos for this room."
+              heading="No photos captured yet"
+              description="Tap Add Photo to use your device's normal camera or library flow."
             />
           </div>
         ) : (
@@ -263,6 +373,8 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
                 <div className="relative">
                   {photo.url ? (
                     <img alt={photo.fileName} className="h-40 w-full object-cover" src={photo.url} />
+                  ) : photo.blob ? (
+                    <PendingPhotoPreview alt={photo.fileName} blob={photo.blob} />
                   ) : (
                     <div className="flex h-40 items-center justify-center bg-slate-100 text-sm text-slate-500">
                       {photo.isPendingUpload ? "Pending local upload" : "Preview unavailable"}
@@ -277,9 +389,20 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
                     <p className="text-sm font-semibold">{photo.fileName}</p>
                     <p className="text-xs text-slate-500">
                       {photo.kind ?? "GENERAL"}
-                      {photo.isPendingUpload ? " | queued" : ""}
+                      {photo.isPendingUpload ? " | queued locally" : ""}
                     </p>
                   </div>
+                  {photo.blob ? (
+                    <button
+                      className="field-button secondary w-full px-3"
+                      disabled={savingBackupId === String(photo._id)}
+                      onClick={() => void handleSaveBackup(photo)}
+                      type="button"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      {savingBackupId === String(photo._id) ? "Opening..." : "Save Backup"}
+                    </button>
+                  ) : null}
                   {confirmAction === `removePhoto:${photo._id}` ? (
                     <div className="animate-slide-up flex gap-2">
                       <button

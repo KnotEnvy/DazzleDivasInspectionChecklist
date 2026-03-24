@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 type ChecklistType = "CLEANING" | "INSPECTION";
 type RoomGenerationMode = "SINGLE" | "PER_BEDROOM" | "PER_BATHROOM";
@@ -155,6 +156,7 @@ export function PropertyChecklistOverridesSection(props: {
   const updatePropertyTask = useMutation(api.templates.updatePropertyOverrideTask);
   const removePropertyTask = useMutation(api.templates.removePropertyOverrideTask);
 
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
   const [creatingOverrideCopy, setCreatingOverrideCopy] = useState(false);
   const [resettingOverrides, setResettingOverrides] = useState(false);
@@ -483,99 +485,125 @@ export function PropertyChecklistOverridesSection(props: {
   return (
     <div className="space-y-4">
       <section className="rounded-2xl border border-border bg-white p-4">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold">Checklist Preview</h2>
-            <p className="text-sm text-slate-600">
-              This property now previews its effective checklist library, using property overrides
-              when they exist and the shared base template otherwise.
-            </p>
+        <button
+          className="flex w-full flex-wrap items-start justify-between gap-3 text-left"
+          onClick={() => setPreviewCollapsed((prev) => !prev)}
+          type="button"
+        >
+          <div className="flex items-center gap-2">
+            <div>
+              <h2 className="text-lg font-bold">Checklist Preview</h2>
+              {previewCollapsed && (
+                <p className="text-sm text-slate-500">
+                  {previewSourceLabel} &middot; {bedrooms ?? 1} bed / {bathrooms ?? 1} bath
+                </p>
+              )}
+              {!previewCollapsed && (
+                <p className="text-sm text-slate-600">
+                  This property now previews its effective checklist library, using property overrides
+                  when they exist and the shared base template otherwise.
+                </p>
+              )}
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">
-              {previewSourceLabel}
-            </p>
-            <p className="text-xs font-semibold text-slate-500">
-              Using {bedrooms ?? 1} bedroom(s) and {bathrooms ?? 1} bathroom(s)
-            </p>
-          </div>
-        </div>
-
-        {library === undefined || preview === null ? (
-          <p className="text-sm text-slate-500">Loading checklist preview...</p>
-        ) : library.rooms.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-700">
-              No checklist template rooms exist yet.
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              Create the starter room library first, then this property can branch into its own
-              private override copy.
-            </p>
-            <button
-              className="field-button primary mt-3 px-4"
-              disabled={bootstrapDisabled}
-              onClick={() => void onBootstrapTemplates()}
-              type="button"
-            >
-              Create Starter Templates
-            </button>
-          </div>
-        ) : library.rooms.every((room) => room.isActive !== true) ? (
-          <div className="rounded-xl border border-dashed border-border bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-700">
-              All effective rooms are inactive for this property.
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              Reactivate at least one room before workers start new checklists here.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {(["CLEANING", "INSPECTION"] as ChecklistType[]).map((checklistType) => (
-              <div
-                key={checklistType}
-                className="rounded-xl border border-border bg-slate-50 p-3"
-              >
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="font-semibold">{checklistType} Checklist</h3>
-                  <span className="text-xs font-semibold text-slate-500">
-                    {preview[checklistType].length} rooms
-                  </span>
-                </div>
-
-                {preview[checklistType].length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    No {checklistType.toLowerCase()} rooms are active for this property.
-                  </p>
-                ) : (
-                  <div className="grid gap-2 xl:grid-cols-2">
-                    {preview[checklistType].map((room) => {
-                      const tasks =
-                        checklistType === "CLEANING" ? room.cleaningTasks : room.inspectionTasks;
-
-                      return (
-                        <div
-                          key={`${checklistType}-${room.key}-${room.roomName}`}
-                          className="rounded-lg border border-border bg-white p-2"
-                        >
-                          <p className="text-sm font-semibold">{room.roomName}</p>
-                          <p className="text-xs text-slate-500">
-                            {tasks.length} tasks | Photos required:{" "}
-                            {Math.max(2, ...tasks.map((task) => task.requiredPhotoMin ?? 0))}
-                          </p>
-                          <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                            {tasks.map((task) => (
-                              <li key={task.key}>- {task.description}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+          <div className="flex items-center gap-3">
+            {!previewCollapsed && (
+              <div className="text-right">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">
+                  {previewSourceLabel}
+                </p>
+                <p className="text-xs font-semibold text-slate-500">
+                  Using {bedrooms ?? 1} bedroom(s) and {bathrooms ?? 1} bathroom(s)
+                </p>
               </div>
-            ))}
+            )}
+            {previewCollapsed ? (
+              <ChevronDown className="h-5 w-5 shrink-0 text-slate-400" />
+            ) : (
+              <ChevronUp className="h-5 w-5 shrink-0 text-slate-400" />
+            )}
+          </div>
+        </button>
+
+        {!previewCollapsed && (
+          <div className="mt-3">
+            {library === undefined || preview === null ? (
+              <p className="text-sm text-slate-500">Loading checklist preview...</p>
+            ) : library.rooms.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-700">
+                  No checklist template rooms exist yet.
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Create the starter room library first, then this property can branch into its own
+                  private override copy.
+                </p>
+                <button
+                  className="field-button primary mt-3 px-4"
+                  disabled={bootstrapDisabled}
+                  onClick={(e) => { e.stopPropagation(); void onBootstrapTemplates(); }}
+                  type="button"
+                >
+                  Create Starter Templates
+                </button>
+              </div>
+            ) : library.rooms.every((room) => room.isActive !== true) ? (
+              <div className="rounded-xl border border-dashed border-border bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-700">
+                  All effective rooms are inactive for this property.
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Reactivate at least one room before workers start new checklists here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {(["CLEANING", "INSPECTION"] as ChecklistType[]).map((checklistType) => (
+                  <div
+                    key={checklistType}
+                    className="rounded-xl border border-border bg-slate-50 p-3"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <h3 className="font-semibold">{checklistType} Checklist</h3>
+                      <span className="text-xs font-semibold text-slate-500">
+                        {preview[checklistType].length} rooms
+                      </span>
+                    </div>
+
+                    {preview[checklistType].length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        No {checklistType.toLowerCase()} rooms are active for this property.
+                      </p>
+                    ) : (
+                      <div className="grid gap-2 xl:grid-cols-2">
+                        {preview[checklistType].map((room) => {
+                          const tasks =
+                            checklistType === "CLEANING" ? room.cleaningTasks : room.inspectionTasks;
+
+                          return (
+                            <div
+                              key={`${checklistType}-${room.key}-${room.roomName}`}
+                              className="rounded-lg border border-border bg-white p-2"
+                            >
+                              <p className="text-sm font-semibold">{room.roomName}</p>
+                              <p className="text-xs text-slate-500">
+                                {tasks.length} tasks | Photos required:{" "}
+                                {Math.max(2, ...tasks.map((task) => task.requiredPhotoMin ?? 0))}
+                              </p>
+                              <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                                {tasks.map((task) => (
+                                  <li key={task.key}>- {task.description}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </section>

@@ -1,5 +1,29 @@
 import { openDB } from "idb";
 
+function generateLocalId() {
+  if (typeof crypto !== "undefined") {
+    if (typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+
+    if (typeof crypto.getRandomValues === "function") {
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+      return [
+        hex.slice(0, 4).join(""),
+        hex.slice(4, 6).join(""),
+        hex.slice(6, 8).join(""),
+        hex.slice(8, 10).join(""),
+        hex.slice(10, 16).join(""),
+      ].join("-");
+    }
+  }
+
+  return `fallback-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export type CreateInspectionPayload = {
   propertyId: string;
   type: "CLEANING" | "INSPECTION";
@@ -222,6 +246,20 @@ async function putItem(item: OutboxItem) {
   notifyOutboxChanged();
 }
 
+async function putItems(items: OutboxItem[]) {
+  if (items.length === 0) {
+    return;
+  }
+
+  const database = await db();
+  const transaction = database.transaction(STORE, "readwrite");
+  for (const item of items) {
+    await transaction.store.put(item);
+  }
+  await transaction.done;
+  notifyOutboxChanged();
+}
+
 async function deleteItems(ids: string[]) {
   if (ids.length === 0) {
     return;
@@ -268,7 +306,7 @@ function makeBaseItem<TType extends OutboxItemType, TPayload>(
 ): BaseOutboxItem<TType, TPayload> {
   const createdAt = Date.now();
   return {
-    id: crypto.randomUUID(),
+    id: generateLocalId(),
     type,
     payload,
     createdAt,
@@ -471,13 +509,26 @@ export async function queueUpdateRoomNotes(payload: UpdateRoomNotesPayload) {
 export async function queueUploadPhoto(
   payload: Omit<UploadPhotoPayload, "localPhotoId">
 ) {
-  const item = makeBaseItem("UPLOAD_PHOTO", {
-    ...payload,
-    localPhotoId: `local-photo:${crypto.randomUUID()}`,
-  });
+  const [localPhotoId] = await queueUploadPhotos([payload]);
+  return localPhotoId;
+}
 
-  await putItem(item);
-  return item.payload.localPhotoId;
+export async function queueUploadPhotos(
+  payloads: Array<Omit<UploadPhotoPayload, "localPhotoId">>
+) {
+  if (payloads.length === 0) {
+    return [];
+  }
+
+  const items = payloads.map((payload) =>
+    makeBaseItem("UPLOAD_PHOTO", {
+      ...payload,
+      localPhotoId: `local-photo:${generateLocalId()}`,
+    })
+  );
+
+  await putItems(items);
+  return items.map((item) => item.payload.localPhotoId);
 }
 
 export async function removeQueuedLocalPhoto(localPhotoId: string) {
@@ -654,3 +705,6 @@ export async function discardOutboxItem(id: string) {
   const items = await listItemsInternal();
   await deleteItems(getDiscardedOutboxItemIds(items, id));
 }
+
+
+

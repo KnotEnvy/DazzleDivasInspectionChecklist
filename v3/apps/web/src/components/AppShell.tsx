@@ -32,7 +32,7 @@ export function AppShell() {
   const { user, isAdmin } = useCurrentUser();
   const isOnline = useNetworkStatus();
   const { count } = useOutboxCount();
-  const { items } = useOutboxItems({ includeResolved: true });
+  const { items } = useOutboxItems();
   const { syncing } = useOfflineSync();
   const conflictCount = items.filter((item) => item.status === "CONFLICT").length;
   const [moreOpen, setMoreOpen] = useState(false);

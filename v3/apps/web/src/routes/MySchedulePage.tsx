@@ -77,12 +77,9 @@ type JobDetail = {
   } | null;
 };
 
-function startOfWeekLocal(date: Date) {
+function startOfDayLocal(date: Date) {
   const clone = new Date(date);
   clone.setHours(0, 0, 0, 0);
-  const day = clone.getDay();
-  const mondayOffset = (day + 6) % 7;
-  clone.setDate(clone.getDate() - mondayOffset);
   return clone;
 }
 
@@ -180,7 +177,7 @@ export function MySchedulePage() {
   const [updatingStatus, setUpdatingStatus] = useState<WorkerEditableStatus | null>(null);
   const [scheduleAnchor] = useState(() => Date.now());
 
-  const windowStart = useMemo(() => startOfWeekLocal(new Date(scheduleAnchor)), [scheduleAnchor]);
+  const windowStart = useMemo(() => startOfDayLocal(new Date(scheduleAnchor)), [scheduleAnchor]);
   const windowEnd = useMemo(() => {
     return new Date(windowStart.getTime() + 13 * DAY_MS + (23 * 60 + 59) * 60 * 1000);
   }, [windowStart]);
@@ -389,7 +386,7 @@ export function MySchedulePage() {
 
       {/* ── Weekly grid — primary nav on mobile ── */}
       <section className="rounded-2xl border border-border bg-white p-3 shadow-sm">
-        <h2 className="mb-2 text-sm font-bold text-slate-600">This Week</h2>
+        <h2 className="mb-2 text-sm font-bold text-slate-600">Next 7 Days</h2>
         <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-7 md:gap-3 md:overflow-visible md:pb-0">
           {weekDays.map((day, index) => {
             const isToday = sameLocalDate(Date.now(), day);
@@ -400,11 +397,11 @@ export function MySchedulePage() {
                   isToday ? "border-brand-500 border-t-2 bg-brand-50/40" : "border-border bg-slate-50"
                 }`}
               >
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                  {day.toLocaleDateString(undefined, { weekday: "short" })}
+                <p className={`text-[11px] font-bold uppercase tracking-[0.16em] ${isToday ? "text-brand-700" : "text-slate-500"}`}>
+                  {isToday ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })}
                 </p>
                 <p className="text-xs font-semibold">
-                  {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  {day.toLocaleDateString(undefined, { weekday: isToday ? "short" : undefined, month: "short", day: "numeric" })}
                 </p>
                 <div className="mt-1.5 space-y-1">
                   {jobsByDay[index].length === 0 ? (

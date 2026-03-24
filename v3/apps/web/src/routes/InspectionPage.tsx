@@ -1,4 +1,4 @@
-﻿import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { Link } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
@@ -19,7 +19,7 @@ import {
   queueSetTaskCompleted,
   queueSetTaskIssue,
   queueUpdateRoomNotes,
-  queueUploadPhoto,
+  queueUploadPhotos,
   removeQueuedLocalPhoto,
   type PhotoKind,
 } from "@/lib/offlineOutbox";
@@ -120,7 +120,7 @@ export function InspectionPage() {
     api.inspections.getById,
     inspectionId ? { inspectionId } : "skip"
   ) as InspectionDetail | null | undefined;
-  const { items: outboxItems } = useOutboxItems({ includeResolved: true });
+  const { items: outboxItems } = useOutboxItems();
 
   const [selectedRoomId, setSelectedRoomId] = useState<Id<"roomInspections"> | null>(null);
   const isCompletedAdminReview = isAdmin && inspection?.status === "COMPLETED";
@@ -138,8 +138,6 @@ export function InspectionPage() {
   const setTaskIssue = useMutation(api.taskResults.setIssue);
   const updateRoomNotes = useMutation(api.roomInspections.updateNotes);
   const completeRoom = useMutation(api.roomInspections.complete);
-  const generateUploadUrl = useMutation(api.photos.generateUploadUrl);
-  const savePhoto = useMutation(api.photos.save);
   const removePhoto = useMutation(api.photos.remove);
 
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
@@ -150,7 +148,6 @@ export function InspectionPage() {
   const [savingTaskId, setSavingTaskId] = useState<Id<"taskResults"> | null>(null);
   const [savingIssueTaskId, setSavingIssueTaskId] = useState<Id<"taskResults"> | null>(null);
   const [savingNotes, setSavingNotes] = useState(false);
-  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [removingPhotoId, setRemovingPhotoId] = useState<Id<"photos"> | null>(null);
   const [completingRoomId, setCompletingRoomId] = useState<Id<"roomInspections"> | null>(null);
   const [completingInspection, setCompletingInspection] = useState(false);
@@ -366,75 +363,47 @@ export function InspectionPage() {
     }
   }
 
-  async function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
+  async function handlePhotoFiles(files: File[]) {
     if (!inspectionId || !selectedRoomView || files.length === 0) {
       return;
     }
 
-    if (!isOnline) {
-      for (const file of files) {
-        await queueUploadPhoto({
-          inspectionId,
-          roomInspectionId: selectedRoomView._id,
-          file,
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type || "application/octet-stream",
-          kind: photoKind,
-        });
-      }
-
-      toast.success(`Saved ${files.length} photo${files.length === 1 ? "" : "s"} for sync`);
-      event.target.value = "";
-      return;
-    }
-
-    setUploadingPhotos(true);
-    let uploaded = 0;
-
     try {
-      for (const file of files) {
-        const uploadUrl = await generateUploadUrl({
-          roomInspectionId: selectedRoomView._id,
-        });
+      const captureStartedAt = Date.now();
+      await queueUploadPhotos(
+        files.map((file, index) => {
+          const mimeType = file.type || "application/octet-stream";
+          const fallbackExtension = mimeType === "image/png" ? ".png" : ".jpg";
+          const fileName = file.name?.trim() || `photo-${captureStartedAt}-${index + 1}${fallbackExtension}`;
 
-        const response = await fetch(uploadUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": file.type || "application/octet-stream",
-          },
-          body: file,
-        });
+          return {
+            inspectionId,
+            roomInspectionId: selectedRoomView._id,
+            file,
+            fileName,
+            fileSize: file.size,
+            mimeType,
+            kind: photoKind,
+          };
+        })
+      );
 
-        if (!response.ok) {
-          throw new Error(`Upload failed for ${file.name}`);
-        }
-
-        const { storageId } = (await response.json()) as { storageId?: Id<"_storage"> };
-        if (!storageId) {
-          throw new Error(`Upload did not return a storage id for ${file.name}`);
-        }
-
-        await savePhoto({
-          storageId,
-          roomInspectionId: selectedRoomView._id,
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type || "application/octet-stream",
-          kind: photoKind,
-        });
-
-        uploaded += 1;
+      if (isOnline) {
+        toast.success(
+          `Saved ${files.length} photo${files.length === 1 ? "" : "s"} locally and queued background sync`
+        );
+      } else {
+        toast.success(`Saved ${files.length} photo${files.length === 1 ? "" : "s"} for sync`);
       }
-
-      toast.success(`Uploaded ${uploaded} photo${uploaded === 1 ? "" : "s"}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to upload photo");
-    } finally {
-      setUploadingPhotos(false);
-      event.target.value = "";
+      toast.error(error instanceof Error ? error.message : "Failed to save photo locally");
     }
+  }
+
+  async function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    await handlePhotoFiles(files);
   }
 
   async function handleRemovePhoto(photo: {
@@ -776,7 +745,6 @@ export function InspectionPage() {
                           setRoomNotes={setRoomNotes}
                           setTaskIssueDrafts={setTaskIssueDrafts}
                           taskIssueDrafts={taskIssueDrafts}
-                          uploadingPhotos={uploadingPhotos}
                         />
                       </div>
                     ) : null}
@@ -871,6 +839,18 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
