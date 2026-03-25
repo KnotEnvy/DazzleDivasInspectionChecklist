@@ -8,7 +8,6 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronUp,
-  ClipboardList,
   Inbox,
   Plus,
 } from "lucide-react";
@@ -259,6 +258,23 @@ function requiredRoleForJobType(jobType: JobType) {
   return jobType === "INSPECTION" ? "INSPECTOR" : "CLEANER";
 }
 
+function urgencyBorder(scheduledStart: number) {
+  const hoursUntil = (scheduledStart - Date.now()) / (1000 * 60 * 60);
+  if (hoursUntil < 0) return "border-l-4 border-l-rose-500";
+  if (hoursUntil <= 24) return "border-l-4 border-l-amber-400";
+  if (hoursUntil <= 48) return "border-l-4 border-l-sky-300";
+  return "";
+}
+
+function urgencyLabel(scheduledStart: number) {
+  const hoursUntil = (scheduledStart - Date.now()) / (1000 * 60 * 60);
+  if (hoursUntil < 0) return "Overdue";
+  if (hoursUntil <= 6) return "Due soon";
+  if (hoursUntil <= 24) return "Within 24h";
+  if (hoursUntil <= 48) return "Within 48h";
+  return null;
+}
+
 function getDeleteBlockReason(job: DispatchDetail | null | undefined) {
   if (!job) {
     return "Select a job to delete";
@@ -318,6 +334,7 @@ export function AdminSchedulePage() {
   >({});
   const [createForm, setCreateForm] = useState(buildDefaultCreateForm);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showAllUnassigned, setShowAllUnassigned] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
 
   const windowStart = useMemo(() => {
@@ -561,49 +578,6 @@ export function AdminSchedulePage() {
       }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create job");
-    } finally {
-      setSavingAction(null);
-    }
-  }
-
-  async function handleAssign() {
-    if (!selectedJob) {
-      return;
-    }
-    setSavingAction("assign");
-    try {
-      await reassignJob({
-        jobId: selectedJob._id,
-        assigneeId: assigneeId.length > 0 ? assigneeId : null,
-      });
-      toast.success(assigneeId.length > 0 ? "Job assignment updated" : "Job moved to unassigned");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update assignee");
-    } finally {
-      setSavingAction(null);
-    }
-  }
-
-  async function handleReschedule() {
-    if (!selectedJob) {
-      return;
-    }
-    const scheduledStart = fromDatetimeLocalValue(scheduledStartInput);
-    const scheduledEnd = fromDatetimeLocalValue(scheduledEndInput);
-    if (!Number.isFinite(scheduledStart) || !Number.isFinite(scheduledEnd)) {
-      toast.error("Enter valid start and end times");
-      return;
-    }
-    setSavingAction("reschedule");
-    try {
-      await rescheduleJob({
-        jobId: selectedJob._id,
-        scheduledStart,
-        scheduledEnd,
-      });
-      toast.success("Job rescheduled");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to reschedule job");
     } finally {
       setSavingAction(null);
     }
@@ -865,7 +839,7 @@ export function AdminSchedulePage() {
           </button>
           {showCreateForm && (
           <div className="border-t border-border p-4">
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="text-sm font-medium text-slate-700">
               Property
               <select
@@ -906,6 +880,26 @@ export function AdminSchedulePage() {
               </select>
             </label>
             <label className="text-sm font-medium text-slate-700">
+              Assignee
+              <select
+                className="input mt-1"
+                value={createForm.assigneeId}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    assigneeId: event.target.value as Id<"users"> | "",
+                  }))
+                }
+              >
+                <option value="">Leave unassigned</option>
+                {eligibleCreateAssignees.map((user) => (
+                  <option key={user._id} value={user._id}>
+                    {user.name} ({user.role})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-medium text-slate-700">
               Start
               <input
                 className="input mt-1"
@@ -928,23 +922,21 @@ export function AdminSchedulePage() {
               />
             </label>
             <label className="text-sm font-medium text-slate-700">
-              Assignee
+              Priority
               <select
                 className="input mt-1"
-                value={createForm.assigneeId}
+                value={createForm.priority}
                 onChange={(event) =>
                   setCreateForm((current) => ({
                     ...current,
-                    assigneeId: event.target.value as Id<"users"> | "",
+                    priority: event.target.value as Priority,
                   }))
                 }
               >
-                <option value="">Leave unassigned</option>
-                {eligibleCreateAssignees.map((user) => (
-                  <option key={user._id} value={user._id}>
-                    {user.name} ({user.role})
-                  </option>
-                ))}
+                <option value="LOW">LOW</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="HIGH">HIGH</option>
+                <option value="URGENT">URGENT</option>
               </select>
             </label>
             <label className="text-sm font-medium text-slate-700">
@@ -966,24 +958,6 @@ export function AdminSchedulePage() {
               </select>
             </label>
             <label className="text-sm font-medium text-slate-700">
-              Priority
-              <select
-                className="input mt-1"
-                value={createForm.priority}
-                onChange={(event) =>
-                  setCreateForm((current) => ({
-                    ...current,
-                    priority: event.target.value as Priority,
-                  }))
-                }
-              >
-                <option value="LOW">LOW</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HIGH">HIGH</option>
-                <option value="URGENT">URGENT</option>
-              </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700">
               Client / Account
               <input
                 className="input mt-1"
@@ -995,7 +969,7 @@ export function AdminSchedulePage() {
               />
             </label>
             <label className="text-sm font-medium text-slate-700">
-              Arrival Deadline
+              Guest Arrival Deadline
               <input
                 className="input mt-1"
                 type="datetime-local"
@@ -1009,7 +983,7 @@ export function AdminSchedulePage() {
           <label className="mt-3 block text-sm font-medium text-slate-700">
             Job Notes
             <textarea
-              className="input mt-1 min-h-24"
+              className="input mt-1 min-h-20"
               placeholder="Cleaning instructions, guest issues, or dispatch notes"
               value={createForm.notes}
               onChange={(event) =>
@@ -1017,17 +991,14 @@ export function AdminSchedulePage() {
               }
             />
           </label>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">
-              Property assignments can stay as preferences, but dispatch is no longer locked to them.
-            </p>
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
             <button
-              className="field-button primary px-4"
+              className="field-button primary px-6"
               disabled={savingAction === "create"}
               onClick={() => void handleCreateJob()}
               type="button"
             >
-              {savingAction === "create" ? "Creating..." : "Create Dispatch Job"}
+              {savingAction === "create" ? "Creating..." : "Add Turnover"}
             </button>
           </div>
           </div>
@@ -1057,10 +1028,12 @@ export function AdminSchedulePage() {
             />
           ) : (
             <div className="space-y-2">
-              {unassignedJobs.slice(0, 8).map((job) => (
+              {(showAllUnassigned ? unassignedJobs : unassignedJobs.slice(0, 5)).map((job) => {
+                const urgency = urgencyLabel(job.scheduledStart);
+                return (
                 <div
                   key={job._id}
-                  className={`rounded-2xl border p-3 transition ${
+                  className={`rounded-2xl border p-3 transition ${urgencyBorder(job.scheduledStart)} ${
                     selectedJobId === job._id
                       ? "border-brand-500 bg-brand-50"
                       : "border-border bg-slate-50"
@@ -1071,7 +1044,18 @@ export function AdminSchedulePage() {
                     onClick={() => setSelectedJobId(job._id)}
                     type="button"
                   >
-                    <p className="font-semibold">{job.propertyName}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold">{job.propertyName}</p>
+                      {urgency && (
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          urgency === "Overdue" ? "bg-rose-100 text-rose-700"
+                            : urgency === "Due soon" ? "bg-amber-100 text-amber-700"
+                            : "bg-sky-100 text-sky-700"
+                        }`}>
+                          {urgency}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-slate-600">{formatJobWindow(job)}</p>
                     <p className="text-xs text-slate-500">{job.jobType}</p>
                   </button>
@@ -1105,7 +1089,19 @@ export function AdminSchedulePage() {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
+              {unassignedJobs.length > 5 && (
+                <button
+                  className="w-full rounded-xl py-2 text-center text-sm font-semibold text-brand-600 hover:text-brand-800 transition"
+                  onClick={() => setShowAllUnassigned((prev) => !prev)}
+                  type="button"
+                >
+                  {showAllUnassigned
+                    ? "Show less"
+                    : `Show all ${unassignedJobs.length} unassigned`}
+                </button>
+              )}
             </div>
           )}
         </section>
@@ -1210,108 +1206,132 @@ export function AdminSchedulePage() {
                 description="Adjust the filters above or change the date window."
               />
             ) : viewMode === "month" ? (
-              <div className="grid gap-3 lg:grid-cols-7">
-                {monthWeeks.flat().map((day, index) => {
-                  const dayJobs = jobsByDay[index] ?? [];
-                  const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
+              <div className="space-y-2">
+                {monthWeeks.map((week, weekIndex) => (
+                  <div
+                    key={weekIndex}
+                    className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-7 md:gap-3 md:overflow-visible md:pb-0"
+                  >
+                    {week.map((day) => {
+                      const dayIndex = weekIndex * 7 + week.indexOf(day);
+                      const dayJobs = jobsByDay[dayIndex] ?? [];
+                      const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
+                      const isToday = sameLocalDate(Date.now(), day);
 
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          className={`min-w-[140px] flex-shrink-0 rounded-xl border p-2 md:min-w-0 md:flex-shrink ${
+                            isToday
+                              ? "border-brand-500 border-t-2 bg-brand-50/40"
+                              : isCurrentMonth
+                                ? "border-border bg-slate-50"
+                                : "border-slate-200 bg-slate-100/60"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <p className={`text-[11px] font-bold uppercase tracking-[0.16em] ${isToday ? "text-brand-700" : "text-slate-500"}`}>
+                              {isToday ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })}
+                            </p>
+                            {dayJobs.length > 0 && (
+                              <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                                {dayJobs.length}
+                              </span>
+                            )}
+                          </div>
+                          <p className={`text-xs font-semibold ${isCurrentMonth ? "text-slate-900" : "text-slate-400"}`}>
+                            {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          </p>
+                          <div className="mt-1.5 space-y-1">
+                            {dayJobs.length === 0 ? (
+                              <p className="text-[11px] text-slate-400">&mdash;</p>
+                            ) : (
+                              <>
+                                {dayJobs.slice(0, 3).map((job) => (
+                                  <button
+                                    key={job._id}
+                                    className={`w-full rounded-lg border-l-[3px] bg-white px-1.5 py-1 text-left text-[11px] transition ${statusLeftBorder(job.status)} ${
+                                      selectedJobId === job._id
+                                        ? "ring-2 ring-brand-400 ring-offset-1"
+                                        : "hover:ring-1 hover:ring-brand-200 hover:ring-offset-1"
+                                    }`}
+                                    onClick={() => setSelectedJobId(job._id)}
+                                    type="button"
+                                  >
+                                    <span className="font-semibold">
+                                      {new Date(job.scheduledStart).toLocaleTimeString([], {
+                                        hour: "numeric",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
+                                    <span className="ml-1 text-slate-600 truncate">{job.propertyName}</span>
+                                  </button>
+                                ))}
+                                {dayJobs.length > 3 && (
+                                  <p className="text-[10px] font-semibold text-slate-500">
+                                    +{dayJobs.length - 3} more
+                                  </p>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            ) : viewMode === "week" ? (
+              <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-7 md:gap-3 md:overflow-visible md:pb-0">
+                {visibleDays.map((day, index) => {
+                  const isToday = sameLocalDate(Date.now(), day);
                   return (
                     <div
                       key={day.toISOString()}
-                      className={`rounded-2xl border p-3 ${
-                        isCurrentMonth ? "border-border bg-slate-50" : "border-slate-200 bg-slate-100"
+                      className={`min-w-[140px] flex-shrink-0 rounded-xl border p-2 md:min-w-0 md:flex-shrink ${
+                        isToday
+                          ? "border-brand-500 border-t-2 bg-brand-50/40"
+                          : "border-border bg-slate-50"
                       }`}
                     >
-                      <div className="mb-3 flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                            {day.toLocaleDateString(undefined, { weekday: "short" })}
-                          </p>
-                          <p
-                            className={`text-sm font-semibold ${
-                              isCurrentMonth ? "text-slate-900" : "text-slate-500"
-                            }`}
-                          >
-                            {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                          </p>
-                        </div>
-                        <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-slate-600">
-                          {dayJobs.length}
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {dayJobs.length === 0 ? (
-                          <p className="text-xs text-slate-500">No jobs</p>
+                      <p className={`text-[11px] font-bold uppercase tracking-[0.16em] ${isToday ? "text-brand-700" : "text-slate-500"}`}>
+                        {isToday ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })}
+                      </p>
+                      <p className="text-xs font-semibold">
+                        {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                      </p>
+                      <div className="mt-1.5 space-y-1">
+                        {jobsByDay[index].length === 0 ? (
+                          <p className="text-[11px] text-slate-400">&mdash;</p>
                         ) : (
-                          <>
-                            {dayJobs.slice(0, 3).map((job) => (
-                              <button
-                                key={job._id}
-                                className={`w-full rounded-xl border p-2 text-left text-xs transition ${
-                                  selectedJobId === job._id
-                                    ? "border-brand-500 bg-brand-50"
-                                    : "border-border bg-white hover:border-brand-300"
-                                }`}
-                                onClick={() => setSelectedJobId(job._id)}
-                                type="button"
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <p className="font-semibold">
-                                    {new Date(job.scheduledStart).toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </p>
-                                  <span
-                                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(
-                                      job.status
-                                    )}`}
-                                  >
-                                    {job.status}
-                                  </span>
-                                </div>
-                                <p className="mt-1 font-semibold">{job.propertyName}</p>
-                                <p className="mt-1 text-[11px] text-slate-500">
-                                  {job.assigneeName ?? "Unassigned"}
-                                </p>
-                              </button>
-                            ))}
-                            {dayJobs.length > 3 ? (
-                              <p className="text-[11px] font-semibold text-slate-500">
-                                +{dayJobs.length - 3} more jobs
+                          jobsByDay[index].map((job) => (
+                            <button
+                              key={job._id}
+                              className={`w-full rounded-lg border-l-[3px] bg-white px-2 py-1.5 text-left text-[12px] transition ${statusLeftBorder(job.status)} ${
+                                selectedJobId === job._id
+                                  ? "ring-2 ring-brand-400 ring-offset-1"
+                                  : "hover:ring-1 hover:ring-brand-200 hover:ring-offset-1"
+                              }`}
+                              onClick={() => setSelectedJobId(job._id)}
+                              type="button"
+                            >
+                              <p className="font-semibold leading-tight">
+                                {new Date(job.scheduledStart).toLocaleTimeString([], {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
                               </p>
-                            ) : null}
-                          </>
+                              <p className="leading-tight text-slate-700 truncate">{job.propertyName}</p>
+                              <p className="text-[11px] text-slate-500 truncate">
+                                {job.assigneeName ?? "Unassigned"}
+                              </p>
+                            </button>
+                          ))
                         )}
                       </div>
                     </div>
                   );
                 })}
-              </div>
-            ) : viewMode === "week" ? (
-              <div className="grid gap-3 lg:grid-cols-7">
-                {visibleDays.map((day, index) => (
-                  <div key={day.toISOString()} className="rounded-2xl border border-border bg-slate-50 p-3">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
-                      {day.toLocaleDateString(undefined, { weekday: "short" })}
-                    </p>
-                    <p className="mb-3 text-sm font-semibold">{day.toLocaleDateString()}</p>
-                    <div className="space-y-2">
-                      {jobsByDay[index].length === 0 ? (
-                        <p className="text-xs text-slate-500">No jobs</p>
-                      ) : (
-                        jobsByDay[index].map((job) => (
-                          <JobCard
-                            key={job._id}
-                            job={job}
-                            isActive={selectedJobId === job._id}
-                            onSelect={setSelectedJobId}
-                          />
-                        ))
-                      )}
-                    </div>
-                  </div>
-                ))}
               </div>
             ) : (
               <div className="space-y-3">
@@ -1327,33 +1347,6 @@ export function AdminSchedulePage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-border bg-white p-4">
-            <h2 className="mb-3 text-lg font-bold">Filtered Job List</h2>
-            {jobs === undefined ? (
-              <div className="space-y-2">
-                <div className="skeleton h-16 rounded-xl" />
-                <div className="skeleton h-16 rounded-xl" />
-                <div className="skeleton h-16 rounded-xl" />
-              </div>
-            ) : listJobs.length === 0 ? (
-              <EmptyState
-                icon={<ClipboardList className="h-8 w-8" />}
-                heading="No dispatch jobs"
-                description="Create a job above or adjust the date window."
-              />
-            ) : (
-              <div className="space-y-2">
-                {listJobs.map((job) => (
-                  <JobRow
-                    key={job._id}
-                    job={job}
-                    isActive={selectedJobId === job._id}
-                    onSelect={setSelectedJobId}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
         </div>
 
         <aside className="xl:sticky xl:top-4 xl:self-start rounded-2xl border border-border bg-white p-4">
@@ -1374,80 +1367,66 @@ export function AdminSchedulePage() {
           ) : !selectedJob ? (
             <p className="text-sm text-slate-500">Job not found.</p>
           ) : (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-border bg-slate-50 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="space-y-3">
+              {/* Job header card */}
+              <div className="rounded-2xl border border-border bg-slate-50 p-3">
+                <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold">{selectedJob.property?.name ?? "Unknown property"}</p>
-                    <p className="text-sm text-slate-600">
+                    <p className="text-xs text-slate-600">
                       {selectedJob.property?.address ?? "No address on file"}
                     </p>
                   </div>
-                  <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(selectedJob.status)}`}>
+                  <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(selectedJob.status)}`}>
                     {selectedJob.status}
                   </span>
                 </div>
-                <p className="mt-3 text-sm text-slate-600">
+                <p className="mt-2 text-sm text-slate-700">
                   {selectedJob.jobType} | {formatJobWindow(selectedJob)}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="text-xs text-slate-500">
                   Priority: {selectedJob.priority ?? "MEDIUM"}
                   {selectedJob.assignee ? ` | ${selectedJob.assignee.name}` : " | Unassigned"}
-                  {selectedJob.property?.timezone ? ` | ${selectedJob.property.timezone}` : ""}
                 </p>
+
+                {/* Compact info rows — only show non-empty fields */}
+                {(selectedJob.notes || selectedJob.arrivalDeadline || selectedJob.clientLabel) && (
+                  <div className="mt-2 space-y-1 border-t border-border pt-2 text-xs text-slate-600">
+                    {selectedJob.arrivalDeadline && (
+                      <p><span className="font-semibold text-slate-700">Guest arrival:</span> {formatOptionalDateTime(selectedJob.arrivalDeadline)}</p>
+                    )}
+                    {selectedJob.clientLabel && (
+                      <p><span className="font-semibold text-slate-700">Client:</span> {selectedJob.clientLabel}{selectedJob.intakeSource ? ` (${selectedJob.intakeSource})` : ""}</p>
+                    )}
+                    {selectedJob.notes && (
+                      <p><span className="font-semibold text-slate-700">Notes:</span> {selectedJob.notes}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Property details — compact */}
+                {(selectedJob.property?.serviceNotes || selectedJob.property?.accessInstructions || selectedJob.property?.entryMethod) && (
+                  <div className="mt-2 space-y-1 border-t border-border pt-2 text-xs text-slate-600">
+                    {selectedJob.property.accessInstructions && (
+                      <p><span className="font-semibold text-slate-700">Access:</span> {selectedJob.property.accessInstructions}</p>
+                    )}
+                    {selectedJob.property.entryMethod && (
+                      <p><span className="font-semibold text-slate-700">Entry:</span> {selectedJob.property.entryMethod}</p>
+                    )}
+                    {selectedJob.property.serviceNotes && (
+                      <p><span className="font-semibold text-slate-700">Service notes:</span> {selectedJob.property.serviceNotes}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {(selectedJob.property?.isArchived || selectedJob.property?.isActive === false) && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                  Dispatch edits are blocked because this property is archived or inactive.
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  Dispatch edits are blocked — property is archived or inactive.
                 </div>
               )}
 
-              {selectedJob.notes && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Job Notes</p>
-                  <p className="text-sm text-slate-600">{selectedJob.notes}</p>
-                </div>
-              )}
-              {selectedJob.intakeSource && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Turnover Source</p>
-                  <p className="text-sm text-slate-600">{selectedJob.intakeSource}</p>
-                </div>
-              )}
-              {selectedJob.clientLabel && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Client / Account</p>
-                  <p className="text-sm text-slate-600">{selectedJob.clientLabel}</p>
-                </div>
-              )}
-              {selectedJob.arrivalDeadline && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Arrival Deadline</p>
-                  <p className="text-sm text-slate-600">
-                    {formatOptionalDateTime(selectedJob.arrivalDeadline)}
-                  </p>
-                </div>
-              )}
-              {selectedJob.property?.serviceNotes && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Service Notes</p>
-                  <p className="text-sm text-slate-600">{selectedJob.property.serviceNotes}</p>
-                </div>
-              )}
-              {selectedJob.property?.accessInstructions && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Access Instructions</p>
-                  <p className="text-sm text-slate-600">{selectedJob.property.accessInstructions}</p>
-                </div>
-              )}
-              {selectedJob.property?.entryMethod && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Entry Method</p>
-                  <p className="text-sm text-slate-600">{selectedJob.property.entryMethod}</p>
-                </div>
-              )}
-
+              {/* Primary action */}
               <button
                 className="field-button primary w-full px-4"
                 disabled={
@@ -1467,31 +1446,19 @@ export function AdminSchedulePage() {
                     : "Start Checklist"}
               </button>
 
-              <button
-                className="field-button secondary w-full px-4"
-                disabled={controlsLocked || savingAction === "saveAll" || !hasDispatchChanges}
-                onClick={() => void handleSaveAllDispatchChanges()}
-                type="button"
-              >
-                {savingAction === "saveAll" ? "Saving All..." : "Save All Dispatch Changes"}
-              </button>
+              {/* Consolidated dispatch controls */}
+              <section className="rounded-2xl border border-border p-3 space-y-3">
+                <h3 className="text-sm font-bold text-slate-600">Dispatch Controls</h3>
 
-              <section className="rounded-2xl border border-border p-4">
-                <div className="mb-2">
-                  <h3 className="font-semibold">Assignee</h3>
-                  <p className="text-sm text-slate-600">
-                    Choose any active {requiredRoleForJob(selectedJob).toLowerCase()} or leave this job unassigned.
-                  </p>
-                </div>
-                <label className="text-sm font-medium text-slate-700">
-                  Assigned Staff
+                <label className="block text-sm font-medium text-slate-700">
+                  Assignee
                   <select
                     className="input mt-1"
                     disabled={controlsLocked}
                     value={assigneeId}
                     onChange={(event) => setAssigneeId(event.target.value as Id<"users"> | "")}
                   >
-                    <option value="">Leave unassigned</option>
+                    <option value="">Unassigned</option>
                     {eligibleAssignees.map((user) => (
                       <option key={user._id} value={user._id}>
                         {user.name} ({user.role})
@@ -1499,23 +1466,9 @@ export function AdminSchedulePage() {
                     ))}
                   </select>
                 </label>
-                <button
-                  className="field-button secondary mt-3 w-full px-4"
-                  disabled={controlsLocked || savingAction === "assign" || assigneeId === selectedAssigneeValue}
-                  onClick={() => void handleAssign()}
-                  type="button"
-                >
-                  {savingAction === "assign" ? "Saving..." : "Save Assignment"}
-                </button>
-              </section>
 
-              <section className="rounded-2xl border border-border p-4">
-                <div className="mb-2">
-                  <h3 className="font-semibold">Reschedule</h3>
-                  <p className="text-sm text-slate-600">Move the clean to the correct day or time window.</p>
-                </div>
-                <div className="grid gap-3">
-                  <label className="text-sm font-medium text-slate-700">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block text-sm font-medium text-slate-700">
                     Start
                     <input
                       className="input mt-1"
@@ -1525,7 +1478,7 @@ export function AdminSchedulePage() {
                       onChange={(event) => setScheduledStartInput(event.target.value)}
                     />
                   </label>
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className="block text-sm font-medium text-slate-700">
                     End
                     <input
                       className="input mt-1"
@@ -1536,29 +1489,8 @@ export function AdminSchedulePage() {
                     />
                   </label>
                 </div>
-                <button
-                  className="field-button secondary mt-3 w-full px-4"
-                  disabled={
-                    controlsLocked ||
-                    savingAction === "reschedule" ||
-                    scheduledStartInput.length === 0 ||
-                    scheduledEndInput.length === 0 ||
-                    (scheduledStartInput === toDatetimeLocalValue(selectedJob.scheduledStart) &&
-                      scheduledEndInput === toDatetimeLocalValue(selectedJob.scheduledEnd))
-                  }
-                  onClick={() => void handleReschedule()}
-                  type="button"
-                >
-                  {savingAction === "reschedule" ? "Saving..." : "Save Timing"}
-                </button>
-              </section>
 
-              <section className="rounded-2xl border border-border p-4">
-                <div className="mb-2">
-                  <h3 className="font-semibold">Status</h3>
-                  <p className="text-sm text-slate-600">Dispatch controls everything except COMPLETED.</p>
-                </div>
-                <label className="text-sm font-medium text-slate-700">
+                <label className="block text-sm font-medium text-slate-700">
                   Status
                   <select
                     className="input mt-1"
@@ -1577,8 +1509,9 @@ export function AdminSchedulePage() {
                     ))}
                   </select>
                 </label>
+
                 {confirmAction === "cancelStatus" ? (
-                  <div className="animate-slide-up mt-3 flex gap-2">
+                  <div className="animate-slide-up flex gap-2">
                     <button
                       className="field-button danger flex-1 px-4"
                       disabled={savingAction === "status"}
@@ -1603,39 +1536,29 @@ export function AdminSchedulePage() {
                   </div>
                 ) : (
                   <button
-                    className="field-button secondary mt-3 w-full px-4"
-                    disabled={
-                      controlsLocked ||
-                      savingAction === "status" ||
-                      selectedJob.status === "COMPLETED" ||
-                      statusInput === selectedJob.status
-                    }
+                    className="field-button primary w-full px-4"
+                    disabled={controlsLocked || savingAction === "saveAll" || !hasDispatchChanges}
                     onClick={() => {
-                      if (statusInput === "CANCELLED") {
+                      if (statusInput === "CANCELLED" && statusInput !== selectedJob.status) {
                         setConfirmAction("cancelStatus");
                         return;
                       }
-                      void handleStatusSave();
+                      void handleSaveAllDispatchChanges();
                     }}
                     type="button"
                   >
-                    {savingAction === "status" ? "Saving..." : "Save Status"}
+                    {savingAction === "saveAll" ? "Saving..." : "Save Changes"}
                   </button>
                 )}
               </section>
 
-              <section className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-                <div className="mb-2">
-                  <h3 className="font-semibold text-rose-900">Delete Job</h3>
-                  <p className="text-sm text-rose-700">
-                    Remove duplicate or bad dispatch entries before they turn into checklist history.
-                  </p>
-                </div>
-                <p className="text-sm text-rose-800">
-                  {deleteBlockReason ?? "This removes the job and its dispatch event log. Linked, in-progress, and completed jobs stay protected."}
+              {/* Delete — compact */}
+              <section className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                <p className="text-xs text-rose-700">
+                  {deleteBlockReason ?? "Remove this dispatch entry. Linked, in-progress, and completed jobs stay protected."}
                 </p>
                 {confirmAction === "deleteJob" ? (
-                  <div className="animate-slide-up mt-3 flex gap-2">
+                  <div className="animate-slide-up mt-2 flex gap-2">
                     <button
                       className="field-button danger flex-1 px-4"
                       disabled={!canDeleteSelectedJob || savingAction === "delete"}
@@ -1657,7 +1580,7 @@ export function AdminSchedulePage() {
                   </div>
                 ) : (
                   <button
-                    className="field-button danger mt-3 w-full px-4"
+                    className="field-button danger mt-2 w-full px-4"
                     disabled={!canDeleteSelectedJob || savingAction === "delete"}
                     onClick={() => setConfirmAction("deleteJob")}
                     type="button"
@@ -1668,7 +1591,7 @@ export function AdminSchedulePage() {
               </section>
 
               <section>
-                <h3 className="mb-2 font-semibold">Recent Events</h3>
+                <h3 className="mb-2 text-sm font-bold text-slate-600">Recent Events</h3>
                 {selectedJob.events.length === 0 ? (
                   <p className="text-xs text-slate-400">No events recorded yet.</p>
                 ) : (
@@ -1706,44 +1629,6 @@ function statusLeftBorder(status: JobStatus) {
   }
 }
 
-function JobCard({
-  job,
-  isActive,
-  onSelect,
-}: {
-  job: DispatchJob;
-  isActive: boolean;
-  onSelect: (jobId: Id<"jobs">) => void;
-}) {
-  return (
-    <button
-      className={`w-full rounded-2xl border border-l-4 p-3 text-left transition ${statusLeftBorder(job.status)} ${
-        isActive ? "border-brand-500 bg-brand-50" : "border-border bg-white hover:border-brand-300"
-      }`}
-      onClick={() => onSelect(job._id)}
-      type="button"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-semibold">
-          {new Date(job.scheduledStart).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </p>
-        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(job.status)}`}>
-          {job.status}
-        </span>
-      </div>
-      <p className="mt-2 text-sm font-semibold">{job.propertyName}</p>
-      <p className="text-xs text-slate-600">{job.jobType}</p>
-      {summarizeTurnoverIntake(job) && (
-        <p className="mt-1 text-xs text-slate-500">{summarizeTurnoverIntake(job)}</p>
-      )}
-      <p className="mt-1 text-xs text-slate-500">{job.assigneeName ?? "Unassigned"}</p>
-    </button>
-  );
-}
-
 function JobRow({
   job,
   isActive,
@@ -1755,26 +1640,28 @@ function JobRow({
 }) {
   return (
     <button
-      className={`w-full rounded-2xl border p-3 text-left transition ${
-        isActive ? "border-brand-500 bg-brand-50" : "border-border bg-white hover:border-brand-300"
+      className={`w-full rounded-xl border-l-[3px] bg-white px-4 py-3 text-left transition ${statusLeftBorder(job.status)} ${
+        isActive
+          ? "ring-2 ring-brand-400 ring-offset-1"
+          : "hover:ring-1 hover:ring-brand-200 hover:ring-offset-1"
       }`}
       onClick={() => onSelect(job._id)}
       type="button"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-semibold">
-            {job.propertyName} | {job.jobType}
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2">
+            <p className="text-sm font-bold text-slate-900">
+              {new Date(job.scheduledStart).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </p>
+            <p className="truncate text-sm font-semibold text-slate-700">{job.propertyName}</p>
+          </div>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {job.assigneeName ?? "Unassigned"} &middot; {job.jobType}
+            {job.priority && job.priority !== "MEDIUM" ? ` &middot; ${job.priority}` : ""}
           </p>
-          <p className="text-sm text-slate-600">{formatJobWindow(job)}</p>
-          <p className="text-xs text-slate-500">
-            {job.assigneeName ?? "Unassigned"} | Priority: {job.priority ?? "MEDIUM"}
-          </p>
-          {summarizeTurnoverIntake(job) && (
-            <p className="text-xs text-slate-500">{summarizeTurnoverIntake(job)}</p>
-          )}
         </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(job.status)}`}>
+        <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusTone(job.status)}`}>
           {job.status}
         </span>
       </div>

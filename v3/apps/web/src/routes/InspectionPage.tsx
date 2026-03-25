@@ -12,19 +12,24 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxItems } from "@/hooks/useOutboxItems";
 import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
+import { useOfflineSync } from "@/app/OfflineSyncProvider";
 import {
+  getOutboxItems,
   queueCompleteInspection,
   queueCompleteRoom,
   queueRemovePhoto,
   queueSetTaskCompleted,
   queueSetTaskIssue,
   queueUpdateRoomNotes,
+  queueUploadPhoto,
   queueUploadPhotos,
   removeQueuedLocalPhoto,
   type PhotoKind,
+  type UploadPhotoPayload,
 } from "@/lib/offlineOutbox";
 import { getNextHydratedDraft } from "@/lib/draftHydration";
 import { applyInspectionOutboxOverlay } from "@/lib/offlineInspectionState";
+import { classifyReplayFailureStatus } from "@/lib/offlineReplay";
 import { roomStatusTone } from "@/lib/statusColors";
 
 type RoomSummary = {
@@ -109,6 +114,21 @@ type CompletedReview = {
   }>;
 };
 
+type PendingDirectPhotoUpload = {
+  roomInspectionId: string;
+  promise: Promise<void>;
+};
+
+const MAX_DIRECT_PHOTO_UPLOADS = 2;
+
+function createClientUploadId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `direct-upload:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+}
+
 export function InspectionPage() {
   const navigate = useNavigate();
   const { isAdmin } = useCurrentUser();
@@ -121,6 +141,7 @@ export function InspectionPage() {
     inspectionId ? { inspectionId } : "skip"
   ) as InspectionDetail | null | undefined;
   const { items: outboxItems } = useOutboxItems();
+  const { flushNow } = useOfflineSync();
 
   const [selectedRoomId, setSelectedRoomId] = useState<Id<"roomInspections"> | null>(null);
   const isCompletedAdminReview = isAdmin && inspection?.status === "COMPLETED";
@@ -139,6 +160,8 @@ export function InspectionPage() {
   const updateRoomNotes = useMutation(api.roomInspections.updateNotes);
   const completeRoom = useMutation(api.roomInspections.complete);
   const removePhoto = useMutation(api.photos.remove);
+  const generatePhotoUploadUrl = useMutation(api.photos.generateUploadUrl);
+  const savePhoto = useMutation(api.photos.save);
 
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [roomNotes, setRoomNotes] = useState("");
@@ -155,13 +178,34 @@ export function InspectionPage() {
   const lastHydratedRoomId = useRef<string | null>(null);
   const lastHydratedInspectionNotes = useRef("");
   const lastHydratedInspectionId = useRef<string | null>(null);
+  const [pendingDirectPhotoCountByRoom, setPendingDirectPhotoCountByRoom] = useState<
+    Record<string, number>
+  >({});
+  const directPhotoUploadsRef = useRef<Map<string, PendingDirectPhotoUpload>>(new Map());
 
   const inspectionOverlay = useMemo(
     () => applyInspectionOutboxOverlay(inspection, selectedRoom, outboxItems),
     [inspection, outboxItems, selectedRoom]
   );
-  const inspectionView = inspectionOverlay.inspection;
+  const baseInspectionView = inspectionOverlay.inspection;
   const selectedRoomView = inspectionOverlay.selectedRoom;
+  const selectedRoomPendingDirectPhotoCount = selectedRoomView
+    ? pendingDirectPhotoCountByRoom[String(selectedRoomView._id)] ?? 0
+    : 0;
+  const inspectionView = useMemo(() => {
+    if (!baseInspectionView) {
+      return baseInspectionView;
+    }
+
+    return {
+      ...baseInspectionView,
+      roomInspections: baseInspectionView.roomInspections.map((room) => ({
+        ...room,
+        photoCount:
+          room.photoCount + (pendingDirectPhotoCountByRoom[String(room._id)] ?? 0),
+      })),
+    };
+  }, [baseInspectionView, pendingDirectPhotoCountByRoom]);
   const inspectionQueueItems = useMemo(() => {
     if (!inspectionId) {
       return [];
@@ -175,6 +219,11 @@ export function InspectionPage() {
       return "inspectionId" in item.payload && item.payload.inspectionId === inspectionId;
     });
   }, [inspectionId, outboxItems]);
+
+  const pendingQueuedPhotoCount = useMemo(
+    () => outboxItems.filter((item) => item.type === "UPLOAD_PHOTO").length,
+    [outboxItems]
+  );
 
   const totals = useMemo(() => {
     const rooms = inspectionView?.roomInspections ?? [];
@@ -260,6 +309,94 @@ export function InspectionPage() {
     lastHydratedInspectionNotes.current = nextSourceDraft;
     lastHydratedInspectionId.current = inspectionView._id;
   }, [inspectionNotes, inspectionView?._id, inspectionView?.notes]);
+
+  function adjustPendingDirectPhotoCount(roomInspectionId: string, delta: number) {
+    setPendingDirectPhotoCountByRoom((current) => {
+      const existing = current[roomInspectionId] ?? 0;
+      const nextCount = Math.max(0, existing + delta);
+
+      if (nextCount === existing) {
+        return current;
+      }
+
+      const next = { ...current };
+      if (nextCount === 0) {
+        delete next[roomInspectionId];
+      } else {
+        next[roomInspectionId] = nextCount;
+      }
+      return next;
+    });
+  }
+
+  function getPendingDirectPhotoUploadPromises(roomInspectionId: string) {
+    return [...directPhotoUploadsRef.current.values()]
+      .filter((upload) => upload.roomInspectionId === roomInspectionId)
+      .map((upload) => upload.promise);
+  }
+
+  function startDirectPhotoUpload(payload: Omit<UploadPhotoPayload, "localPhotoId">) {
+    const uploadId = createClientUploadId();
+    const roomInspectionKey = String(payload.roomInspectionId);
+
+    adjustPendingDirectPhotoCount(roomInspectionKey, 1);
+
+    const promise = (async () => {
+      try {
+        const uploadUrl = await generatePhotoUploadUrl({
+          roomInspectionId: payload.roomInspectionId as Id<"roomInspections">,
+        });
+
+        if (typeof uploadUrl !== "string") {
+          throw new Error("Upload URL was not returned for photo");
+        }
+
+        const response = await fetch(uploadUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": payload.mimeType || "application/octet-stream",
+          },
+          body: payload.file,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Upload failed for ${payload.fileName}`);
+        }
+
+        const body = (await response.json()) as { storageId?: Id<"_storage"> };
+        if (!body.storageId) {
+          throw new Error(`Upload did not return a storage id for ${payload.fileName}`);
+        }
+
+        await savePhoto({
+          storageId: body.storageId,
+          roomInspectionId: payload.roomInspectionId as Id<"roomInspections">,
+          fileName: payload.fileName,
+          fileSize: payload.fileSize,
+          mimeType: payload.mimeType,
+          kind: payload.kind,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to upload photo";
+        if (classifyReplayFailureStatus(message) !== "FAILED") {
+          throw error;
+        }
+
+        await queueUploadPhoto(payload);
+        toast(`Connection slowed down. Saved ${payload.fileName} locally for sync.`);
+      } finally {
+        directPhotoUploadsRef.current.delete(uploadId);
+        adjustPendingDirectPhotoCount(roomInspectionKey, -1);
+      }
+    })().catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to upload photo");
+    });
+
+    directPhotoUploadsRef.current.set(uploadId, {
+      roomInspectionId: roomInspectionKey,
+      promise,
+    });
+  }
 
   if (!inspectionId) {
     return <p className="text-slate-600">Missing inspection id.</p>;
@@ -370,31 +507,50 @@ export function InspectionPage() {
 
     try {
       const captureStartedAt = Date.now();
-      await queueUploadPhotos(
-        files.map((file, index) => {
-          const mimeType = file.type || "application/octet-stream";
-          const fallbackExtension = mimeType === "image/png" ? ".png" : ".jpg";
-          const fileName = file.name?.trim() || `photo-${captureStartedAt}-${index + 1}${fallbackExtension}`;
+      const payloads = files.map((file, index) => {
+        const mimeType = file.type || "application/octet-stream";
+        const fallbackExtension = mimeType === "image/png" ? ".png" : ".jpg";
+        const fileName = file.name?.trim() || `photo-${captureStartedAt}-${index + 1}${fallbackExtension}`;
+        const blob = file.slice(0, file.size, mimeType);
 
-          return {
-            inspectionId,
-            roomInspectionId: selectedRoomView._id,
-            file,
-            fileName,
-            fileSize: file.size,
-            mimeType,
-            kind: photoKind,
-          };
-        })
-      );
+        return {
+          inspectionId,
+          roomInspectionId: selectedRoomView._id,
+          file: blob,
+          fileName,
+          fileSize: blob.size,
+          mimeType,
+          kind: photoKind,
+        } satisfies Omit<UploadPhotoPayload, "localPhotoId">;
+      });
 
-      if (isOnline) {
-        toast.success(
-          `Saved ${files.length} photo${files.length === 1 ? "" : "s"} locally and queued background sync`
-        );
-      } else {
-        toast.success(`Saved ${files.length} photo${files.length === 1 ? "" : "s"} for sync`);
+      const shouldQueuePhotos =
+        !isOnline ||
+        pendingQueuedPhotoCount > 0 ||
+        directPhotoUploadsRef.current.size + payloads.length > MAX_DIRECT_PHOTO_UPLOADS;
+
+      if (shouldQueuePhotos) {
+        await queueUploadPhotos(payloads);
+
+        if (isOnline) {
+          toast.success(
+            `Saved ${files.length} photo${files.length === 1 ? "" : "s"} locally and queued background sync`
+          );
+        } else {
+          toast.success(
+            `Saved ${files.length} photo${files.length === 1 ? "" : "s"} for sync`
+          );
+        }
+        return;
       }
+
+      for (const payload of payloads) {
+        startDirectPhotoUpload(payload);
+      }
+
+      toast.success(
+        `Saving ${files.length} photo${files.length === 1 ? "" : "s"} in background`
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save photo locally");
     }
@@ -455,6 +611,50 @@ export function InspectionPage() {
         });
         toast.success("Room completion queued for sync");
       } else {
+        const roomInspectionKey = String(selectedRoomView._id);
+        const pendingDirectUploads = getPendingDirectPhotoUploadPromises(roomInspectionKey);
+
+        if (pendingDirectUploads.length > 0) {
+          const syncingToastId = toast.loading(
+            `Finishing ${pendingDirectUploads.length} background photo${pendingDirectUploads.length === 1 ? "" : "s"} before room completion`
+          );
+
+          try {
+            await Promise.allSettled(pendingDirectUploads);
+          } finally {
+            toast.dismiss(syncingToastId);
+          }
+        }
+
+        const queuedRoomPhotos = (await getOutboxItems()).filter(
+          (item) =>
+            item.type === "UPLOAD_PHOTO" &&
+            item.payload.roomInspectionId === selectedRoomView._id
+        );
+
+        if (queuedRoomPhotos.length > 0) {
+          const syncingToastId = toast.loading(
+            `Syncing ${queuedRoomPhotos.length} queued photo${queuedRoomPhotos.length === 1 ? "" : "s"} before room completion`
+          );
+
+          try {
+            await flushNow();
+          } finally {
+            toast.dismiss(syncingToastId);
+          }
+
+          const remainingRoomPhotoQueue = (await getOutboxItems()).filter(
+            (item) =>
+              item.type === "UPLOAD_PHOTO" &&
+              item.payload.roomInspectionId === selectedRoomView._id
+          );
+
+          if (remainingRoomPhotoQueue.length > 0) {
+            toast.error("Room photos are still syncing. Finish the queue before completing this room.");
+            return;
+          }
+        }
+
         await completeRoom({ roomInspectionId: selectedRoomView._id });
         toast.success("Room marked complete");
       }
@@ -570,7 +770,8 @@ export function InspectionPage() {
     selectedRoomView?.taskResults.every((task) => task.completed) ?? false;
   const roomHasEnoughPhotos =
     selectedRoomView !== undefined && selectedRoomView !== null
-      ? selectedRoomView.photos.length >= selectedRoomView.requiredPhotoMin
+      ? selectedRoomView.photos.length + selectedRoomPendingDirectPhotoCount >=
+        selectedRoomView.requiredPhotoMin
       : false;
   const canCompleteSelectedRoom =
     inspectionView.status !== "COMPLETED" &&
@@ -733,6 +934,7 @@ export function InspectionPage() {
                           onSaveNotes={handleSaveNotes}
                           onTaskIssueSave={handleTaskIssueSave}
                           onTaskToggle={handleTaskToggle}
+                          pendingDirectPhotoCount={selectedRoomPendingDirectPhotoCount}
                           photoKind={photoKind}
                           removingPhotoId={removingPhotoId}
                           room={selectedRoomView}

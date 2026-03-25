@@ -37,6 +37,7 @@ type InspectionRoomPanelProps = {
   taskIssueDrafts: Record<string, string>;
   roomNotes: string;
   photoKind: PhotoKind;
+  pendingDirectPhotoCount: number;
   confirmAction: string | null;
   savingTaskId: Id<"taskResults"> | null;
   savingIssueTaskId: Id<"taskResults"> | null;
@@ -142,6 +143,7 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
     taskIssueDrafts,
     roomNotes,
     photoKind,
+    pendingDirectPhotoCount,
     confirmAction,
     savingTaskId,
     savingIssueTaskId,
@@ -177,7 +179,9 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
   }
 
   const roomTasksComplete = room.taskResults.every((task) => task.completed);
-  const roomHasEnoughPhotos = room.photos.length >= room.requiredPhotoMin;
+  const effectivePhotoCount = room.photos.length + pendingDirectPhotoCount;
+  const roomHasEnoughPhotos = effectivePhotoCount >= room.requiredPhotoMin;
+  const hasAnyPhotoCards = room.photos.length > 0 || pendingDirectPhotoCount > 0;
 
   async function handleSaveBackup(photo: RoomDetail["photos"][number]) {
     setSavingBackupId(String(photo._id));
@@ -204,7 +208,7 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
           <p className="text-sm text-slate-600">
             {room.taskResults.filter((task) => task.completed).length}/{room.taskResults.length} tasks
             complete | {room.taskResults.filter((task) => task.hasIssue).length} issues |{" "}
-            {room.photos.length}/{room.requiredPhotoMin} required photos
+            {effectivePhotoCount}/{room.requiredPhotoMin} required photos
           </p>
         </div>
         <span
@@ -352,10 +356,16 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
               Pending local photos can be backed up to Photos or Files below if you need a manual
               fallback.
             </p>
+            {pendingDirectPhotoCount > 0 ? (
+              <p className="text-xs font-normal text-brand-700">
+                {pendingDirectPhotoCount} photo{pendingDirectPhotoCount === 1 ? "" : "s"} uploading
+                in background.
+              </p>
+            ) : null}
           </div>
         </div>
 
-        {room.photos.length === 0 ? (
+        {!hasAnyPhotoCards ? (
           <div className="mt-3">
             <EmptyState
               icon={<Camera className="h-7 w-7" />}
@@ -437,6 +447,22 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
                       {removingPhotoId === photo._id ? "Removing..." : "Remove Photo"}
                     </button>
                   )}
+                </div>
+              </div>
+            ))}
+            {Array.from({ length: pendingDirectPhotoCount }).map((_, index) => (
+              <div
+                key={`pending-direct-photo-${index}`}
+                className="overflow-hidden rounded-2xl border border-border bg-white"
+              >
+                <div className="flex h-40 items-center justify-center bg-slate-100 text-sm text-slate-500">
+                  Uploading in background...
+                </div>
+                <div className="space-y-1 p-3">
+                  <p className="text-sm font-semibold">Photo upload in progress</p>
+                  <p className="text-xs text-slate-500">
+                    This photo will appear here when the upload finishes.
+                  </p>
                 </div>
               </div>
             ))}
