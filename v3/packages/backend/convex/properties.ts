@@ -10,6 +10,15 @@ import {
 import { getPropertySummaryMetrics } from "./lib/propertySummaries";
 import { propertyTypeValidator } from "./lib/validators";
 
+function sortPropertiesByName<T extends { name: string }>(properties: T[]) {
+  return properties.slice().sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+}
+
 async function enrichPropertiesForAdmin(
   ctx: QueryCtx,
   properties: Array<Doc<"properties">>
@@ -38,7 +47,7 @@ async function listAdminProperties(ctx: QueryCtx, includeArchived: boolean) {
     ? properties
     : properties.filter((property) => property.isArchived !== true);
 
-  return await enrichPropertiesForAdmin(ctx, filtered);
+  return await enrichPropertiesForAdmin(ctx, sortPropertiesByName(filtered));
 }
 
 export const listForCurrentUser = query({
@@ -52,7 +61,9 @@ export const listForCurrentUser = query({
         .withIndex("by_active", (q) => q.eq("isActive", true))
         .collect();
 
-      return properties.filter((property) => property.isArchived !== true);
+      return sortPropertiesByName(
+        properties.filter((property) => property.isArchived !== true)
+      );
     }
 
     const assignmentRole: "CLEANER" | "INSPECTOR" = user.role;
@@ -73,9 +84,11 @@ export const listForCurrentUser = query({
       })
     );
 
-    return properties.filter((property): property is NonNullable<typeof property> => {
-      return !!property && property.isActive && property.isArchived !== true;
-    });
+    return sortPropertiesByName(
+      properties.filter((property): property is NonNullable<typeof property> => {
+        return !!property && property.isActive && property.isArchived !== true;
+      })
+    );
   },
 });
 
@@ -124,7 +137,7 @@ export const search = query({
       includeArchived ? true : property.isArchived !== true
     );
 
-    return await enrichPropertiesForAdmin(ctx, candidates);
+    return await enrichPropertiesForAdmin(ctx, sortPropertiesByName(candidates));
   },
 });
 
