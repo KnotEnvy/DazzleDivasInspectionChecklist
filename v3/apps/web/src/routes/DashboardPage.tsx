@@ -309,11 +309,11 @@ export function DashboardPage() {
         {/* ── Today's Operations + Staff On Duty ── */}
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,1fr)]">
           {/* Today's Timeline */}
-          <div className="rounded-2xl border border-border bg-white p-4">
+          <div className="overflow-hidden rounded-2xl border border-border bg-white p-3 sm:p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="text-lg font-bold">Today's Operations</h2>
+              <h2 className="min-w-0 text-lg font-bold">Today&apos;s Operations</h2>
               <Link
-                className="text-xs font-semibold text-brand-700 hover:text-brand-800"
+                className="shrink-0 whitespace-nowrap text-xs font-semibold text-brand-700 hover:text-brand-800"
                 to="/schedule"
               >
                 Full Dispatch &rarr;
@@ -336,13 +336,13 @@ export function DashboardPage() {
                 {adminTodayJobs.map((job) => (
                   <Link
                     key={job._id}
-                    className="flex items-center gap-3 rounded-xl border border-border p-3 transition hover:border-brand-300"
+                    className="flex items-center gap-2 rounded-xl border border-border p-2 transition hover:border-brand-300 sm:gap-3 sm:p-3"
                     to="/schedule"
                   >
-                    <div className="w-14 flex-shrink-0 text-center">
-                      <p className="text-sm font-bold text-slate-900">
+                    <div className="w-12 shrink-0 text-center sm:w-14">
+                      <p className="text-xs font-bold text-slate-900 sm:text-sm">
                         {new Date(job.scheduledStart).toLocaleTimeString([], {
-                          hour: "2-digit",
+                          hour: "numeric",
                           minute: "2-digit",
                         })}
                       </p>
@@ -351,7 +351,7 @@ export function DashboardPage() {
                       <p className="truncate text-sm font-semibold">
                         {job.propertyName}
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="truncate text-xs text-slate-500">
                         {job.jobType}
                         {job.assigneeName
                           ? ` · ${job.assigneeName}`
@@ -359,12 +359,12 @@ export function DashboardPage() {
                       </p>
                     </div>
                     {!job.assigneeId ? (
-                      <span className="flex-shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                        UNASSIGNED
+                      <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        OPEN
                       </span>
                     ) : (
                       <span
-                        className={`flex-shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(
                           job.status
                         )}`}
                       >
@@ -378,11 +378,11 @@ export function DashboardPage() {
           </div>
 
           {/* Staff On Duty */}
-          <div className="rounded-2xl border border-border bg-white p-4">
+          <div className="overflow-hidden rounded-2xl border border-border bg-white p-3 sm:p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="text-lg font-bold">Staff Roster</h2>
+              <h2 className="min-w-0 text-lg font-bold">Staff Roster</h2>
               <Link
-                className="text-xs font-semibold text-brand-700 hover:text-brand-800"
+                className="shrink-0 whitespace-nowrap text-xs font-semibold text-brand-700 hover:text-brand-800"
                 to="/admin"
               >
                 Manage &rarr;
@@ -405,10 +405,10 @@ export function DashboardPage() {
                 {staffWithCounts.map((member) => (
                   <div
                     key={member._id}
-                    className="flex items-center gap-3 rounded-xl border border-border p-3"
+                    className="flex items-center gap-2 rounded-xl border border-border p-2 sm:gap-3 sm:p-3"
                   >
                     <div
-                      className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white sm:h-9 sm:w-9 sm:text-xs ${
                         member.role === "CLEANER"
                           ? "bg-brand-500"
                           : "bg-accent-500"
@@ -427,7 +427,7 @@ export function DashboardPage() {
                       </p>
                       <p className="text-xs text-slate-500">{member.role}</p>
                     </div>
-                    <div className="flex-shrink-0 text-right">
+                    <div className="shrink-0 text-right">
                       {member.todayJobCount === 0 ? (
                         <span className="text-xs text-slate-400">idle</span>
                       ) : (
