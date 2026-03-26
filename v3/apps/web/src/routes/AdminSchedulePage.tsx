@@ -1207,104 +1207,192 @@ export function AdminSchedulePage() {
                 description="Adjust the filters above or change the date window."
               />
             ) : viewMode === "month" ? (
-              <div className="-mx-4 space-y-2 overflow-x-auto px-4 pb-2">
-                {monthWeeks.map((week, weekIndex) => (
-                  <div
-                    key={weekIndex}
-                    className="flex gap-2"
-                    style={{ minWidth: `${7 * 160}px` }}
-                  >
-                    {week.map((day) => {
-                      const dayIndex = weekIndex * 7 + week.indexOf(day);
-                      const dayJobs = jobsByDay[dayIndex] ?? [];
-                      const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
-                      const isToday = sameLocalDate(Date.now(), day);
-                      const unassignedCount = dayJobs.filter((j) => !j.assigneeName).length;
+              <>
+                {/* Mobile: compact vertical list grouped by week */}
+                <div className="space-y-3 md:hidden">
+                  {monthWeeks.map((week, weekIndex) => {
+                    const weekHasJobs = week.some((_d, i) => (jobsByDay[weekIndex * 7 + i] ?? []).length > 0);
+                    return (
+                      <div key={weekIndex} className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 px-1">
+                          {week[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} &ndash; {week[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        </p>
+                        {!weekHasJobs ? (
+                          <div className="rounded-xl border border-border bg-slate-50/60 px-3 py-2">
+                            <p className="text-xs text-slate-400">No jobs this week</p>
+                          </div>
+                        ) : (
+                          week.map((day, dayInWeek) => {
+                            const dayIndex = weekIndex * 7 + dayInWeek;
+                            const dayJobs = jobsByDay[dayIndex] ?? [];
+                            const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
+                            const isToday = sameLocalDate(Date.now(), day);
 
-                      return (
-                        <div
-                          key={day.toISOString()}
-                          className={`flex flex-1 flex-col rounded-xl border ${
-                            isToday
-                              ? "border-brand-400 bg-brand-50/30"
-                              : isCurrentMonth
-                                ? "border-border bg-slate-50/60"
-                                : "border-slate-200 bg-slate-100/40"
-                          }`}
-                        >
-                          {/* Day header */}
-                          <div className={`flex items-center justify-between gap-1 rounded-t-xl px-2 py-1.5 ${
-                            isToday ? "bg-brand-100/50" : isCurrentMonth ? "bg-slate-100/80" : "bg-slate-100/40"
-                          }`}>
-                            <div>
-                              <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${
-                                isToday ? "text-brand-700" : isCurrentMonth ? "text-slate-500" : "text-slate-400"
-                              }`}>
-                                {isToday ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })}
-                              </p>
-                              <p className={`text-xs font-semibold ${isCurrentMonth ? "text-slate-800" : "text-slate-400"}`}>
-                                {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                              </p>
-                            </div>
-                            {dayJobs.length > 0 && (
-                              <div className="text-right leading-none">
-                                <p className="text-[10px] font-semibold text-slate-500">{dayJobs.length}</p>
-                                {unassignedCount > 0 && (
-                                  <p className="text-[10px] font-bold text-amber-600">{unassignedCount} open</p>
-                                )}
+                            if (dayJobs.length === 0) return null;
+
+                            const unassignedCount = dayJobs.filter((j) => !j.assigneeName).length;
+                            return (
+                              <div
+                                key={day.toISOString()}
+                                className={`rounded-xl border ${
+                                  isToday
+                                    ? "border-brand-400 bg-brand-50/30"
+                                    : isCurrentMonth
+                                      ? "border-border bg-slate-50/60"
+                                      : "border-slate-200 bg-slate-100/40"
+                                }`}
+                              >
+                                <div className={`flex items-center justify-between rounded-t-xl px-3 py-1.5 ${
+                                  isToday ? "bg-brand-100/50" : "bg-slate-100/60"
+                                }`}>
+                                  <div className="flex items-baseline gap-2">
+                                    <p className={`text-[11px] font-bold uppercase tracking-[0.16em] ${isToday ? "text-brand-700" : "text-slate-500"}`}>
+                                      {isToday ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })}
+                                    </p>
+                                    <p className={`text-xs font-semibold ${isCurrentMonth ? "text-slate-800" : "text-slate-400"}`}>
+                                      {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xs font-semibold text-slate-600">{dayJobs.length}</p>
+                                    {unassignedCount > 0 && (
+                                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">{unassignedCount} open</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="space-y-1 p-2">
+                                  {dayJobs.map((job) => {
+                                    const isUnassigned = !job.assigneeName;
+                                    return (
+                                      <button
+                                        key={job._id}
+                                        className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition ${
+                                          isUnassigned
+                                            ? "border border-dashed border-amber-300 bg-amber-50"
+                                            : "border border-slate-200 bg-white"
+                                        } ${
+                                          selectedJobId === job._id
+                                            ? "ring-2 ring-brand-400 ring-offset-1"
+                                            : "active:ring-1 active:ring-brand-300"
+                                        }`}
+                                        onClick={() => setSelectedJobId(job._id)}
+                                        type="button"
+                                      >
+                                        <p className="text-sm font-semibold truncate text-slate-900">{job.propertyName}</p>
+                                        <p className={`shrink-0 text-xs ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
+                                          {job.assigneeName ?? "Unassigned"}
+                                        </p>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            )}
-                          </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
 
-                          {/* Jobs */}
-                          <div className="flex-1 space-y-1 p-1.5">
-                            {dayJobs.length === 0 ? (
-                              <p className="py-1 text-center text-[11px] text-slate-400">&mdash;</p>
-                            ) : (
-                              <>
-                                {dayJobs.slice(0, 4).map((job) => {
-                                  const isUnassigned = !job.assigneeName;
-                                  return (
-                                    <button
-                                      key={job._id}
-                                      className={`w-full rounded px-1.5 py-1 text-left text-[11px] transition ${
-                                        isUnassigned
-                                          ? "border border-dashed border-amber-300 bg-amber-50"
-                                          : "border border-slate-200 bg-white"
-                                      } ${
-                                        selectedJobId === job._id
-                                          ? "ring-2 ring-brand-400 ring-offset-1"
-                                          : "hover:ring-1 hover:ring-brand-300"
-                                      }`}
-                                      onClick={() => setSelectedJobId(job._id)}
-                                      type="button"
-                                    >
-                                      <p className="font-semibold leading-snug truncate text-slate-900">
-                                        {job.propertyName}
-                                      </p>
-                                      <p className={`truncate text-[10px] ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
-                                        {job.assigneeName ?? "Unassigned"}
-                                      </p>
-                                    </button>
-                                  );
-                                })}
-                                {dayJobs.length > 4 && (
-                                  <p className="text-center text-[10px] font-semibold text-slate-500">
-                                    +{dayJobs.length - 4} more
-                                  </p>
-                                )}
-                              </>
-                            )}
+                {/* Tablet+: horizontal scroll grid */}
+                <div className="hidden md:block -mx-4 space-y-2 overflow-x-auto px-4 pb-2">
+                  {monthWeeks.map((week, weekIndex) => (
+                    <div
+                      key={weekIndex}
+                      className="flex gap-2"
+                      style={{ minWidth: `${7 * 160}px` }}
+                    >
+                      {week.map((day, dayInWeek) => {
+                        const dayIndex = weekIndex * 7 + dayInWeek;
+                        const dayJobs = jobsByDay[dayIndex] ?? [];
+                        const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
+                        const isToday = sameLocalDate(Date.now(), day);
+                        const unassignedCount = dayJobs.filter((j) => !j.assigneeName).length;
+
+                        return (
+                          <div
+                            key={day.toISOString()}
+                            className={`flex flex-1 flex-col rounded-xl border ${
+                              isToday
+                                ? "border-brand-400 bg-brand-50/30"
+                                : isCurrentMonth
+                                  ? "border-border bg-slate-50/60"
+                                  : "border-slate-200 bg-slate-100/40"
+                            }`}
+                          >
+                            <div className={`flex items-center justify-between gap-1 rounded-t-xl px-2 py-1.5 ${
+                              isToday ? "bg-brand-100/50" : isCurrentMonth ? "bg-slate-100/80" : "bg-slate-100/40"
+                            }`}>
+                              <div>
+                                <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${
+                                  isToday ? "text-brand-700" : isCurrentMonth ? "text-slate-500" : "text-slate-400"
+                                }`}>
+                                  {isToday ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })}
+                                </p>
+                                <p className={`text-xs font-semibold ${isCurrentMonth ? "text-slate-800" : "text-slate-400"}`}>
+                                  {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                </p>
+                              </div>
+                              {dayJobs.length > 0 && (
+                                <div className="text-right leading-none">
+                                  <p className="text-[10px] font-semibold text-slate-500">{dayJobs.length}</p>
+                                  {unassignedCount > 0 && (
+                                    <p className="text-[10px] font-bold text-amber-600">{unassignedCount} open</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 space-y-1 p-1.5">
+                              {dayJobs.length === 0 ? (
+                                <p className="py-1 text-center text-[11px] text-slate-400">&mdash;</p>
+                              ) : (
+                                <>
+                                  {dayJobs.slice(0, 4).map((job) => {
+                                    const isUnassigned = !job.assigneeName;
+                                    return (
+                                      <button
+                                        key={job._id}
+                                        className={`w-full rounded px-1.5 py-1 text-left text-[11px] transition ${
+                                          isUnassigned
+                                            ? "border border-dashed border-amber-300 bg-amber-50"
+                                            : "border border-slate-200 bg-white"
+                                        } ${
+                                          selectedJobId === job._id
+                                            ? "ring-2 ring-brand-400 ring-offset-1"
+                                            : "hover:ring-1 hover:ring-brand-300"
+                                        }`}
+                                        onClick={() => setSelectedJobId(job._id)}
+                                        type="button"
+                                      >
+                                        <p className="font-semibold leading-snug truncate text-slate-900">
+                                          {job.propertyName}
+                                        </p>
+                                        <p className={`truncate text-[10px] ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
+                                          {job.assigneeName ?? "Unassigned"}
+                                        </p>
+                                      </button>
+                                    );
+                                  })}
+                                  {dayJobs.length > 4 && (
+                                    <p className="text-center text-[10px] font-semibold text-slate-500">
+                                      +{dayJobs.length - 4} more
+                                    </p>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : viewMode === "week" ? (
-              <div className="-mx-4 overflow-x-auto px-4 pb-2">
-                <div className="flex gap-3" style={{ minWidth: `${visibleDays.length * 180}px` }}>
+              <>
+                {/* Mobile: vertical stack */}
+                <div className="space-y-2 md:hidden">
                   {visibleDays.map((day, index) => {
                     const isToday = sameLocalDate(Date.now(), day);
                     const dayJobs = jobsByDay[index];
@@ -1313,67 +1401,77 @@ export function AdminSchedulePage() {
                       ...new Set(dayJobs.map((j) => j.assigneeName).filter(Boolean)),
                     ] as string[];
 
+                    if (dayJobs.length === 0 && !isToday) return (
+                      <div
+                        key={day.toISOString()}
+                        className="flex items-center justify-between rounded-xl border border-border bg-slate-50/60 px-3 py-2"
+                      >
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            {day.toLocaleDateString(undefined, { weekday: "short" })}
+                          </p>
+                          <p className="text-sm font-semibold text-slate-400">
+                            {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          </p>
+                        </div>
+                        <p className="text-xs text-slate-400">Off</p>
+                      </div>
+                    );
+
                     return (
                       <div
                         key={day.toISOString()}
-                        className={`flex flex-1 flex-col rounded-xl border ${
-                          isToday
-                            ? "border-brand-400 bg-brand-50/30"
-                            : "border-border bg-slate-50/60"
+                        className={`rounded-xl border ${
+                          isToday ? "border-brand-400 bg-brand-50/30" : "border-border bg-slate-50/60"
                         }`}
                       >
-                        {/* Day header */}
-                        <div className={`rounded-t-xl px-3 py-2 ${isToday ? "bg-brand-100/50" : "bg-slate-100/80"}`}>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isToday ? "text-brand-700" : "text-slate-500"}`}>
-                                {isToday ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })}
+                        <div className={`flex items-center justify-between rounded-t-xl px-3 py-2 ${isToday ? "bg-brand-100/50" : "bg-slate-100/80"}`}>
+                          <div className="flex items-baseline gap-2">
+                            <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isToday ? "text-brand-700" : "text-slate-500"}`}>
+                              {isToday ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })}
+                            </p>
+                            <p className="text-sm font-semibold text-slate-800">
+                              {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {dayJobs.length > 0 && (
+                              <p className="text-xs font-semibold text-slate-600">
+                                {dayJobs.length} job{dayJobs.length !== 1 ? "s" : ""}
                               </p>
-                              <p className="text-sm font-semibold text-slate-800">
-                                {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              {dayJobs.length > 0 && (
-                                <p className="text-xs font-semibold text-slate-600">
-                                  {dayJobs.length} job{dayJobs.length !== 1 ? "s" : ""}
-                                </p>
-                              )}
-                              {unassignedCount > 0 && (
-                                <p className="text-[11px] font-bold text-amber-600">
-                                  {unassignedCount} open
-                                </p>
-                              )}
-                            </div>
+                            )}
+                            {unassignedCount > 0 && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                                {unassignedCount} open
+                              </span>
+                            )}
                           </div>
                         </div>
-
-                        {/* Jobs */}
-                        <div className="flex-1 space-y-1.5 p-2">
+                        <div className="space-y-1.5 p-2">
                           {dayJobs.length === 0 ? (
-                            <p className="py-4 text-center text-xs text-slate-400">No jobs</p>
+                            <p className="py-2 text-center text-xs text-slate-400">No jobs</p>
                           ) : (
                             dayJobs.map((job) => {
                               const isUnassigned = !job.assigneeName;
                               return (
                                 <button
                                   key={job._id}
-                                  className={`w-full rounded-lg px-2.5 py-2 text-left transition ${
+                                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition ${
                                     isUnassigned
                                       ? "border border-dashed border-amber-300 bg-amber-50"
                                       : "border border-slate-200 bg-white"
                                   } ${
                                     selectedJobId === job._id
                                       ? "ring-2 ring-brand-400 ring-offset-1"
-                                      : "hover:ring-1 hover:ring-brand-300 hover:ring-offset-1"
+                                      : "active:ring-1 active:ring-brand-300"
                                   }`}
                                   onClick={() => setSelectedJobId(job._id)}
                                   type="button"
                                 >
-                                  <p className="text-sm font-semibold leading-snug truncate text-slate-900">
+                                  <p className="text-sm font-semibold truncate text-slate-900">
                                     {job.propertyName}
                                   </p>
-                                  <p className={`text-xs truncate ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
+                                  <p className={`shrink-0 text-xs ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
                                     {job.assigneeName ?? "Unassigned"}
                                   </p>
                                 </button>
@@ -1381,16 +1479,11 @@ export function AdminSchedulePage() {
                             })
                           )}
                         </div>
-
-                        {/* Workers on this day */}
                         {workerNames.length > 0 && (
                           <div className="border-t border-border px-2 py-1.5">
                             <div className="flex flex-wrap gap-1">
                               {workerNames.map((name) => (
-                                <span
-                                  key={name}
-                                  className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
-                                >
+                                <span key={name} className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
                                   {name.split(" ")[0]}
                                 </span>
                               ))}
@@ -1401,7 +1494,100 @@ export function AdminSchedulePage() {
                     );
                   })}
                 </div>
-              </div>
+
+                {/* Tablet+: horizontal scroll columns */}
+                <div className="hidden md:block -mx-4 overflow-x-auto px-4 pb-2">
+                  <div className="flex gap-3" style={{ minWidth: `${visibleDays.length * 170}px` }}>
+                    {visibleDays.map((day, index) => {
+                      const isToday = sameLocalDate(Date.now(), day);
+                      const dayJobs = jobsByDay[index];
+                      const unassignedCount = dayJobs.filter((j) => !j.assigneeName).length;
+                      const workerNames = [
+                        ...new Set(dayJobs.map((j) => j.assigneeName).filter(Boolean)),
+                      ] as string[];
+
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          className={`flex flex-1 flex-col rounded-xl border ${
+                            isToday
+                              ? "border-brand-400 bg-brand-50/30"
+                              : "border-border bg-slate-50/60"
+                          }`}
+                        >
+                          <div className={`rounded-t-xl px-3 py-2 ${isToday ? "bg-brand-100/50" : "bg-slate-100/80"}`}>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${isToday ? "text-brand-700" : "text-slate-500"}`}>
+                                  {isToday ? "Today" : day.toLocaleDateString(undefined, { weekday: "short" })}
+                                </p>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  {day.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                {dayJobs.length > 0 && (
+                                  <p className="text-xs font-semibold text-slate-600">
+                                    {dayJobs.length} job{dayJobs.length !== 1 ? "s" : ""}
+                                  </p>
+                                )}
+                                {unassignedCount > 0 && (
+                                  <p className="text-[11px] font-bold text-amber-600">
+                                    {unassignedCount} open
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex-1 space-y-1.5 p-2">
+                            {dayJobs.length === 0 ? (
+                              <p className="py-4 text-center text-xs text-slate-400">No jobs</p>
+                            ) : (
+                              dayJobs.map((job) => {
+                                const isUnassigned = !job.assigneeName;
+                                return (
+                                  <button
+                                    key={job._id}
+                                    className={`w-full rounded-lg px-2.5 py-2 text-left transition ${
+                                      isUnassigned
+                                        ? "border border-dashed border-amber-300 bg-amber-50"
+                                        : "border border-slate-200 bg-white"
+                                    } ${
+                                      selectedJobId === job._id
+                                        ? "ring-2 ring-brand-400 ring-offset-1"
+                                        : "hover:ring-1 hover:ring-brand-300 hover:ring-offset-1"
+                                    }`}
+                                    onClick={() => setSelectedJobId(job._id)}
+                                    type="button"
+                                  >
+                                    <p className="text-sm font-semibold leading-snug truncate text-slate-900">
+                                      {job.propertyName}
+                                    </p>
+                                    <p className={`text-xs truncate ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
+                                      {job.assigneeName ?? "Unassigned"}
+                                    </p>
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                          {workerNames.length > 0 && (
+                            <div className="border-t border-border px-2 py-1.5">
+                              <div className="flex flex-wrap gap-1">
+                                {workerNames.map((name) => (
+                                  <span key={name} className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                    {name.split(" ")[0]}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
             ) : (
               <div className="space-y-3">
                 {jobsByDay[0].map((job) => (
