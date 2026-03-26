@@ -832,9 +832,10 @@ export function AdminSchedulePage() {
               </div>
             </div>
             {showCreateForm ? (
-              <ChevronUp className="h-5 w-5 flex-shrink-0 text-slate-400" />
+              <ChevronUp className="h-5 w-5 shrink-0 text-slate-400" />
             ) : (
-              <ChevronDown className="h-5 w-5 flex-shrink-0 text-slate-400" />
+
+              <ChevronDown className="h-5 w-5 shrink-0 text-slate-400" />
             )}
           </button>
           {showCreateForm && (
