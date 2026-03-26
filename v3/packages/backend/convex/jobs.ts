@@ -1,4 +1,4 @@
-﻿import { mutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
@@ -504,14 +504,14 @@ export const createManual = mutation({
       jobType: args.jobType,
       scheduledStart: args.scheduledStart,
       scheduledEnd: args.scheduledEnd,
-      assigneeId,
       status: "SCHEDULED",
       priority: args.priority ?? "MEDIUM",
       intakeSource: args.intakeSource,
-      clientLabel,
-      arrivalDeadline: args.arrivalDeadline,
-      notes,
       createdById: actor._id,
+      ...(assigneeId ? { assigneeId } : {}),
+      ...(clientLabel ? { clientLabel } : {}),
+      ...(args.arrivalDeadline !== undefined ? { arrivalDeadline: args.arrivalDeadline } : {}),
+      ...(notes ? { notes } : {}),
     });
 
     await recordJobEvent(ctx, {
