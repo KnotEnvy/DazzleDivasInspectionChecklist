@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "convex/_generated/dataModel";
@@ -17,6 +17,15 @@ type PropertyOption = {
   name: string;
 };
 
+function sortPropertiesByName<T extends { name: string }>(properties: T[]) {
+  return properties.slice().sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+}
+
 export function NewChecklistPage() {
   const navigate = useNavigate();
   const { isAdmin, isLoading } = useCurrentUser();
@@ -26,6 +35,10 @@ export function NewChecklistPage() {
   const properties = useQuery(api.properties.listForCurrentUser) as
     | PropertyOption[]
     | undefined;
+  const sortedProperties = useMemo(
+    () => sortPropertiesByName(properties ?? []),
+    [properties]
+  );
   const createInspection = useMutation(api.inspections.create);
 
   const [propertyId, setPropertyId] = useState("");
@@ -95,7 +108,7 @@ export function NewChecklistPage() {
         </p>
       </div>
 
-      {properties !== undefined && properties.length === 0 ? (
+      {properties !== undefined && sortedProperties.length === 0 ? (
         <EmptyState
           icon={<Building2 className="h-8 w-8" />}
           heading="No properties available"
@@ -113,7 +126,7 @@ export function NewChecklistPage() {
               required
             >
               <option value="">Select a property...</option>
-              {properties?.map((property) => (
+              {sortedProperties.map((property) => (
                 <option key={property._id} value={property._id}>
                   {property.name}
                 </option>

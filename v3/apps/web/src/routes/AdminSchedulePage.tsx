@@ -124,6 +124,15 @@ const jobTypes: Array<JobType | "ALL"> = [
   "MAINTENANCE",
 ];
 
+function sortPropertiesByName<T extends { name: string }>(properties: T[]) {
+  return properties.slice().sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+}
+
 function startOfDayLocal(value: Date) {
   const next = new Date(value);
   next.setHours(0, 0, 0, 0);
@@ -365,6 +374,10 @@ export function AdminSchedulePage() {
   const properties = useQuery(api.properties.listAdmin, { includeArchived: false }) as
     | AdminProperty[]
     | undefined;
+  const sortedProperties = useMemo(
+    () => sortPropertiesByName(properties ?? []),
+    [properties]
+  );
 
   const createManualJob = useMutation(api.jobs.createManual);
   const reassignJob = useMutation(api.jobs.reassign);
@@ -473,10 +486,10 @@ export function AdminSchedulePage() {
     selectedJob.property?.isArchived === true;
 
   useEffect(() => {
-    if (properties && properties.length > 0 && createForm.propertyId.length === 0) {
-      setCreateForm((current) => ({ ...current, propertyId: properties[0]._id }));
+    if (sortedProperties.length > 0 && createForm.propertyId.length === 0) {
+      setCreateForm((current) => ({ ...current, propertyId: sortedProperties[0]._id }));
     }
-  }, [createForm.propertyId.length, properties]);
+  }, [createForm.propertyId.length, sortedProperties]);
 
   useEffect(() => {
     if (
@@ -852,7 +865,7 @@ export function AdminSchedulePage() {
                 }
               >
                 <option value="">Select property</option>
-                {(properties ?? []).map((property) => (
+                {sortedProperties.map((property) => (
                   <option key={property._id} value={property._id}>
                     {property.name}
                   </option>
@@ -1125,7 +1138,7 @@ export function AdminSchedulePage() {
               onChange={(event) => setPropertyFilter(event.target.value as "ALL" | Id<"properties">)}
             >
               <option value="ALL">All properties</option>
-              {(properties ?? []).map((property) => (
+              {sortedProperties.map((property) => (
                 <option key={property._id} value={property._id}>
                   {property.name}
                 </option>

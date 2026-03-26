@@ -175,6 +175,15 @@ function deriveRoomNames(params: {
   return [params.room.name];
 }
 
+function sortPropertiesByName<T extends { name: string }>(properties: T[]) {
+  return properties.slice().sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+}
+
 export function AdminPropertiesPage() {
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -191,7 +200,13 @@ export function AdminPropertiesPage() {
     searchTerm.trim().length > 0 ? { term: searchTerm, includeArchived } : "skip"
   ) as AdminProperty[] | undefined;
 
-  const activeList = searchTerm.trim().length > 0 ? searchedProperties : properties;
+  const activeList = useMemo(
+    () =>
+      sortPropertiesByName(
+        searchTerm.trim().length > 0 ? searchedProperties ?? [] : properties ?? []
+      ),
+    [properties, searchTerm, searchedProperties]
+  );
 
   const createProperty = useMutation(api.properties.create);
   const updateProperty = useMutation(api.properties.update);
