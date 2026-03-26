@@ -308,7 +308,6 @@ function buildDefaultCreateForm() {
     scheduledEnd: toDatetimeLocalValue(end.getTime()),
     priority: "MEDIUM" as Priority,
     intakeSource: "MANUAL" as IntakeSource,
-    clientLabel: "",
     arrivalDeadline: "",
     notes: "",
   };
@@ -563,7 +562,6 @@ export function AdminSchedulePage() {
         assigneeId: createForm.assigneeId.length > 0 ? createForm.assigneeId : undefined,
         priority: createForm.priority,
         intakeSource: createForm.intakeSource,
-        clientLabel: createForm.clientLabel.trim() || undefined,
         arrivalDeadline,
         notes: createForm.notes.trim() || undefined,
       });
@@ -957,17 +955,6 @@ export function AdminSchedulePage() {
                 <option value="TEXT">TEXT</option>
                 <option value="PHONE">PHONE</option>
               </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Client / Account
-              <input
-                className="input mt-1"
-                placeholder="Airbnb PM team"
-                value={createForm.clientLabel}
-                onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, clientLabel: event.target.value }))
-                }
-              />
             </label>
             <label className="text-sm font-medium text-slate-700">
               Guest Arrival Deadline

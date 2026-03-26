@@ -161,6 +161,7 @@ export const create = mutation({
   args: {
     name: v.string(),
     address: v.string(),
+    clientLabel: v.optional(v.string()),
     description: v.optional(v.string()),
     propertyType: propertyTypeValidator,
     bedrooms: v.optional(v.number()),
@@ -173,14 +174,29 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+
+    const clientLabel = args.clientLabel?.trim() || undefined;
+
     return await ctx.db.insert("properties", {
-      ...args,
+      name: args.name,
+      address: args.address,
+      propertyType: args.propertyType,
       timezone: args.timezone ?? "America/New_York",
       activeCleanerAssignments: 0,
       activeInspectorAssignments: 0,
       activeServicePlans: 0,
       isArchived: false,
       isActive: true,
+      ...(clientLabel ? { clientLabel } : {}),
+      ...(args.description !== undefined ? { description: args.description } : {}),
+      ...(args.bedrooms !== undefined ? { bedrooms: args.bedrooms } : {}),
+      ...(args.bathrooms !== undefined ? { bathrooms: args.bathrooms } : {}),
+      ...(args.notes !== undefined ? { notes: args.notes } : {}),
+      ...(args.accessInstructions !== undefined
+        ? { accessInstructions: args.accessInstructions }
+        : {}),
+      ...(args.entryMethod !== undefined ? { entryMethod: args.entryMethod } : {}),
+      ...(args.serviceNotes !== undefined ? { serviceNotes: args.serviceNotes } : {}),
     });
   },
 });
@@ -190,6 +206,7 @@ export const update = mutation({
     propertyId: v.id("properties"),
     name: v.optional(v.string()),
     address: v.optional(v.string()),
+    clientLabel: v.optional(v.string()),
     description: v.optional(v.string()),
     propertyType: v.optional(propertyTypeValidator),
     bedrooms: v.optional(v.number()),
@@ -205,9 +222,13 @@ export const update = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
 
-    const { propertyId, ...updates } = args;
+    const { propertyId, clientLabel, ...updates } = args;
+    const normalizedUpdates = {
+      ...updates,
+      ...(clientLabel !== undefined ? { clientLabel: clientLabel.trim() || undefined } : {}),
+    };
     const filteredUpdates = Object.fromEntries(
-      Object.entries(updates).filter(([, value]) => value !== undefined)
+      Object.entries(normalizedUpdates).filter(([, value]) => value !== undefined)
     );
 
     await ctx.db.patch(propertyId, filteredUpdates);

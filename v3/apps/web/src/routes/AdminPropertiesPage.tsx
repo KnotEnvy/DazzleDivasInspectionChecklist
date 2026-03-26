@@ -25,6 +25,7 @@ type AdminProperty = {
   _id: Id<"properties">;
   name: string;
   address: string;
+  clientLabel?: string;
   propertyType: "RESIDENTIAL" | "COMMERCIAL";
   bedrooms?: number;
   bathrooms?: number;
@@ -63,6 +64,7 @@ type PropertyJob = {
 type PropertyFormState = {
   name: string;
   address: string;
+  clientLabel: string;
   propertyType: "RESIDENTIAL" | "COMMERCIAL";
   bedrooms: string;
   bathrooms: string;
@@ -205,6 +207,7 @@ export function AdminPropertiesPage() {
   const [createForm, setCreateForm] = useState({
     name: "",
     address: "",
+    clientLabel: "",
     propertyType: "RESIDENTIAL" as "RESIDENTIAL" | "COMMERCIAL",
     bedrooms: "",
     bathrooms: "",
@@ -221,6 +224,7 @@ export function AdminPropertiesPage() {
   const [editForm, setEditForm] = useState<PropertyFormState>({
     name: "",
     address: "",
+    clientLabel: "",
     propertyType: "RESIDENTIAL" as "RESIDENTIAL" | "COMMERCIAL",
     bedrooms: "",
     bathrooms: "",
@@ -238,6 +242,7 @@ export function AdminPropertiesPage() {
     return {
       name: selectedProperty.name,
       address: selectedProperty.address,
+      clientLabel: selectedProperty.clientLabel ?? "",
       propertyType: selectedProperty.propertyType,
       bedrooms: selectedProperty.bedrooms ? String(selectedProperty.bedrooms) : "",
       bathrooms: selectedProperty.bathrooms ? String(selectedProperty.bathrooms) : "",
@@ -250,6 +255,7 @@ export function AdminPropertiesPage() {
     selectedPropertyId,
     selectedProperty?.name,
     selectedProperty?.address,
+    selectedProperty?.clientLabel,
     selectedProperty?.propertyType,
     selectedProperty?.bedrooms,
     selectedProperty?.bathrooms,
@@ -279,6 +285,7 @@ export function AdminPropertiesPage() {
       if (
         current.name === selectedPropertyFormDefaults.name &&
         current.address === selectedPropertyFormDefaults.address &&
+        current.clientLabel === selectedPropertyFormDefaults.clientLabel &&
         current.propertyType === selectedPropertyFormDefaults.propertyType &&
         current.bedrooms === selectedPropertyFormDefaults.bedrooms &&
         current.bathrooms === selectedPropertyFormDefaults.bathrooms &&
@@ -425,6 +432,7 @@ export function AdminPropertiesPage() {
       const propertyId = await createProperty({
         name: createForm.name.trim(),
         address: createForm.address.trim(),
+        clientLabel: createForm.clientLabel.trim() || undefined,
         propertyType: createForm.propertyType,
         bedrooms,
         bathrooms,
@@ -438,6 +446,7 @@ export function AdminPropertiesPage() {
       setCreateForm({
         name: "",
         address: "",
+        clientLabel: "",
         propertyType: "RESIDENTIAL",
         bedrooms: "",
         bathrooms: "",
@@ -472,6 +481,7 @@ export function AdminPropertiesPage() {
         propertyId: selectedPropertyId,
         name: editForm.name.trim(),
         address: editForm.address.trim(),
+        clientLabel: editForm.clientLabel.trim() || undefined,
         propertyType: editForm.propertyType,
         bedrooms,
         bathrooms,
@@ -716,6 +726,17 @@ export function AdminPropertiesPage() {
                 required
               />
             </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              Client / Account
+              <input
+                className="input mt-1"
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, clientLabel: event.target.value }))
+                }
+                placeholder="Optional"
+                value={createForm.clientLabel}
+              />
+            </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-sm font-semibold text-slate-700">
                 Property Type
@@ -864,6 +885,11 @@ export function AdminPropertiesPage() {
                     <div>
                       <p className="font-semibold">{property.name}</p>
                       <p className="text-sm text-slate-600">{property.address}</p>
+                      {property.clientLabel ? (
+                        <p className="text-xs font-semibold text-brand-700">
+                          Client: {property.clientLabel}
+                        </p>
+                      ) : null}
                       <p className="text-xs font-semibold text-slate-500">
                         {property.propertyType} | {property.bedrooms ?? 1} bed |{" "}
                         {property.bathrooms ?? 1} bath | {property.timezone ?? "America/New_York"}
@@ -1006,6 +1032,17 @@ export function AdminPropertiesPage() {
                   setEditForm((current) => ({ ...current, address: event.target.value }))
                 }
                 value={editForm.address}
+              />
+            </label>
+            <label className="block text-sm font-semibold text-slate-700">
+              Client / Account
+              <input
+                className="input mt-1"
+                onChange={(event) =>
+                  setEditForm((current) => ({ ...current, clientLabel: event.target.value }))
+                }
+                placeholder="Optional"
+                value={editForm.clientLabel}
               />
             </label>
             <label className="block text-sm font-semibold text-slate-700">

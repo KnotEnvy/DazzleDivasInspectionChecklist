@@ -44,6 +44,7 @@ const schema = defineSchema({
   properties: defineTable({
     name: v.string(),
     address: v.string(),
+    clientLabel: v.optional(v.string()),
     description: v.optional(v.string()),
     propertyType: v.union(v.literal("RESIDENTIAL"), v.literal("COMMERCIAL")),
     bedrooms: v.optional(v.number()),

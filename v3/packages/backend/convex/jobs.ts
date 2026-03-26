@@ -66,6 +66,7 @@ async function hydrateJobs(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
 
     return {
       ...job,
+      clientLabel: property?.clientLabel ?? job.clientLabel ?? undefined,
       propertyName: property?.name ?? "Unknown property",
       propertyAddress: property?.address ?? "",
       propertyTimezone: property?.timezone ?? "America/New_York",
@@ -392,6 +393,7 @@ export const getById = query({
 
     return {
       ...job,
+      clientLabel: property?.clientLabel ?? job.clientLabel ?? undefined,
       property,
       servicePlan,
       assignee,
