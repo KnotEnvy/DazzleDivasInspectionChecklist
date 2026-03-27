@@ -135,6 +135,10 @@ function parseOptionalCount(value: string) {
   return Math.floor(parsed);
 }
 
+function buildOptionalField<T>(key: string, value: T | undefined) {
+  return value === undefined ? {} : { [key]: value };
+}
+
 function inferRoomGenerationMode(room: {
   name: string;
   generationMode?: RoomGenerationMode;
@@ -447,14 +451,17 @@ export function AdminPropertiesPage() {
       const propertyId = await createProperty({
         name: createForm.name.trim(),
         address: createForm.address.trim(),
-        clientLabel: createForm.clientLabel.trim() || undefined,
         propertyType: createForm.propertyType,
-        bedrooms,
-        bathrooms,
         timezone: createForm.timezone.trim(),
-        accessInstructions: createForm.accessInstructions.trim() || undefined,
-        entryMethod: createForm.entryMethod.trim() || undefined,
-        serviceNotes: createForm.serviceNotes.trim() || undefined,
+        ...buildOptionalField("clientLabel", createForm.clientLabel.trim() || undefined),
+        ...buildOptionalField("bedrooms", bedrooms),
+        ...buildOptionalField("bathrooms", bathrooms),
+        ...buildOptionalField(
+          "accessInstructions",
+          createForm.accessInstructions.trim() || undefined
+        ),
+        ...buildOptionalField("entryMethod", createForm.entryMethod.trim() || undefined),
+        ...buildOptionalField("serviceNotes", createForm.serviceNotes.trim() || undefined),
       });
 
       toast.success("Property created");
@@ -496,14 +503,17 @@ export function AdminPropertiesPage() {
         propertyId: selectedPropertyId,
         name: editForm.name.trim(),
         address: editForm.address.trim(),
-        clientLabel: editForm.clientLabel.trim() || undefined,
         propertyType: editForm.propertyType,
-        bedrooms,
-        bathrooms,
         timezone: editForm.timezone.trim(),
-        accessInstructions: editForm.accessInstructions.trim() || undefined,
-        entryMethod: editForm.entryMethod.trim() || undefined,
-        serviceNotes: editForm.serviceNotes.trim() || undefined,
+        ...buildOptionalField("clientLabel", editForm.clientLabel.trim() || undefined),
+        ...buildOptionalField("bedrooms", bedrooms),
+        ...buildOptionalField("bathrooms", bathrooms),
+        ...buildOptionalField(
+          "accessInstructions",
+          editForm.accessInstructions.trim() || undefined
+        ),
+        ...buildOptionalField("entryMethod", editForm.entryMethod.trim() || undefined),
+        ...buildOptionalField("serviceNotes", editForm.serviceNotes.trim() || undefined),
       });
 
       toast.success("Property updated");
@@ -1529,3 +1539,4 @@ function AssignmentRoleSection(props: {
     </div>
   );
 }
+
