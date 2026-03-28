@@ -893,12 +893,12 @@ export function AdminPropertiesPage() {
               description="Create your first property using the form above."
             />
           ) : (
-            <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-[32rem] space-y-2 overflow-y-auto pr-1 lg:max-h-[38rem]">
               {activeList.map((property) => (
                 <button
                   key={property._id}
                   aria-label={`Select property: ${property.name}`}
-                  className={`w-full rounded-xl border p-3 text-left transition ${
+                  className={`w-full rounded-xl border p-2.5 text-left transition ${
                     property._id === selectedPropertyId
                       ? "border-brand-500 bg-brand-50"
                       : "border-border bg-white hover:border-brand-300"
@@ -909,7 +909,7 @@ export function AdminPropertiesPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold">{property.name}</p>
-                      <p className="text-sm text-slate-600">{property.address}</p>
+                      <p className="text-sm leading-5 text-slate-600">{property.address}</p>
                       {property.clientLabel ? (
                         <p className="text-xs font-semibold text-brand-700">
                           Client: {property.clientLabel}
@@ -1539,4 +1539,5 @@ function AssignmentRoleSection(props: {
     </div>
   );
 }
+
 

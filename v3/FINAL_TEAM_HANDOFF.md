@@ -1,143 +1,76 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: March 21, 2026
+Updated: March 28, 2026
 
 ## Purpose
-This is the active handoff for the next working team. The product is live in production and was used in the field on March 21, 2026. Treat this repo as an operating system for a real business, not a rebuild playground.
-
-The team split for the next pass:
-- UI/UX expert: improve clarity, speed, polish, consistency, and mobile ergonomics without breaking the current workflow.
-- Backend/frontend expert: fix wiring, state, auth, data integrity, deployment, and production bugs.
+This is the active high-level handoff for the next working team.
+The app is live in production with real business data and real field usage.
+Treat this repository like operating infrastructure, not a rebuild sandbox.
 
 ## Current Product State
 ### Live and working
-- Production auth is running through Convex Auth.
-- Admins can manage properties, templates, staffing, schedules, and disposable jobs.
-- Cleaners and inspectors can complete real checklist work in the field.
+- Production auth runs through Convex Auth.
+- Admins manage staff, properties, templates, schedules, recurring plans, and disposable jobs.
+- Cleaners and inspectors complete real field checklists.
 - Admin completed-checklist review is live.
-- Photo review and iPhone-sized download/export are live.
-- Offline queue/replay exists and has already been used in practice.
+- Photo review and iPhone-friendly save/export flows are live.
+- Offline queue/replay is live and has already been used in practice.
 
 ### Operating reality
-- There is now real production data.
+- There is real production data.
 - Do not wipe production data.
 - Do not delete templates unless explicitly requested.
-- Do not treat old pilot/dev reset tools as safe for production use.
-- Any schema/auth/env change should be reviewed as a production change.
-
-## Active Architecture
-- Frontend host: Cloudflare Pages
-- Frontend app: `apps/web`
-- Backend host: Convex
-- Backend app: `packages/backend/convex`
-- Shared code: `packages/shared`
-- Auth: Convex Auth + password-based accounts + invite/reset flow
-- Storage: Convex DB + Convex file storage
-- Runtime/package manager: Bun workspaces
+- Any schema/auth/env change must be treated as a rollout change.
+- Cloudflare Pages and Convex deploy separately. Do not assume a frontend deploy updated production backend behavior.
+- Convex production is now warning that the project is above Free plan limits. Bandwidth, storage, and usage headroom are active operational concerns.
 
 ## Source Of Truth
-Keep root docs minimal.
-
 Current active docs:
 - `README.md`
 - `FINAL_TEAM_HANDOFF.md`
+- `NEXT_TEAM_HANDOFF.md`
 
-Historical setup, rollout, and checkpoint docs have been moved to `archive/` and should be treated as reference only.
+Historical setup and checkpoint docs live in `archive/` and should be treated as reference only.
 
-## Production Guardrails
-- Preserve the current admin, cleaner, and inspector role model.
-- Preserve completed-checklist history and evidence integrity.
-- Preserve offline queue/replay behavior.
-- Preserve photo capture and export behavior.
-- Do not break the distinction between disposable scheduled jobs and completed checklist history.
-- Do not casually change auth URLs, redirect handling, or onboarding flow without testing the live invite path.
-- Prefer additive fixes over broad rewrites.
+## Priority Workstreams
+### 1. Auth and onboarding correctness
+Primary goal: boring, reliable staff onboarding.
 
-## Known Workstreams
-### 1. Live Ops Bug Fixes
-This is the first priority. Start from real usage pain, not speculative cleanup.
+Focus:
+- invite email delivery
+- password setup completion state
+- accurate admin roster status
+- production custom-domain auth correctness
 
-Initial known items:
-- User onboarding state needs end-to-end cleanup and re-verification.
-  - Goal: admin should see accurate user status such as invite pending vs password set.
-  - Goal: resend invite should behave cleanly and not leave stale error messaging.
-- Auth and invite links must stay on the production custom domain.
-  - Goal: setup/password links should use `app.dazzledivascleaning.com` as the canonical app URL.
-- Admin roster/status messaging can be clearer.
-  - Goal: reduce confusing badge/error combinations after successful setup.
+### 2. Deployment and rollout discipline
+Primary goal: stop production drift between Cloudflare and Convex.
 
-### 2. UI/UX Expert Scope
-Primary mission: improve confidence and speed for real operators.
+Recent incident that matters:
+- Property create/edit with the Client / Account field failed in production until Convex production was deployed with the matching schema/functions.
+- The field existed in the repo, but production backend drift made the live feature fail.
 
-Focus areas:
-- Admin dashboard and admin user management readability
-- Completed-history scanning for the day’s finished work
-- Completed-checklist review layout and photo actions
-- Schedule/admin operations clarity
-- Set-password/auth screens
-- Mobile spacing, touch targets, contrast, and information hierarchy
+Rule:
+- Any schema-backed UI change is not done until Convex production is deployed and verified.
 
-Working rules:
-- Preserve current workflow shape unless there is a strong usability reason to change it.
-- Prefer obvious states over clever states.
-- Optimize for busy operators on phones first, desktops second.
-- When proposing changes, include before/after screenshots or a short visual rationale.
-- Avoid cosmetic churn that does not reduce confusion or taps.
+### 3. Convex usage and capacity
+Primary goal: keep the app online and responsive under growing real usage.
 
-Expected deliverables:
-- Ranked UX issue list with screenshots
-- A compact visual system pass for badges, alerts, buttons, empty states, and forms
-- Improvements to admin review and onboarding screens
-- A small set of high-confidence production-safe UI changes
+Focus:
+- inspect Convex bandwidth/storage/function usage in the dashboard
+- understand what photos, exports, and queries cost in practice
+- decide whether to reduce usage, change behavior, or move off the Free plan immediately
 
-### 3. Backend/Frontend Expert Scope
-Primary mission: make the app boringly reliable in production.
+### 4. Highest-friction admin and mobile UX
+Primary goal: improve operator speed without changing workflow shape casually.
 
-Focus areas:
-- Auth, onboarding, resend invite, password setup state transitions
-- Admin user state correctness
-- Query/mutation/action consistency
-- Deployment/env assumptions across Convex and Cloudflare
-- Error handling and user-facing status messaging
-- Data integrity around jobs, inspections, and evidence
-
-Working rules:
-- Reproduce bugs against the current live workflow before redesigning internals.
-- Treat Convex actions/mutations and frontend state changes as one system.
-- Do not ship auth or env changes without explicit verification steps.
-- Keep production migrations and one-off data fixes narrow and auditable.
-
-Expected deliverables:
-- Verified fixes for onboarding/state edge cases
-- Clear production env checklist for future maintainers
-- Safer error handling and less ambiguous admin feedback
-- Tight regression checks for the most business-critical flows
-
-## First Session Checklist For The Next Team
-1. Read `README.md`.
-2. Read this handoff.
-3. Confirm current production URLs and env assumptions before changing auth or deploy wiring.
-4. Review the admin onboarding flow end to end in production.
-5. Build a real bug list from field feedback before choosing feature work.
-6. Separate bugs from enhancements.
-7. Ship the smallest safe fixes first.
-
-## Suggested Ownership Split
-### UI/UX expert
-- Owns visual audit, mobile/admin usability pass, and interaction clarity.
-- Does not change backend contracts without coordinating with the wiring owner.
-
-### Backend/frontend expert
-- Owns auth/onboarding correctness, backend queries/actions, data states, and deployment integrity.
-- Supports UI work by exposing the right state and reducing ambiguity in API responses.
-
-### Shared ownership
-- Admin onboarding flow
-- Completed-checklist review experience
-- Any state that is both user-visible and operationally important
+Focus:
+- admin onboarding/status clarity
+- admin schedule and property-management ergonomics
+- completed review clarity and photo actions
+- mobile field efficiency on real phones
 
 ## Validation Standard
-Every meaningful production-facing change should be validated against these flows:
+Before shipping meaningful changes, validate:
 - Admin sign-in
 - Create staff account
 - Invite email arrival
@@ -147,27 +80,11 @@ Every meaningful production-facing change should be validated against these flow
 - Checklist completion with photos
 - Admin review of completed work
 - Photo export/save flow
+- Property create/edit including Client / Account
 - Offline queue/replay for at least one worker scenario
 
-## Backlog Capture Template
-Use this format when collecting the next round of fixes:
-
-```text
-Title:
-Type: bug | ux | enhancement
-Priority: P0 | P1 | P2
-Owner: UI/UX | Backend/Frontend | Shared
-Observed in production?: yes/no
-User impact:
-Steps to reproduce:
-Expected result:
-Actual result:
-Proposed fix:
-Validation needed:
-```
-
 ## Recommended Next Moves
-1. Finish the onboarding correctness pass and verify it on the live app.
-2. Consolidate the first real field-usage bug list.
-3. Do a focused admin UI/UX polish pass on the highest-friction screens.
-4. Only after those are stable, pick the next feature batch.
+1. Re-verify onboarding correctness in production.
+2. Audit Convex production usage and plan headroom before the next feature batch.
+3. Build the next bug list from real usage, not speculation.
+4. Keep fixes narrow and verify both frontend and backend deploy needs before calling a rollout complete.

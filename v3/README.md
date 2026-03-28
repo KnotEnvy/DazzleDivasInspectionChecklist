@@ -1,6 +1,6 @@
 # Dazzle Divas v3
 
-Updated: March 21, 2026
+Updated: March 28, 2026
 
 ## Status
 v3 is the active production app for Dazzle Divas field operations.
@@ -22,6 +22,7 @@ Current emphasis:
 - improve admin and mobile UX
 - harden onboarding and status accuracy
 - keep production deployment/configuration reliable
+- reduce Convex bandwidth/plan pressure before it affects field operations
 
 ## Stack
 - Web: React 19 + Vite 6 + Tailwind 4 + React Router 7
@@ -42,6 +43,7 @@ v3/
 
 ## Active Docs
 - [FINAL_TEAM_HANDOFF.md](./FINAL_TEAM_HANDOFF.md)
+- [NEXT_TEAM_HANDOFF.md](./NEXT_TEAM_HANDOFF.md)
 - [README.md](./README.md)
 
 Older rollout, setup, and checkpoint docs have been moved to `archive/` for local reference only.
@@ -52,6 +54,8 @@ Older rollout, setup, and checkpoint docs have been moved to `archive/` for loca
 - Do not break completed-history integrity.
 - Do not break offline queue/replay behavior.
 - Do not make auth/env changes casually.
+- Do not assume a frontend deploy also updated Convex production.
+- Treat Convex plan-limit and bandwidth warnings as operational issues, not backlog trivia.
 
 ## Local Setup
 ```bash
