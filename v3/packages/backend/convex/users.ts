@@ -70,6 +70,15 @@ function isAssignmentRole(role: UserRole): role is AssignmentRole {
   return role === "CLEANER" || role === "INSPECTOR";
 }
 
+function sortUsersByName<T extends { name: string }>(users: T[]) {
+  return users.slice().sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+}
+
 async function insertUserAdminEvent(
   ctx: MutationCtx,
   params: {
@@ -241,6 +250,33 @@ export const list = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
     return await ctx.db.query("users").collect();
+  },
+});
+
+export const listActiveStaff = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+
+    const [cleaners, inspectors] = await Promise.all([
+      ctx.db
+        .query("users")
+        .withIndex("by_role", (q) => q.eq("role", "CLEANER"))
+        .collect(),
+      ctx.db
+        .query("users")
+        .withIndex("by_role", (q) => q.eq("role", "INSPECTOR"))
+        .collect(),
+    ]);
+
+    return sortUsersByName([...cleaners, ...inspectors])
+      .filter((user) => user.isActive)
+      .map((user) => ({
+        _id: user._id,
+        name: user.name,
+        role: user.role,
+        isActive: user.isActive,
+      }));
   },
 });
 

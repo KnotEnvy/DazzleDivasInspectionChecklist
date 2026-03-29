@@ -1,4 +1,5 @@
 ﻿import { query, mutation } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -126,6 +127,44 @@ export const listCompleted = query({
         );
       })
     );
+  },
+});
+
+export const listCompletedPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    const results =
+      user.role === "ADMIN"
+        ? await ctx.db
+            .query("inspections")
+            .withIndex("by_status", (q) => q.eq("status", "COMPLETED"))
+            .order("desc")
+            .paginate(args.paginationOpts)
+        : await ctx.db
+            .query("inspections")
+            .withIndex("by_assignee_status", (q) =>
+              q.eq("assigneeId", user._id).eq("status", "COMPLETED")
+            )
+            .order("desc")
+            .paginate(args.paginationOpts);
+
+    return {
+      ...results,
+      page: await Promise.all(
+        results.page.map(async (inspection) => {
+          return buildCompletedInspectionHistoryItem(
+            inspection,
+            typeof inspection.issueCount === "number"
+              ? inspection.issueCount
+              : await loadInspectionIssueCount(ctx, inspection._id)
+          );
+        })
+      ),
+    };
   },
 });
 

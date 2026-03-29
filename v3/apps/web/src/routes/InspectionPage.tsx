@@ -30,6 +30,7 @@ import {
 import { getNextHydratedDraft } from "@/lib/draftHydration";
 import { applyInspectionOutboxOverlay } from "@/lib/offlineInspectionState";
 import { classifyReplayFailureStatus } from "@/lib/offlineReplay";
+import { optimizePhotoForUpload } from "@/lib/photoUploadOptimization";
 import { roomStatusTone } from "@/lib/statusColors";
 
 type RoomSummary = {
@@ -507,22 +508,29 @@ export function InspectionPage() {
 
     try {
       const captureStartedAt = Date.now();
-      const payloads = files.map((file, index) => {
-        const mimeType = file.type || "application/octet-stream";
-        const fallbackExtension = mimeType === "image/png" ? ".png" : ".jpg";
-        const fileName = file.name?.trim() || `photo-${captureStartedAt}-${index + 1}${fallbackExtension}`;
-        const blob = file.slice(0, file.size, mimeType);
+      const payloads = await Promise.all(
+        files.map(async (file, index) => {
+          const mimeType = file.type || "application/octet-stream";
+          const fallbackExtension = mimeType === "image/png" ? ".png" : ".jpg";
+          const fileName = file.name?.trim() || `photo-${captureStartedAt}-${index + 1}${fallbackExtension}`;
+          const blob = file.slice(0, file.size, mimeType);
+          const optimizedPhoto = await optimizePhotoForUpload({
+            file: blob,
+            fileName,
+            mimeType,
+          });
 
-        return {
-          inspectionId,
-          roomInspectionId: selectedRoomView._id,
-          file: blob,
-          fileName,
-          fileSize: blob.size,
-          mimeType,
-          kind: photoKind,
-        } satisfies Omit<UploadPhotoPayload, "localPhotoId">;
-      });
+          return {
+            inspectionId,
+            roomInspectionId: selectedRoomView._id,
+            file: optimizedPhoto.blob,
+            fileName: optimizedPhoto.fileName,
+            fileSize: optimizedPhoto.fileSize,
+            mimeType: optimizedPhoto.mimeType,
+            kind: photoKind,
+          } satisfies Omit<UploadPhotoPayload, "localPhotoId">;
+        })
+      );
 
       const shouldQueuePhotos =
         !isOnline ||

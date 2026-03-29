@@ -26,6 +26,7 @@ type WorkerEditableStatus = "IN_PROGRESS" | "BLOCKED";
 
 type ScheduleJob = {
   _id: Id<"jobs">;
+  _creationTime: number;
   propertyId: Id<"properties">;
   scheduledStart: number;
   scheduledEnd: number;
@@ -33,15 +34,10 @@ type ScheduleJob = {
   linkedInspectionId?: Id<"inspections">;
   propertyName: string;
   propertyAddress: string;
-  propertyServiceNotes?: string;
   status: JobStatus;
   jobType: JobType;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-  intakeSource?: IntakeSource;
-  clientLabel?: string;
-  arrivalDeadline?: number;
   assigneeName?: string | null;
-  notes?: string;
   checklistType: "CLEANING" | "INSPECTION" | null;
   canStartChecklist: boolean;
 };
@@ -472,17 +468,21 @@ export function MySchedulePage() {
         ) : (
           <div className="mt-3 space-y-3">
             <div className="rounded-xl border border-border bg-slate-50 p-3 text-sm">
-              <p className="font-semibold text-slate-900">{selectedListJob.propertyAddress}</p>
-              <p className="mt-1 text-slate-600">
-                Priority: {selectedListJob.priority ?? "MEDIUM"}
-                {selectedListJob.assigneeName ? ` | ${selectedListJob.assigneeName}` : ""}
+              <p className="font-semibold text-slate-900">
+                {selectedJobEffective?.property?.address ?? selectedListJob.propertyAddress}
               </p>
-              {selectedListJob.notes && (
-                <p className="mt-2 text-slate-600">{selectedListJob.notes}</p>
+              <p className="mt-1 text-slate-600">
+                Priority: {selectedJobEffective?.priority ?? selectedListJob.priority ?? "MEDIUM"}
+                {(selectedJobEffective?.assignee?.name ?? selectedListJob.assigneeName)
+                  ? ` | ${selectedJobEffective?.assignee?.name ?? selectedListJob.assigneeName}`
+                  : ""}
+              </p>
+              {selectedJobEffective?.notes && (
+                <p className="mt-2 text-slate-600">{selectedJobEffective.notes}</p>
               )}
-              {selectedListJob.propertyServiceNotes && (
+              {selectedJobEffective?.property?.serviceNotes && (
                 <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-                  {selectedListJob.propertyServiceNotes}
+                  {selectedJobEffective.property.serviceNotes}
                 </p>
               )}
             </div>

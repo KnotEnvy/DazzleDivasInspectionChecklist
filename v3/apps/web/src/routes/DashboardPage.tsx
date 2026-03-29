@@ -63,8 +63,7 @@ type AdminDispatchJob = {
 type StaffUser = {
   _id: string;
   name: string;
-  email: string;
-  role: string;
+  role: "CLEANER" | "INSPECTOR";
   isActive: boolean;
 };
 
@@ -150,7 +149,7 @@ export function DashboardPage() {
     isAdmin ? { from: startOfToday(), to: startOfToday() + 7 * DAY_MS } : "skip"
   ) as AdminDispatchJob[] | undefined;
   const allStaff = useQuery(
-    api.users.list,
+    api.users.listActiveStaff,
     isAdmin ? undefined : "skip"
   ) as StaffUser[] | undefined;
 
@@ -178,9 +177,7 @@ export function DashboardPage() {
       ...blockedToday.filter((job) => job.assigneeId),
     ];
 
-    const activeStaff = (allStaff ?? []).filter(
-      (member) => member.isActive && member.role !== "ADMIN"
-    );
+    const activeStaff = (allStaff ?? []).filter((member) => member.isActive);
     const staffWithCounts = activeStaff
       .map((member) => {
         const memberJobs = adminTodayJobs.filter((job) => job.assigneeId === member._id);

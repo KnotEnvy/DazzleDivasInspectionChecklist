@@ -39,42 +39,37 @@ function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
 
-async function hydrateJobs(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
+async function hydrateJobListItems(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
   const propertyIds = [...new Set(jobs.map((job) => job.propertyId))];
-  const servicePlanIds = [
-    ...new Set(jobs.map((job) => job.servicePlanId).filter(isDefined)),
-  ];
   const assigneeIds = [...new Set(jobs.map((job) => job.assigneeId).filter(isDefined))];
 
-  const [properties, servicePlans, assignees] = await Promise.all([
+  const [properties, assignees] = await Promise.all([
     Promise.all(propertyIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
-    Promise.all(servicePlanIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
     Promise.all(assigneeIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
   ]);
 
   const propertyById = new Map(properties);
-  const servicePlanById = new Map(servicePlans);
   const assigneeById = new Map(assignees);
 
   return jobs.map((job) => {
     const property = propertyById.get(job.propertyId) ?? null;
-    const servicePlan = job.servicePlanId
-      ? (servicePlanById.get(job.servicePlanId) ?? null)
-      : null;
     const assignee = job.assigneeId ? (assigneeById.get(job.assigneeId) ?? null) : null;
     const checklistType = checklistTypeForJobType(job.jobType);
 
     return {
-      ...job,
-      clientLabel: property?.clientLabel ?? job.clientLabel ?? undefined,
+      _id: job._id,
+      _creationTime: job._creationTime,
+      propertyId: job.propertyId,
+      scheduledStart: job.scheduledStart,
+      scheduledEnd: job.scheduledEnd,
+      assigneeId: job.assigneeId,
+      linkedInspectionId: job.linkedInspectionId,
       propertyName: property?.name ?? "Unknown property",
       propertyAddress: property?.address ?? "",
-      propertyTimezone: property?.timezone ?? "America/New_York",
-      propertyServiceNotes: property?.serviceNotes ?? "",
-      propertyIsActive: property?.isActive ?? false,
-      propertyIsArchived: property?.isArchived === true,
+      status: job.status,
+      jobType: job.jobType,
+      priority: job.priority,
       assigneeName: assignee?.name ?? null,
-      servicePlan,
       checklistType,
       canStartChecklist:
         job.assigneeId !== undefined &&
@@ -312,7 +307,7 @@ export const listMyUpcoming = query({
       .filter((job) => job.status !== "CANCELLED")
       .sort((a, b) => a.scheduledStart - b.scheduledStart);
 
-    return await hydrateJobs(ctx, filtered);
+    return await hydrateJobListItems(ctx, filtered);
   },
 });
 
@@ -337,7 +332,7 @@ export const listAdminDispatch = query({
       )
       .collect();
 
-    return await hydrateJobs(ctx, jobs.sort((a, b) => a.scheduledStart - b.scheduledStart));
+    return await hydrateJobListItems(ctx, jobs.sort((a, b) => a.scheduledStart - b.scheduledStart));
   },
 });
 
@@ -362,7 +357,7 @@ export const listByProperty = query({
       )
       .collect();
 
-    return await hydrateJobs(ctx, jobs.sort((a, b) => a.scheduledStart - b.scheduledStart));
+    return await hydrateJobListItems(ctx, jobs.sort((a, b) => a.scheduledStart - b.scheduledStart));
   },
 });
 

@@ -452,6 +452,8 @@ export function CompletedInspectionReview({
                         <img
                           alt={photo.export_file_name}
                           className="h-44 w-full object-cover"
+                          decoding="async"
+                          loading="lazy"
                           src={photo.url}
                         />
                       ) : (

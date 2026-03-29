@@ -102,6 +102,25 @@ export const listAdmin = query({
   },
 });
 
+export const listAdminNames = query({
+  args: {
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const properties = await ctx.db.query("properties").collect();
+    const filtered = args.includeArchived === true
+      ? properties
+      : properties.filter((property) => property.isArchived !== true);
+
+    return sortPropertiesByName(filtered).map((property) => ({
+      _id: property._id,
+      name: property.name,
+    }));
+  },
+});
+
 export const listAll = listAdmin;
 
 export const search = query({

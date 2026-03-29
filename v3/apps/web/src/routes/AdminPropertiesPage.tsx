@@ -196,20 +196,22 @@ export function AdminPropertiesPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const properties = useQuery(api.properties.listAdmin, { includeArchived }) as
-    | AdminProperty[]
-    | undefined;
+  const trimmedSearchTerm = searchTerm.trim();
+  const properties = useQuery(
+    api.properties.listAdmin,
+    trimmedSearchTerm.length === 0 ? { includeArchived } : "skip"
+  ) as AdminProperty[] | undefined;
   const searchedProperties = useQuery(
     api.properties.search,
-    searchTerm.trim().length > 0 ? { term: searchTerm, includeArchived } : "skip"
+    trimmedSearchTerm.length > 0 ? { term: trimmedSearchTerm, includeArchived } : "skip"
   ) as AdminProperty[] | undefined;
 
   const activeList = useMemo(
     () =>
       sortPropertiesByName(
-        searchTerm.trim().length > 0 ? searchedProperties ?? [] : properties ?? []
+        trimmedSearchTerm.length > 0 ? searchedProperties ?? [] : properties ?? []
       ),
-    [properties, searchTerm, searchedProperties]
+    [properties, trimmedSearchTerm, searchedProperties]
   );
 
   const createProperty = useMutation(api.properties.create);

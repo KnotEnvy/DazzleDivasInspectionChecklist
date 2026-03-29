@@ -32,24 +32,17 @@ type SavingAction =
 
 type DispatchJob = {
   _id: Id<"jobs">;
+  _creationTime: number;
   propertyId: Id<"properties">;
   propertyName: string;
   propertyAddress: string;
-  propertyTimezone: string;
-  propertyServiceNotes: string;
-  propertyIsActive: boolean;
-  propertyIsArchived: boolean;
   scheduledStart: number;
   scheduledEnd: number;
   status: JobStatus;
   jobType: JobType;
   priority?: Priority;
-  intakeSource?: IntakeSource;
-  clientLabel?: string;
-  arrivalDeadline?: number;
   assigneeId?: Id<"users">;
   assigneeName?: string | null;
-  notes?: string;
   checklistType: "CLEANING" | "INSPECTION" | null;
 };
 
@@ -370,8 +363,8 @@ export function AdminSchedulePage() {
     api.jobs.getById,
     selectedJobId ? { jobId: selectedJobId } : "skip"
   ) as DispatchDetail | null | undefined;
-  const users = useQuery(api.users.list) as AdminUser[] | undefined;
-  const properties = useQuery(api.properties.listAdmin, { includeArchived: false }) as
+  const users = useQuery(api.users.listActiveStaff) as AdminUser[] | undefined;
+  const properties = useQuery(api.properties.listAdminNames, { includeArchived: false }) as
     | AdminProperty[]
     | undefined;
   const sortedProperties = useMemo(

@@ -382,7 +382,13 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
               >
                 <div className="relative">
                   {photo.url ? (
-                    <img alt={photo.fileName} className="h-40 w-full object-cover" src={photo.url} />
+                    <img
+                      alt={photo.fileName}
+                      className="h-40 w-full object-cover"
+                      decoding="async"
+                      loading="lazy"
+                      src={photo.url}
+                    />
                   ) : photo.blob ? (
                     <PendingPhotoPreview alt={photo.fileName} blob={photo.blob} />
                   ) : (

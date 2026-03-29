@@ -1,5 +1,5 @@
 ﻿import { Link } from "react-router-dom";
-import { useQuery } from "convex/react";
+import { usePaginatedQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { Clock3 } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
@@ -96,9 +96,15 @@ function HistorySection({
 }
 
 export function HistoryPage() {
-  const items = useQuery(api.inspections.listCompleted) as
-    | CompletedInspection[]
-    | undefined;
+  const { results: items, status, loadMore } = usePaginatedQuery(
+    api.inspections.listCompletedPaginated,
+    {},
+    { initialNumItems: 30 }
+  ) as {
+    results: CompletedInspection[];
+    status: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
+    loadMore: (numItems: number) => void;
+  };
   const referenceDate = new Date();
   const todayLabel = referenceDate.toLocaleDateString([], {
     weekday: "long",
@@ -120,7 +126,7 @@ export function HistoryPage() {
             Start with today&apos;s finished jobs so admin can review photos quickly.
           </p>
         </div>
-        {items ? (
+        {status !== "LoadingFirstPage" ? (
           <div className="rounded-2xl border border-border bg-white px-4 py-3 text-sm text-slate-600">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Today</p>
             <p className="mt-1 text-2xl font-bold text-slate-900">{todayItems.length}</p>
@@ -129,7 +135,7 @@ export function HistoryPage() {
         ) : null}
       </div>
 
-      {items === undefined ? (
+      {status === "LoadingFirstPage" ? (
         <div className="space-y-3">
           <div className="skeleton h-16 rounded-xl" />
           <div className="skeleton h-16 rounded-xl" />
@@ -155,6 +161,18 @@ export function HistoryPage() {
             items={earlierItems}
             referenceDate={referenceDate}
           />
+          {status !== "Exhausted" ? (
+            <div className="flex justify-center pt-2">
+              <button
+                className="field-button secondary px-4"
+                disabled={status !== "CanLoadMore"}
+                onClick={() => loadMore(30)}
+                type="button"
+              >
+                {status === "LoadingMore" ? "Loading Older Jobs..." : "Load Older Jobs"}
+              </button>
+            </div>
+          ) : null}
         </>
       )}
     </div>
