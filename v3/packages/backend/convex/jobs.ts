@@ -428,7 +428,7 @@ export const reassign = mutation({
         requiredRole,
       });
 
-      if (isDispatchActiveStatus(job.status)) {
+      if (isDispatchActiveStatus(job.status) && requiredRole !== "CLEANER") {
         await assertNoAssigneeConflict(ctx, {
           assigneeId: assignee._id,
           scheduledStart: job.scheduledStart,

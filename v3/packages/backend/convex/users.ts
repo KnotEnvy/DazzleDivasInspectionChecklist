@@ -79,6 +79,20 @@ function sortUsersByName<T extends { name: string }>(users: T[]) {
   );
 }
 
+function sanitizeUserDisplayName(user: Pick<Doc<"users">, "name" | "email">) {
+  const normalizedName = typeof user.name === "string" ? user.name.trim() : "";
+  if (normalizedName.length > 0) {
+    return normalizedName;
+  }
+
+  const normalizedEmail = typeof user.email === "string" ? user.email.trim() : "";
+  if (normalizedEmail.length > 0) {
+    return normalizedEmail;
+  }
+
+  return "Unknown Staff";
+}
+
 async function insertUserAdminEvent(
   ctx: MutationCtx,
   params: {
@@ -258,25 +272,21 @@ export const listActiveStaff = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
 
-    const [cleaners, inspectors] = await Promise.all([
-      ctx.db
-        .query("users")
-        .withIndex("by_role", (q) => q.eq("role", "CLEANER"))
-        .collect(),
-      ctx.db
-        .query("users")
-        .withIndex("by_role", (q) => q.eq("role", "INSPECTOR"))
-        .collect(),
-    ]);
+    const users = await ctx.db.query("users").collect();
 
-    return sortUsersByName([...cleaners, ...inspectors])
-      .filter((user) => user.isActive)
-      .map((user) => ({
-        _id: user._id,
-        name: user.name,
-        role: user.role,
-        isActive: user.isActive,
-      }));
+    return sortUsersByName(
+      users
+        .filter(
+          (user) =>
+            user.isActive && (user.role === "CLEANER" || user.role === "INSPECTOR")
+        )
+        .map((user) => ({
+          _id: user._id,
+          name: sanitizeUserDisplayName(user),
+          role: user.role,
+          isActive: user.isActive,
+        }))
+    );
   },
 });
 
