@@ -38,6 +38,7 @@ type ScheduleJob = {
   jobType: JobType;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   assigneeName?: string | null;
+  isBackToBack?: boolean;
   checklistType: "CLEANING" | "INSPECTION" | null;
   canStartChecklist: boolean;
 };
@@ -54,6 +55,7 @@ type JobDetail = {
   intakeSource?: IntakeSource;
   clientLabel?: string;
   arrivalDeadline?: number;
+  isBackToBack?: boolean;
   notes?: string;
   linkedInspectionId?: Id<"inspections">;
   checklistType: "CLEANING" | "INSPECTION" | null;
@@ -444,7 +446,7 @@ export function MySchedulePage() {
             </h2>
             {selectedListJob && (
               <p className="text-sm text-slate-600">
-                {selectedListJob.jobType} | {formatJobWindow(selectedListJob)}
+                {selectedListJob.isBackToBack ? "B2B Turnover" : selectedListJob.jobType} | {formatJobWindow(selectedListJob)}
               </p>
             )}
           </div>
@@ -580,7 +582,7 @@ export function MySchedulePage() {
                             minute: "2-digit",
                           })}
                           {" | "}
-                          {nextJob.jobType}
+                          {nextJob.isBackToBack ? "B2B Turnover" : nextJob.jobType}
                         </p>
                       </div>
                       <span
@@ -638,7 +640,7 @@ export function MySchedulePage() {
                               minute: "2-digit",
                             })}
                             {" | "}
-                            {job.jobType}
+                            {job.isBackToBack ? "B2B Turnover" : job.jobType}
                           </p>
                         </div>
                         <span
@@ -694,7 +696,7 @@ export function MySchedulePage() {
                 </span>
               </div>
               <p className="mt-2 text-xs text-slate-500">
-                {selectedJobEffective.jobType} | Priority: {selectedJobEffective.priority ?? "MEDIUM"}
+                {selectedJobEffective.isBackToBack ? "B2B Turnover" : selectedJobEffective.jobType} | Priority: {selectedJobEffective.priority ?? "MEDIUM"}
                 {selectedJobEffective.assignee ? ` | ${selectedJobEffective.assignee.name}` : ""}
               </p>
             </div>
@@ -719,6 +721,9 @@ export function MySchedulePage() {
                 label="Arrival Deadline"
                 value={formatOptionalDateTime(selectedJobEffective.arrivalDeadline) ?? ""}
               />
+            )}
+            {selectedJobEffective.isBackToBack && (
+              <DetailBlock label="Dispatch Tag" value="Back-to-back turnover" />
             )}
             {selectedJobEffective.notes && <DetailBlock label="Job Notes" value={selectedJobEffective.notes} />}
           </div>

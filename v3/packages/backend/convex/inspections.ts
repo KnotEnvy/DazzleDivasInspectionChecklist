@@ -76,6 +76,28 @@ async function ensureAssigneeIsEligible(
   return assignee;
 }
 
+async function assertNoOtherActiveInspection(
+  ctx: MutationCtx,
+  assigneeId: Id<"users">
+) {
+  const activeInspection = (
+    await ctx.db
+      .query("inspections")
+      .withIndex("by_assignee_status", (q) =>
+        q.eq("assigneeId", assigneeId).eq("status", "IN_PROGRESS")
+      )
+      .take(1)
+  )[0];
+
+  if (!activeInspection) {
+    return;
+  }
+
+  throw new Error(
+    `Finish or resume the active checklist at ${activeInspection.propertyName} before starting another one`
+  );
+}
+
 export const listActive = query({
   args: {},
   handler: async (ctx) => {
@@ -259,6 +281,8 @@ export const create = mutation({
         skipPropertyAssignmentCheck: lifecycleDecision.skipPropertyAssignmentCheck,
       }
     );
+
+    await assertNoOtherActiveInspection(ctx, assigneeId);
 
     const inspectionId = await ctx.db.insert("inspections", {
       propertyId: args.propertyId,

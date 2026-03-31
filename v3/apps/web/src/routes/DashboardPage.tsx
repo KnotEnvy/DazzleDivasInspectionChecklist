@@ -57,6 +57,7 @@ type AdminDispatchJob = {
   assigneeId?: string;
   assigneeName?: string | null;
   priority?: string;
+  isBackToBack?: boolean;
   checklistType: string | null;
 };
 
@@ -74,6 +75,7 @@ type ScheduleJob = {
   scheduledStart: number;
   scheduledEnd: number;
   linkedInspectionId?: string;
+  isBackToBack?: boolean;
   checklistType: "CLEANING" | "INSPECTION" | null;
   canStartChecklist: boolean;
   status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
@@ -278,7 +280,7 @@ export function DashboardPage() {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}{" "}
-                        {job.jobType}
+                        {job.isBackToBack ? "B2B Turnover" : job.jobType}
                       </p>
                     </div>
                     <span
@@ -648,7 +650,7 @@ export function DashboardPage() {
               </h2>
               <p className="mt-2 text-sm text-slate-600">
                 {nextJob
-                  ? `${nextJob.jobType} scheduled ${formatJobWindow(nextJob)}`
+                  ? `${nextJob.isBackToBack ? "B2B Turnover" : nextJob.jobType} scheduled ${formatJobWindow(nextJob)}`
                   : copy.nextEmptyDescription}
               </p>
             </div>

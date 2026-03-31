@@ -13,9 +13,16 @@ import {
 import { getJobDeleteBlockReason } from "./lib/jobDeletion";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const BACK_TO_BACK_ARRIVAL_HOUR = 16;
 
 function isDispatchActiveStatus(status: Doc<"jobs">["status"]) {
   return status !== "COMPLETED" && status !== "CANCELLED";
+}
+
+function buildBackToBackArrivalDeadline(scheduledStart: number) {
+  const arrivalDeadline = new Date(scheduledStart);
+  arrivalDeadline.setHours(BACK_TO_BACK_ARRIVAL_HOUR, 0, 0, 0);
+  return arrivalDeadline.getTime();
 }
 
 function requiredAssignmentRoleForJob(
@@ -69,6 +76,8 @@ async function hydrateJobListItems(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
       status: job.status,
       jobType: job.jobType,
       priority: job.priority,
+      arrivalDeadline: job.arrivalDeadline,
+      isBackToBack: job.isBackToBack === true,
       assigneeName: assignee?.name ?? null,
       checklistType,
       canStartChecklist:
@@ -458,6 +467,7 @@ export const createManual = mutation({
     priority: v.optional(jobPriorityValidator),
     intakeSource: jobIntakeSourceValidator,
     clientLabel: v.optional(v.string()),
+    isBackToBack: v.optional(v.boolean()),
     arrivalDeadline: v.optional(v.number()),
     notes: v.optional(v.string()),
   },
@@ -476,6 +486,10 @@ export const createManual = mutation({
     let assigneeId = args.assigneeId;
     const notes = args.notes?.trim() || undefined;
     const clientLabel = args.clientLabel?.trim() || undefined;
+    const isBackToBack = args.isBackToBack === true;
+    const arrivalDeadline = isBackToBack
+      ? buildBackToBackArrivalDeadline(args.scheduledStart)
+      : args.arrivalDeadline;
     if (assigneeId) {
       const requiredRole = requiredAssignmentRoleForJob(
         {
@@ -489,11 +503,13 @@ export const createManual = mutation({
         requiredRole,
       });
 
-      await assertNoAssigneeConflict(ctx, {
-        assigneeId: assignee._id,
-        scheduledStart: args.scheduledStart,
-        scheduledEnd: args.scheduledEnd,
-      });
+      if (requiredRole !== "CLEANER") {
+        await assertNoAssigneeConflict(ctx, {
+          assigneeId: assignee._id,
+          scheduledStart: args.scheduledStart,
+          scheduledEnd: args.scheduledEnd,
+        });
+      }
     }
 
     const jobId = await ctx.db.insert("jobs", {
@@ -507,7 +523,8 @@ export const createManual = mutation({
       createdById: actor._id,
       ...(assigneeId ? { assigneeId } : {}),
       ...(clientLabel ? { clientLabel } : {}),
-      ...(args.arrivalDeadline !== undefined ? { arrivalDeadline: args.arrivalDeadline } : {}),
+      ...(isBackToBack ? { isBackToBack: true } : {}),
+      ...(arrivalDeadline !== undefined ? { arrivalDeadline } : {}),
       ...(notes ? { notes } : {}),
     });
 
@@ -521,7 +538,8 @@ export const createManual = mutation({
         assigneeId: assigneeId ?? null,
         intakeSource: args.intakeSource,
         clientLabel: clientLabel ?? null,
-        arrivalDeadline: args.arrivalDeadline ?? null,
+        isBackToBack,
+        arrivalDeadline: arrivalDeadline ?? null,
       },
     });
 
@@ -536,14 +554,16 @@ export const reschedule = mutation({
     scheduledEnd: v.number(),
   },
   handler: async (ctx, args) => {
-    const { actor, job } = await getJobForAdminUpdate(ctx, args.jobId);
+    const { actor, job, servicePlan } = await getJobForAdminUpdate(ctx, args.jobId);
 
     if (args.scheduledEnd <= args.scheduledStart) {
       throw new Error("Scheduled end must be after scheduled start");
     }
 
+    const requiredRole = requiredAssignmentRoleForJob(job, servicePlan);
     if (
       job.assigneeId &&
+      requiredRole !== "CLEANER" &&
       isDispatchActiveStatus(job.status) &&
       (job.scheduledStart !== args.scheduledStart || job.scheduledEnd !== args.scheduledEnd)
     ) {
@@ -558,6 +578,11 @@ export const reschedule = mutation({
     await ctx.db.patch(job._id, {
       scheduledStart: args.scheduledStart,
       scheduledEnd: args.scheduledEnd,
+      ...(job.isBackToBack === true
+        ? {
+            arrivalDeadline: buildBackToBackArrivalDeadline(args.scheduledStart),
+          }
+        : {}),
     });
 
     await recordJobEvent(ctx, {
@@ -569,6 +594,10 @@ export const reschedule = mutation({
         previousScheduledEnd: job.scheduledEnd,
         nextScheduledStart: args.scheduledStart,
         nextScheduledEnd: args.scheduledEnd,
+        nextArrivalDeadline:
+          job.isBackToBack === true
+            ? buildBackToBackArrivalDeadline(args.scheduledStart)
+            : job.arrivalDeadline ?? null,
       },
     });
 

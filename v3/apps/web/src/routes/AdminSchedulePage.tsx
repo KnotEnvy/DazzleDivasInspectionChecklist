@@ -30,6 +30,10 @@ type SavingAction =
   | "delete"
   | null;
 
+const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+const DEFAULT_TURNOVER_START_HOUR = 10;
+const BACK_TO_BACK_ARRIVAL_HOUR = 16;
+
 type DispatchJob = {
   _id: Id<"jobs">;
   _creationTime: number;
@@ -41,6 +45,8 @@ type DispatchJob = {
   status: JobStatus;
   jobType: JobType;
   priority?: Priority;
+  arrivalDeadline?: number;
+  isBackToBack?: boolean;
   assigneeId?: Id<"users">;
   assigneeName?: string | null;
   checklistType: "CLEANING" | "INSPECTION" | null;
@@ -57,6 +63,7 @@ type DispatchDetail = {
   intakeSource?: IntakeSource;
   clientLabel?: string;
   arrivalDeadline?: number;
+  isBackToBack?: boolean;
   assigneeId?: Id<"users">;
   notes?: string;
   linkedInspectionId?: Id<"inspections">;
@@ -211,6 +218,30 @@ function formatOptionalDateTime(timestamp?: number) {
   return timestamp ? new Date(timestamp).toLocaleString() : null;
 }
 
+function shiftDatetimeLocalValue(value: string, offsetMs: number) {
+  const timestamp = fromDatetimeLocalValue(value);
+  return Number.isFinite(timestamp) ? toDatetimeLocalValue(timestamp + offsetMs) : "";
+}
+
+function buildBackToBackArrivalLocalValue(startValue: string) {
+  const timestamp = fromDatetimeLocalValue(startValue);
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+
+  const arrivalDeadline = new Date(timestamp);
+  arrivalDeadline.setHours(BACK_TO_BACK_ARRIVAL_HOUR, 0, 0, 0);
+  return toDatetimeLocalValue(arrivalDeadline.getTime());
+}
+
+function BackToBackBadge() {
+  return (
+    <span className="inline-flex rounded-full border border-rose-300 bg-rose-100 px-2 py-0.5 text-[11px] font-bold tracking-[0.12em] text-rose-700">
+      B2B
+    </span>
+  );
+}
+
 function summarizeTurnoverIntake(job: {
   intakeSource?: IntakeSource;
   clientLabel?: string;
@@ -299,9 +330,8 @@ function getDeleteBlockReason(job: DispatchDetail | null | undefined) {
 
 function buildDefaultCreateForm() {
   const start = new Date();
-  start.setMinutes(0, 0, 0);
-  start.setHours(Math.max(start.getHours() + 1, 10));
-  const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
+  start.setHours(DEFAULT_TURNOVER_START_HOUR, 0, 0, 0);
+  const end = new Date(start.getTime() + FOUR_HOURS_MS);
   return {
     propertyId: "" as Id<"properties"> | "",
     jobType: "CLEANING" as JobType,
@@ -310,6 +340,7 @@ function buildDefaultCreateForm() {
     scheduledEnd: toDatetimeLocalValue(end.getTime()),
     priority: "MEDIUM" as Priority,
     intakeSource: "MANUAL" as IntakeSource,
+    isBackToBack: false,
     arrivalDeadline: "",
     notes: "",
   };
@@ -334,6 +365,7 @@ export function AdminSchedulePage() {
     Record<string, Id<"users"> | "">
   >({});
   const [createForm, setCreateForm] = useState(buildDefaultCreateForm);
+  const [createConfirmArmed, setCreateConfirmArmed] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showAllUnassigned, setShowAllUnassigned] = useState(false);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
@@ -530,6 +562,29 @@ export function AdminSchedulePage() {
     });
   }, [unassignedJobs]);
 
+  useEffect(() => {
+    if (!showCreateForm) {
+      setCreateConfirmArmed(false);
+    }
+  }, [showCreateForm]);
+
+  function updateCreateForm(nextValue: (current: ReturnType<typeof buildDefaultCreateForm>) => ReturnType<typeof buildDefaultCreateForm>) {
+    setCreateConfirmArmed(false);
+    setCreateForm((current) => nextValue(current));
+  }
+
+  function syncCreateFormStart(current: ReturnType<typeof buildDefaultCreateForm>, scheduledStart: string) {
+    const nextScheduledEnd = shiftDatetimeLocalValue(scheduledStart, FOUR_HOURS_MS);
+    return {
+      ...current,
+      scheduledStart,
+      scheduledEnd: nextScheduledEnd || current.scheduledEnd,
+      arrivalDeadline: current.isBackToBack
+        ? buildBackToBackArrivalLocalValue(scheduledStart)
+        : current.arrivalDeadline,
+    };
+  }
+
   function shiftWindow(direction: -1 | 1) {
     setAnchorDate((current) => {
       if (viewMode === "month") {
@@ -568,6 +623,7 @@ export function AdminSchedulePage() {
         assigneeId: createForm.assigneeId.length > 0 ? createForm.assigneeId : undefined,
         priority: createForm.priority,
         intakeSource: createForm.intakeSource,
+        isBackToBack: createForm.isBackToBack || undefined,
         arrivalDeadline,
         notes: createForm.notes.trim() || undefined,
       });
@@ -575,6 +631,7 @@ export function AdminSchedulePage() {
       setSelectedJobId(jobId);
       setAnchorDate(startOfDayLocal(new Date(scheduledStart)));
       const nextDefaults = buildDefaultCreateForm();
+      setCreateConfirmArmed(false);
       setCreateForm((current) => ({
         ...nextDefaults,
         propertyId: current.propertyId,
@@ -851,7 +908,7 @@ export function AdminSchedulePage() {
                 className="input mt-1"
                 value={createForm.propertyId}
                 onChange={(event) =>
-                  setCreateForm((current) => ({
+                  updateCreateForm((current) => ({
                     ...current,
                     propertyId: event.target.value as Id<"properties"> | "",
                   }))
@@ -871,11 +928,19 @@ export function AdminSchedulePage() {
                 className="input mt-1"
                 value={createForm.jobType}
                 onChange={(event) =>
-                  setCreateForm((current) => ({
-                    ...current,
-                    jobType: event.target.value as JobType,
-                    assigneeId: "",
-                  }))
+                  updateCreateForm((current) => {
+                    const nextJobType = event.target.value as JobType;
+                    const canStayBackToBack = nextJobType === "CLEANING" && current.isBackToBack;
+                    return {
+                      ...current,
+                      jobType: nextJobType,
+                      assigneeId: "",
+                      isBackToBack: canStayBackToBack,
+                      arrivalDeadline: canStayBackToBack
+                        ? buildBackToBackArrivalLocalValue(current.scheduledStart)
+                        : "",
+                    };
+                  })
                 }
               >
                 <option value="CLEANING">CLEANING</option>
@@ -890,7 +955,7 @@ export function AdminSchedulePage() {
                 className="input mt-1"
                 value={createForm.assigneeId}
                 onChange={(event) =>
-                  setCreateForm((current) => ({
+                  updateCreateForm((current) => ({
                     ...current,
                     assigneeId: event.target.value as Id<"users"> | "",
                   }))
@@ -911,7 +976,7 @@ export function AdminSchedulePage() {
                 type="datetime-local"
                 value={createForm.scheduledStart}
                 onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, scheduledStart: event.target.value }))
+                  updateCreateForm((current) => syncCreateFormStart(current, event.target.value))
                 }
               />
             </label>
@@ -922,7 +987,7 @@ export function AdminSchedulePage() {
                 type="datetime-local"
                 value={createForm.scheduledEnd}
                 onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, scheduledEnd: event.target.value }))
+                  updateCreateForm((current) => ({ ...current, scheduledEnd: event.target.value }))
                 }
               />
             </label>
@@ -932,7 +997,7 @@ export function AdminSchedulePage() {
                 className="input mt-1"
                 value={createForm.priority}
                 onChange={(event) =>
-                  setCreateForm((current) => ({
+                  updateCreateForm((current) => ({
                     ...current,
                     priority: event.target.value as Priority,
                   }))
@@ -950,7 +1015,7 @@ export function AdminSchedulePage() {
                 className="input mt-1"
                 value={createForm.intakeSource}
                 onChange={(event) =>
-                  setCreateForm((current) => ({
+                  updateCreateForm((current) => ({
                     ...current,
                     intakeSource: event.target.value as IntakeSource,
                   }))
@@ -968,11 +1033,34 @@ export function AdminSchedulePage() {
                 className="input mt-1"
                 type="datetime-local"
                 value={createForm.arrivalDeadline}
+                disabled={createForm.isBackToBack}
                 onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, arrivalDeadline: event.target.value }))
+                  updateCreateForm((current) => ({ ...current, arrivalDeadline: event.target.value }))
                 }
               />
+              {createForm.isBackToBack && (
+                <span className="mt-1 block text-xs text-rose-700">B2B turnovers lock this to 4:00 PM.</span>
+              )}
             </label>
+            {createForm.jobType === "CLEANING" && (
+              <label className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-900 sm:col-span-2 lg:col-span-3">
+                <input
+                  className="h-4 w-4 rounded border-rose-300 text-rose-600"
+                  type="checkbox"
+                  checked={createForm.isBackToBack}
+                  onChange={(event) =>
+                    updateCreateForm((current) => ({
+                      ...current,
+                      isBackToBack: event.target.checked,
+                      arrivalDeadline: event.target.checked
+                        ? buildBackToBackArrivalLocalValue(current.scheduledStart)
+                        : "",
+                    }))
+                  }
+                />
+                <span>Mark as B2B turnover with automatic 4:00 PM guest arrival deadline.</span>
+              </label>
+            )}
           </div>
           <label className="mt-3 block text-sm font-medium text-slate-700">
             Job Notes
@@ -981,19 +1069,40 @@ export function AdminSchedulePage() {
               placeholder="Cleaning instructions, guest issues, or dispatch notes"
               value={createForm.notes}
               onChange={(event) =>
-                setCreateForm((current) => ({ ...current, notes: event.target.value }))
+                updateCreateForm((current) => ({ ...current, notes: event.target.value }))
               }
             />
           </label>
           <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-            <button
-              className="field-button primary px-6"
-              disabled={savingAction === "create"}
-              onClick={() => void handleCreateJob()}
-              type="button"
-            >
-              {savingAction === "create" ? "Creating..." : "Add Turnover"}
-            </button>
+            {createConfirmArmed ? (
+              <>
+                <button
+                  className="field-button primary px-6"
+                  disabled={savingAction === "create"}
+                  onClick={() => void handleCreateJob()}
+                  type="button"
+                >
+                  {savingAction === "create" ? "Creating..." : "Confirm Add Turnover"}
+                </button>
+                <button
+                  className="field-button ghost px-6"
+                  disabled={savingAction === "create"}
+                  onClick={() => setCreateConfirmArmed(false)}
+                  type="button"
+                >
+                  Keep Editing
+                </button>
+              </>
+            ) : (
+              <button
+                className="field-button primary px-6"
+                disabled={savingAction === "create"}
+                onClick={() => setCreateConfirmArmed(true)}
+                type="button"
+              >
+                Add Turnover
+              </button>
+            )}
           </div>
           </div>
           )}
@@ -1039,7 +1148,10 @@ export function AdminSchedulePage() {
                     type="button"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold">{job.propertyName}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold">{job.propertyName}</p>
+                        {job.isBackToBack && <BackToBackBadge />}
+                      </div>
                       {urgency && (
                         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                           urgency === "Overdue" ? "bg-rose-100 text-rose-700"
@@ -1051,7 +1163,10 @@ export function AdminSchedulePage() {
                       )}
                     </div>
                     <p className="text-sm text-slate-600">{formatJobWindow(job)}</p>
-                    <p className="text-xs text-slate-500">{job.jobType}</p>
+                    <p className="text-xs text-slate-500">
+                      {job.isBackToBack ? "B2B Turnover | " : ""}
+                      {job.jobType}
+                    </p>
                   </button>
                   <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                     <select
@@ -1630,7 +1745,7 @@ export function AdminSchedulePage() {
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-slate-700">
-                  {selectedJob.jobType} | {formatJobWindow(selectedJob)}
+                  {selectedJob.isBackToBack ? "B2B Turnover" : selectedJob.jobType} | {formatJobWindow(selectedJob)}
                 </p>
                 <p className="text-xs text-slate-500">
                   Priority: {selectedJob.priority ?? "MEDIUM"}
@@ -1638,7 +1753,7 @@ export function AdminSchedulePage() {
                 </p>
 
                 {/* Compact info rows — only show non-empty fields */}
-                {(selectedJob.notes || selectedJob.arrivalDeadline || selectedJob.clientLabel) && (
+                {(selectedJob.notes || selectedJob.arrivalDeadline || selectedJob.clientLabel || selectedJob.isBackToBack) && (
                   <div className="mt-2 space-y-1 border-t border-border pt-2 text-xs text-slate-600">
                     {selectedJob.arrivalDeadline && (
                       <p><span className="font-semibold text-slate-700">Guest arrival:</span> {formatOptionalDateTime(selectedJob.arrivalDeadline)}</p>
@@ -1723,7 +1838,14 @@ export function AdminSchedulePage() {
                       disabled={controlsLocked}
                       type="datetime-local"
                       value={scheduledStartInput}
-                      onChange={(event) => setScheduledStartInput(event.target.value)}
+                      onChange={(event) => {
+                        const nextStart = event.target.value;
+                        setScheduledStartInput(nextStart);
+                        const nextEnd = shiftDatetimeLocalValue(nextStart, FOUR_HOURS_MS);
+                        if (nextEnd) {
+                          setScheduledEndInput(nextEnd);
+                        }
+                      }}
                     />
                   </label>
                   <label className="block text-sm font-medium text-slate-700">
@@ -1902,10 +2024,11 @@ function JobRow({
             <p className="text-sm font-bold text-slate-900">
               {new Date(job.scheduledStart).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             </p>
-            <p className="truncate text-sm font-semibold text-slate-700">{job.propertyName}</p>
+            <span className="truncate text-sm font-semibold text-slate-700">{job.propertyName}</span>
+            {job.isBackToBack && <BackToBackBadge />}
           </div>
           <p className="mt-0.5 text-xs text-slate-500">
-            {job.assigneeName ?? "Unassigned"} &middot; {job.jobType}
+            {job.assigneeName ?? "Unassigned"} &middot; {job.isBackToBack ? "B2B Turnover" : job.jobType}
             {job.priority && job.priority !== "MEDIUM" ? ` &middot; ${job.priority}` : ""}
           </p>
         </div>

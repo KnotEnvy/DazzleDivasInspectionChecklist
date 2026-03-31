@@ -148,6 +148,7 @@ const schema = defineSchema({
       )
     ),
     clientLabel: v.optional(v.string()),
+    isBackToBack: v.optional(v.boolean()),
     arrivalDeadline: v.optional(v.number()),
     notes: v.optional(v.string()),
     createdById: v.id("users"),
