@@ -28,6 +28,8 @@ describe("classifyReplayFailureStatus", () => {
   it("treats connectivity failures as retryable", () => {
     expect(classifyReplayFailureStatus("Failed to fetch upload URL")).toBe("FAILED");
     expect(classifyReplayFailureStatus("Network timeout while replaying")).toBe("FAILED");
+    expect(classifyReplayFailureStatus("Upload failed for kitchen.jpg", "UPLOAD_PHOTO")).toBe("FAILED");
+    expect(classifyReplayFailureStatus("[CONVEX M(photos:save)] Server Error", "UPLOAD_PHOTO")).toBe("FAILED");
   });
 
   it("treats validation and permission failures as conflicts", () => {

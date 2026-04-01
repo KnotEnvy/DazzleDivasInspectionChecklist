@@ -158,6 +158,75 @@ describe("applyInspectionOutboxOverlay", () => {
     expect(result.selectedRoom?.photos[1]?.isPendingUpload).toBe(true);
     expect(result.diagnostics.relevantPendingCount).toBe(6);
   });
+
+  it("keeps conflicted local photo uploads visible for recovery", () => {
+    const inspection = {
+      _id: "inspection-1",
+      status: "IN_PROGRESS" as const,
+      roomInspections: [
+        {
+          _id: "room-1",
+          roomName: "Kitchen",
+          status: "PENDING" as const,
+          requiredPhotoMin: 2,
+          completedTasks: 1,
+          totalTasks: 2,
+          issueCount: 0,
+          photoCount: 1,
+        },
+      ],
+    };
+
+    const room = {
+      _id: "room-1",
+      roomName: "Kitchen",
+      status: "PENDING" as const,
+      requiredPhotoMin: 2,
+      taskResults: [
+        {
+          _id: "task-1",
+          taskDescription: "Task 1",
+          completed: true,
+        },
+      ],
+      photos: [
+        {
+          _id: "photo-1",
+          fileName: "before.jpg",
+          mimeType: "image/jpeg",
+          kind: "BEFORE" as const,
+          url: "https://example.test/before.jpg",
+        },
+      ],
+    };
+
+    const result = applyInspectionOutboxOverlay(inspection, room, [
+      baseItem({
+        id: "photo-conflict",
+        type: "UPLOAD_PHOTO",
+        status: "CONFLICT",
+        payload: {
+          inspectionId: "inspection-1",
+          roomInspectionId: "room-1",
+          localPhotoId: "local-photo-1",
+          file: new Blob(["image"], { type: "image/jpeg" }),
+          fileName: "after.jpg",
+          fileSize: 5,
+          mimeType: "image/jpeg",
+          kind: "AFTER",
+        },
+      }),
+    ]);
+
+    expect(result.inspection?.roomInspections[0]?.photoCount).toBe(1);
+    expect(result.selectedRoom?.photos).toHaveLength(2);
+    expect(result.selectedRoom?.photos[1]).toMatchObject({
+      _id: "local-photo-1",
+      isPendingUpload: true,
+      hasConflict: true,
+    });
+    expect(result.diagnostics.relevantConflictCount).toBe(1);
+  });
 });
 
 describe("buildJobStatusOverlay", () => {

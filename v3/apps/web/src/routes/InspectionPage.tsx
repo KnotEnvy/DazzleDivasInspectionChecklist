@@ -24,6 +24,7 @@ import {
   queueUploadPhoto,
   queueUploadPhotos,
   removeQueuedLocalPhoto,
+  isOutboxActionable,
   type PhotoKind,
   type UploadPhotoPayload,
 } from "@/lib/offlineOutbox";
@@ -222,7 +223,10 @@ export function InspectionPage() {
   }, [inspectionId, outboxItems]);
 
   const pendingQueuedPhotoCount = useMemo(
-    () => outboxItems.filter((item) => item.type === "UPLOAD_PHOTO").length,
+    () =>
+      outboxItems.filter(
+        (item) => item.type === "UPLOAD_PHOTO" && isOutboxActionable(item)
+      ).length,
     [outboxItems]
   );
 
@@ -379,7 +383,7 @@ export function InspectionPage() {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to upload photo";
-        if (classifyReplayFailureStatus(message) !== "FAILED") {
+        if (classifyReplayFailureStatus(message, "UPLOAD_PHOTO") !== "FAILED") {
           throw error;
         }
 

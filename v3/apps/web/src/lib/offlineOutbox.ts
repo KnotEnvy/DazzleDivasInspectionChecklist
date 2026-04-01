@@ -534,7 +534,7 @@ export async function queueUploadPhotos(
 export async function removeQueuedLocalPhoto(localPhotoId: string) {
   await deleteMatchingItems(
     (item) =>
-      isActionableStatus(item.status) &&
+      item.status !== "SYNCED" &&
       item.type === "UPLOAD_PHOTO" &&
       item.payload.localPhotoId === localPhotoId
   );
@@ -603,7 +603,7 @@ export async function getOutboxItems(options?: { includeResolved?: boolean }) {
 
 export async function getOutboxCount() {
   const items = await listItemsInternal();
-  return items.filter((item) => !isResolvedStatus(item.status)).length;
+  return items.filter(isOutboxActionable).length;
 }
 
 export async function getActiveOutboxItems() {

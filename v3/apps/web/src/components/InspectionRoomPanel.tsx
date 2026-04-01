@@ -27,6 +27,7 @@ type RoomDetail = {
     kind?: PhotoKind;
     url: string | null;
     isPendingUpload?: boolean;
+    hasConflict?: boolean;
     blob?: Blob;
   }>;
 };
@@ -393,7 +394,11 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
                     <PendingPhotoPreview alt={photo.fileName} blob={photo.blob} />
                   ) : (
                     <div className="flex h-40 items-center justify-center bg-slate-100 text-sm text-slate-500">
-                      {photo.isPendingUpload ? "Pending local upload" : "Preview unavailable"}
+                      {photo.hasConflict
+                        ? "Sync needs review"
+                        : photo.isPendingUpload
+                          ? "Pending local upload"
+                          : "Preview unavailable"}
                     </div>
                   )}
                   <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
@@ -405,7 +410,11 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
                     <p className="text-sm font-semibold">{photo.fileName}</p>
                     <p className="text-xs text-slate-500">
                       {photo.kind ?? "GENERAL"}
-                      {photo.isPendingUpload ? " | queued locally" : ""}
+                      {photo.hasConflict
+                        ? " | sync needs review"
+                        : photo.isPendingUpload
+                          ? " | queued locally"
+                          : ""}
                     </p>
                   </div>
                   {photo.blob ? (

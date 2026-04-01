@@ -56,6 +56,7 @@ export type PendingDisplayPhoto = {
   kind?: PhotoKind;
   url: string | null;
   isPendingUpload?: boolean;
+  hasConflict?: boolean;
   blob?: Blob;
 };
 
@@ -116,6 +117,7 @@ export function applyInspectionOutboxOverlay<
   const roomCompletions = new Set<string>();
   const removedPhotoIds = new Set<string>();
   const uploadedPhotosByRoom = new Map<string, PendingDisplayPhoto[]>();
+  const conflictedPhotosByRoom = new Map<string, PendingDisplayPhoto[]>();
   let inspectionNotes = inspection.notes;
   let inspectionStatus = inspection.status;
 
@@ -191,6 +193,25 @@ export function applyInspectionOutboxOverlay<
     }
   }
 
+  for (const item of relevantItems) {
+    if (item.status !== "CONFLICT" || item.type !== "UPLOAD_PHOTO") {
+      continue;
+    }
+
+    const conflictedPhotos = conflictedPhotosByRoom.get(item.payload.roomInspectionId) ?? [];
+    conflictedPhotos.push({
+      _id: item.payload.localPhotoId,
+      fileName: item.payload.fileName,
+      mimeType: item.payload.mimeType,
+      kind: item.payload.kind,
+      url: null,
+      isPendingUpload: true,
+      hasConflict: true,
+      blob: item.payload.file,
+    });
+    conflictedPhotosByRoom.set(item.payload.roomInspectionId, conflictedPhotos);
+  }
+
   const nextInspection = {
     ...inspection,
     status: inspectionStatus,
@@ -242,6 +263,7 @@ export function applyInspectionOutboxOverlay<
   }
 
   const uploadedPhotos = uploadedPhotosByRoom.get(selectedRoom._id) ?? [];
+  const conflictedPhotos = conflictedPhotosByRoom.get(selectedRoom._id) ?? [];
   const nextSelectedRoom = {
     ...selectedRoom,
     status: roomCompletions.has(selectedRoom._id) ? "COMPLETED" : selectedRoom.status,
@@ -258,6 +280,7 @@ export function applyInspectionOutboxOverlay<
         isPendingUpload: false,
       })),
       ...uploadedPhotos,
+      ...conflictedPhotos,
     ],
   };
 

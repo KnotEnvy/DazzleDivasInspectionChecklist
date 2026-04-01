@@ -45,8 +45,48 @@ function isLikelyNetworkError(message: string) {
   );
 }
 
-export function classifyReplayFailureStatus(message: string) {
-  return isLikelyNetworkError(message) ? "FAILED" : "CONFLICT";
+function isLikelyTransientServerError(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("server error") ||
+    normalized.includes("request id") ||
+    normalized.includes("internal error") ||
+    normalized.includes("internal server error") ||
+    normalized.includes("service unavailable") ||
+    normalized.includes("temporarily unavailable") ||
+    normalized.includes("too many requests") ||
+    normalized.includes("rate limit") ||
+    normalized.includes("bad gateway") ||
+    normalized.includes("gateway timeout") ||
+    normalized.includes("status code 5")
+  );
+}
+
+function isLikelyRetryablePhotoFailure(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("upload failed") ||
+    normalized.includes("upload url") ||
+    normalized.includes("storage id")
+  );
+}
+
+export function classifyReplayFailureStatus(
+  message: string,
+  itemType?: OutboxItem["type"]
+) {
+  if (isLikelyNetworkError(message) || isLikelyTransientServerError(message)) {
+    return "FAILED";
+  }
+
+  if (
+    (itemType === "UPLOAD_PHOTO" || itemType === "REMOVE_PHOTO") &&
+    isLikelyRetryablePhotoFailure(message)
+  ) {
+    return "FAILED";
+  }
+
+  return "CONFLICT";
 }
 
 export function getReplayConflictPolicy(item: OutboxItem): ReplayConflictPolicy {
@@ -235,7 +275,7 @@ export async function flushOfflineOutbox(client: ReplayClient): Promise<OfflineR
       result.synced += 1;
     } catch (error) {
       const message = toErrorMessage(error);
-      const failureStatus = classifyReplayFailureStatus(message);
+      const failureStatus = classifyReplayFailureStatus(message, item.type);
 
       await setOutboxItemResult(item.id, {
         status: failureStatus,
