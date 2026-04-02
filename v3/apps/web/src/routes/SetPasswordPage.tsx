@@ -135,7 +135,7 @@ export function SetPasswordPage() {
         </p>
         <h1 className="mt-1 text-2xl font-bold">Set your password</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Finish your account setup and sign in to the Field Checklist app.
+          Finish your account setup and sign in to Dazzle Divas Cleaning Hub.
         </p>
 
         {!email || !code ? (

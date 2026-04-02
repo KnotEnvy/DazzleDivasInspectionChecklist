@@ -59,7 +59,7 @@ export function LoginPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
           Dazzle Divas
         </p>
-        <h1 className="mt-1 text-2xl font-bold">Field Checklist</h1>
+        <h1 className="mt-1 text-2xl font-bold">Dazzle Divas Cleaning Hub</h1>
         <p className="mt-1 text-sm text-slate-600">
           Staff sign-in for cleaners, inspectors, and admins.
         </p>

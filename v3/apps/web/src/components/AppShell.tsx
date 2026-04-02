@@ -44,16 +44,18 @@ export function AppShell() {
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 pb-24 pt-4 lg:px-8 lg:pb-8">
       <header className="glass-panel mb-4 flex items-center justify-between gap-3 p-3 lg:p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white lg:h-10 lg:w-10">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 lg:h-6 lg:w-6">
-              <path d="M12 3c-1.2 0-2.4.6-3 1.7A3.6 3.6 0 0 0 4.6 9c-1 1.6-.6 3.5.7 4.7L12 21l6.7-7.3c1.3-1.2 1.7-3.1.7-4.7A3.6 3.6 0 0 0 15 4.7C14.4 3.6 13.2 3 12 3z"/>
-            </svg>
+          <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white/90 p-0.5 shadow-sm ring-1 ring-brand-100 lg:h-14 lg:w-14">
+            <img
+              alt="Dazzle Divas logo"
+              className="h-full w-full object-contain"
+              src="/pink-dazzleLogo.WEBP"
+            />
           </div>
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-700">
               Dazzle Divas
             </p>
-            <h1 className="text-lg font-bold lg:text-xl">Field Checklist v3</h1>
+            <h1 className="text-lg font-bold lg:text-xl">Cleaning Hub</h1>
           </div>
         </div>
 

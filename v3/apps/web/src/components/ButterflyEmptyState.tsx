@@ -43,7 +43,7 @@ export function ButterflyEmptyState({
   );
 }
 
-function ButterflyIcon() {
+export function ButterflyIcon() {
   return (
     <svg
       viewBox="0 0 160 148"
