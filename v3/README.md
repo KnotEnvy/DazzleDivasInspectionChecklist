@@ -1,11 +1,11 @@
 # Dazzle Divas v3
 
-Updated: March 28, 2026
+Updated: April 1, 2026
 
 ## Status
 v3 is the active production app for Dazzle Divas field operations.
 
-The app is already being used for real field work. This repository should be treated as a live production codebase with real operational data, not as a rebuild sandbox.
+The app is now in daily use across active staff accounts. This repository should be treated as a live production codebase with real operational data, not as a rebuild sandbox.
 
 ## Production Summary
 Currently live and working:
@@ -17,12 +17,18 @@ Currently live and working:
 - offline queueing and replay
 - invite-based staff onboarding
 
+Recent production improvements that matter:
+- quick-add turnover now supports B2B jobs, default 10:00 AM starts, auto 4-hour windows, cleaner multi-assignment, and a two-step create confirmation
+- admin dispatch now allows assigning the same cleaner to multiple overlapping jobs while still enforcing one active checklist at a time
+- the `users:listActiveStaff` production crash was fixed by hardening staff hydration against brittle data
+- the mobile photo/offline sync path was hardened so retryable upload failures do not get trapped as false conflicts and conflicted local photos stay visible to the worker
+
 Current emphasis:
-- fix live production bugs from field usage
-- improve admin and mobile UX
-- harden onboarding and status accuracy
+- fix live production bugs from real field usage
+- improve dispatch/admin throughput without changing workflow shape casually
+- improve mobile checklist and photo confidence on real phones
 - keep production deployment/configuration reliable
-- reduce Convex bandwidth/plan pressure before it affects field operations
+- reduce Convex bandwidth and plan pressure before it affects field operations
 
 ## Stack
 - Web: React 19 + Vite 6 + Tailwind 4 + React Router 7
@@ -86,3 +92,4 @@ For rollout smoke coverage:
 ```bash
 bun run smoke:rollout
 ```
+

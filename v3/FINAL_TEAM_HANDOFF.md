@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: March 28, 2026
+Updated: April 1, 2026
 
 ## Purpose
 This is the active high-level handoff for the next working team.
@@ -15,6 +15,7 @@ Treat this repository like operating infrastructure, not a rebuild sandbox.
 - Admin completed-checklist review is live.
 - Photo review and iPhone-friendly save/export flows are live.
 - Offline queue/replay is live and has already been used in practice.
+- The first full day with all staff accounts active completed successfully after the latest production fixes.
 
 ### Operating reality
 - There is real production data.
@@ -22,7 +23,7 @@ Treat this repository like operating infrastructure, not a rebuild sandbox.
 - Do not delete templates unless explicitly requested.
 - Any schema/auth/env change must be treated as a rollout change.
 - Cloudflare Pages and Convex deploy separately. Do not assume a frontend deploy updated production backend behavior.
-- Convex production is now warning that the project is above Free plan limits. Bandwidth, storage, and usage headroom are active operational concerns.
+- Convex production is warning that the project is above Free plan limits. Bandwidth, storage, and usage headroom are active operational concerns.
 
 ## Source Of Truth
 Current active docs:
@@ -32,42 +33,65 @@ Current active docs:
 
 Historical setup and checkpoint docs live in `archive/` and should be treated as reference only.
 
+## Recent Production Fixes That Matter
+### Dispatch and turnover operations
+- Quick Add Turnover now supports B2B jobs.
+- B2B jobs automatically set the guest-arrival deadline to 4:00 PM on the same day.
+- Quick Add defaults to a 10:00 AM start and automatically sets the end four hours later.
+- Cleaners can now be assigned multiple overlapping jobs in dispatch.
+- The server still enforces one active checklist at a time for a worker.
+- Turnover creation now uses a two-step confirmation to reduce accidental incomplete jobs.
+
+### Production incidents resolved
+- `users:listActiveStaff` crashed production because the query was brittle against bad or legacy user data. It was hardened server-side.
+- Dispatch reassignment still blocked overlapping cleaner jobs even after create/reschedule rules were relaxed. `jobs.reassign` was patched in production.
+- Mobile photo uploads could appear to save, then disappear, while outbox conflicts accumulated. The frontend sync path was hardened so retryable photo failures stay retryable and conflicted local photos remain visible in the checklist.
+
+### Deployment lesson repeated again
+- Some fixes were backend-only, some frontend-only, and some required both. The next team must verify the deployment surface for every change before rollout is called complete.
+
 ## Priority Workstreams
-### 1. Auth and onboarding correctness
-Primary goal: boring, reliable staff onboarding.
+### 1. Mobile checklist and photo confidence
+Primary goal: make field workers trust what they just captured.
+
+Focus:
+- real-device testing on iPhone with weak connectivity
+- confidence messaging during background photo upload
+- conflict recovery that makes sense to non-technical cleaners
+- avoiding UI states where recently captured evidence appears to vanish
+
+### 2. Dispatch and admin throughput
+Primary goal: improve operator speed without changing the real business workflow casually.
+
+Focus:
+- same-day turnover visibility
+- B2B clarity in admin schedule and worker schedule views
+- assignment speed for cleaners carrying multiple same-time jobs
+- small reductions in accidental admin actions
+
+### 3. Auth, roster, and production hardening
+Primary goal: keep user management boring and reliable.
 
 Focus:
 - invite email delivery
 - password setup completion state
 - accurate admin roster status
-- production custom-domain auth correctness
+- defensive handling of legacy or malformed user data
 
-### 2. Deployment and rollout discipline
+### 4. Deployment and rollout discipline
 Primary goal: stop production drift between Cloudflare and Convex.
-
-Recent incident that matters:
-- Property create/edit with the Client / Account field failed in production until Convex production was deployed with the matching schema/functions.
-- The field existed in the repo, but production backend drift made the live feature fail.
 
 Rule:
 - Any schema-backed UI change is not done until Convex production is deployed and verified.
+- Any web-only change is not done until Cloudflare/frontend production is deployed and smoke-checked.
 
-### 3. Convex usage and capacity
+### 5. Convex usage and capacity
 Primary goal: keep the app online and responsive under growing real usage.
 
 Focus:
-- inspect Convex bandwidth/storage/function usage in the dashboard
-- understand what photos, exports, and queries cost in practice
+- inspect Convex bandwidth, storage, and function usage in the dashboard
+- understand what photos, exports, and query volume cost in practice
 - decide whether to reduce usage, change behavior, or move off the Free plan immediately
-
-### 4. Highest-friction admin and mobile UX
-Primary goal: improve operator speed without changing workflow shape casually.
-
-Focus:
-- admin onboarding/status clarity
-- admin schedule and property-management ergonomics
-- completed review clarity and photo actions
-- mobile field efficiency on real phones
 
 ## Validation Standard
 Before shipping meaningful changes, validate:
@@ -76,15 +100,20 @@ Before shipping meaningful changes, validate:
 - Invite email arrival
 - Password setup completion
 - Correct admin status after setup
-- Cleaner/inspector schedule access
+- Cleaner and inspector schedule access
+- Quick Add Turnover including B2B behavior
+- Assign multiple same-time jobs to the same cleaner in dispatch
+- Start only one active checklist at a time for a worker
 - Checklist completion with photos
+- Rapid successive photo capture on a real phone
+- Conflict recovery and offline queue behavior for at least one worker scenario
 - Admin review of completed work
 - Photo export/save flow
 - Property create/edit including Client / Account
-- Offline queue/replay for at least one worker scenario
 
 ## Recommended Next Moves
-1. Re-verify onboarding correctness in production.
-2. Audit Convex production usage and plan headroom before the next feature batch.
-3. Build the next bug list from real usage, not speculation.
-4. Keep fixes narrow and verify both frontend and backend deploy needs before calling a rollout complete.
+1. Build the next enhancement batch from real dispatch and field usage, not speculation.
+2. Re-run mobile photo QA on a real iPhone in weak connectivity conditions before changing that flow again.
+3. Audit Convex production usage and plan headroom before the next photo-heavy or query-heavy feature batch.
+4. Keep fixes narrow and verify both frontend and backend deploy needs before calling rollout complete.
+
