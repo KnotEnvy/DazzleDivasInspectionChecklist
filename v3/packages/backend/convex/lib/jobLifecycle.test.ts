@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   assertAllRoomsCompleted,
+  getJobChecklistStartTiming,
+  getMaxActiveChecklistsForRole,
   validateChecklistStartFromJob,
 } from "./jobLifecycle";
 
@@ -30,6 +32,7 @@ describe("validateChecklistStartFromJob", () => {
         propertyId: "property-1",
         status: "IN_PROGRESS",
         jobType: "CLEANING",
+        scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
         linkedInspectionId: "inspection-1",
         assigneeId: "worker-1",
       },
@@ -37,6 +40,8 @@ describe("validateChecklistStartFromJob", () => {
       checklistType: "CLEANING",
       actor,
       existingInspectionExists: true,
+      currentTime: Date.UTC(2026, 3, 5, 12, 0, 0),
+      propertyTimeZone: "UTC",
     });
 
     expect(result.existingInspectionId).toBe("inspection-1");
@@ -52,12 +57,15 @@ describe("validateChecklistStartFromJob", () => {
           propertyId: "property-2",
           status: "SCHEDULED",
           jobType: "CLEANING",
+          scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
           assigneeId: "worker-1",
         },
         propertyId: "property-1",
         checklistType: "CLEANING",
         actor,
         existingInspectionExists: false,
+        currentTime: Date.UTC(2026, 3, 6, 12, 0, 0),
+        propertyTimeZone: "UTC",
       })
     ).toThrow("Job does not belong to the selected property");
 
@@ -68,6 +76,7 @@ describe("validateChecklistStartFromJob", () => {
           propertyId: "property-1",
           status: "SCHEDULED",
           jobType: "INSPECTION",
+          scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
           assigneeId: "worker-2",
         },
         propertyId: "property-1",
@@ -77,6 +86,8 @@ describe("validateChecklistStartFromJob", () => {
           role: "INSPECTOR",
         },
         existingInspectionExists: false,
+        currentTime: Date.UTC(2026, 3, 6, 12, 0, 0),
+        propertyTimeZone: "UTC",
       })
     ).toThrow("You are not assigned to this job");
   });
@@ -89,6 +100,7 @@ describe("validateChecklistStartFromJob", () => {
           propertyId: "property-1",
           status: "SCHEDULED",
           jobType: "MAINTENANCE",
+          scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
         },
         propertyId: "property-1",
         checklistType: "CLEANING",
@@ -97,6 +109,8 @@ describe("validateChecklistStartFromJob", () => {
           role: "ADMIN",
         },
         existingInspectionExists: false,
+        currentTime: Date.UTC(2026, 3, 6, 12, 0, 0),
+        propertyTimeZone: "UTC",
       })
     ).toThrow("This job type does not support checklist execution");
 
@@ -107,6 +121,7 @@ describe("validateChecklistStartFromJob", () => {
           propertyId: "property-1",
           status: "SCHEDULED",
           jobType: "INSPECTION",
+          scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
         },
         propertyId: "property-1",
         checklistType: "CLEANING",
@@ -115,6 +130,8 @@ describe("validateChecklistStartFromJob", () => {
           role: "ADMIN",
         },
         existingInspectionExists: false,
+        currentTime: Date.UTC(2026, 3, 6, 12, 0, 0),
+        propertyTimeZone: "UTC",
       })
     ).toThrow("Checklist type does not match the selected job type");
   });
@@ -127,13 +144,91 @@ describe("validateChecklistStartFromJob", () => {
           propertyId: "property-1",
           status: "CANCELLED",
           jobType: "CLEANING",
+          scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
         },
         propertyId: "property-1",
         checklistType: "CLEANING",
         actor,
         existingInspectionExists: false,
+        currentTime: Date.UTC(2026, 3, 6, 12, 0, 0),
+        propertyTimeZone: "UTC",
       })
     ).toThrow("This job cannot start a checklist");
+  });
+
+  it("blocks future jobs and same-day starts before 7am", () => {
+    expect(() =>
+      validateChecklistStartFromJob({
+        jobIdProvided: true,
+        job: {
+          propertyId: "property-1",
+          status: "SCHEDULED",
+          jobType: "CLEANING",
+          scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
+          assigneeId: "worker-1",
+        },
+        propertyId: "property-1",
+        checklistType: "CLEANING",
+        actor,
+        existingInspectionExists: false,
+        currentTime: Date.UTC(2026, 3, 5, 12, 0, 0),
+        propertyTimeZone: "UTC",
+      })
+    ).toThrow("This checklist can start on Apr 6, 7:00 AM.");
+
+    expect(() =>
+      validateChecklistStartFromJob({
+        jobIdProvided: true,
+        job: {
+          propertyId: "property-1",
+          status: "SCHEDULED",
+          jobType: "CLEANING",
+          scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
+          assigneeId: "worker-1",
+        },
+        propertyId: "property-1",
+        checklistType: "CLEANING",
+        actor,
+        existingInspectionExists: false,
+        currentTime: Date.UTC(2026, 3, 6, 6, 30, 0),
+        propertyTimeZone: "UTC",
+      })
+    ).toThrow("Checklists can start at Apr 6, 7:00 AM or later.");
+  });
+});
+
+describe("getJobChecklistStartTiming", () => {
+  it("allows same-day starts at 7am and overdue starts after 7am", () => {
+    expect(
+      getJobChecklistStartTiming({
+        scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
+        currentTime: Date.UTC(2026, 3, 6, 7, 0, 0),
+        timeZone: "UTC",
+      }).canStart
+    ).toBe(true);
+
+    expect(
+      getJobChecklistStartTiming({
+        scheduledStart: Date.UTC(2026, 3, 5, 15, 0, 0),
+        currentTime: Date.UTC(2026, 3, 6, 8, 0, 0),
+        timeZone: "UTC",
+      }).canStart
+    ).toBe(true);
+
+    expect(
+      getJobChecklistStartTiming({
+        scheduledStart: Date.UTC(2026, 3, 5, 15, 0, 0),
+        currentTime: Date.UTC(2026, 3, 6, 6, 0, 0),
+        timeZone: "UTC",
+      }).canStart
+    ).toBe(false);
+  });
+});
+
+describe("getMaxActiveChecklistsForRole", () => {
+  it("uses role-based checklist limits", () => {
+    expect(getMaxActiveChecklistsForRole("CLEANER")).toBe(3);
+    expect(getMaxActiveChecklistsForRole("INSPECTOR")).toBe(5);
   });
 });
 

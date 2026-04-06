@@ -74,6 +74,8 @@ type DispatchDetail = {
   notes?: string;
   linkedInspectionId?: Id<"inspections">;
   checklistType: "CLEANING" | "INSPECTION" | null;
+  canStartChecklist: boolean;
+  checklistStartBlockReason?: string;
   servicePlan?: {
     defaultAssigneeRole: "CLEANER" | "INSPECTOR";
   } | null;
@@ -741,6 +743,12 @@ export function AdminSchedulePage() {
       toast.error("Assign the job before starting a checklist");
       return;
     }
+
+    if (!selectedJob.canStartChecklist) {
+      toast.error(selectedJob.checklistStartBlockReason ?? "This checklist is not ready to start");
+      return;
+    }
+
     setSavingAction("checklist");
     try {
       const inspectionId = await createInspection({
@@ -1778,6 +1786,7 @@ export function AdminSchedulePage() {
                   savingAction === "checklist" ||
                   selectedJob.checklistType === null ||
                   !selectedJob.assigneeId ||
+                  (!selectedJob.linkedInspectionId && !selectedJob.canStartChecklist) ||
                   selectedJob.status === "COMPLETED" ||
                   selectedJob.status === "CANCELLED"
                 }
@@ -1790,6 +1799,10 @@ export function AdminSchedulePage() {
                     ? "Open Linked Checklist"
                     : "Start Checklist"}
               </button>
+
+              {!selectedJob.linkedInspectionId && selectedJob.checklistStartBlockReason ? (
+                <p className="text-sm text-amber-700">{selectedJob.checklistStartBlockReason}</p>
+              ) : null}
 
               {/* Consolidated dispatch controls */}
               <section className="rounded-2xl border border-border p-3 space-y-3">

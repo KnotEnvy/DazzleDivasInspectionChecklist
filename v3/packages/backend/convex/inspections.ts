@@ -11,6 +11,8 @@ import {
 } from "./lib/permissions";
 import {
   assertAllRoomsCompleted,
+  getChecklistActiveLimitBlockReason,
+  getMaxActiveChecklistsForRole,
   validateChecklistStartFromJob,
 } from "./lib/jobLifecycle";
 import {
@@ -76,25 +78,28 @@ async function ensureAssigneeIsEligible(
   return assignee;
 }
 
-async function assertNoOtherActiveInspection(
+async function assertActiveInspectionCapacity(
   ctx: MutationCtx,
-  assigneeId: Id<"users">
+  assigneeId: Id<"users">,
+  assigneeRole: "CLEANER" | "INSPECTOR"
 ) {
-  const activeInspection = (
-    await ctx.db
-      .query("inspections")
-      .withIndex("by_assignee_status", (q) =>
-        q.eq("assigneeId", assigneeId).eq("status", "IN_PROGRESS")
-      )
-      .take(1)
-  )[0];
+  const activeInspections = await ctx.db
+    .query("inspections")
+    .withIndex("by_assignee_status", (q) =>
+      q.eq("assigneeId", assigneeId).eq("status", "IN_PROGRESS")
+    )
+    .collect();
 
-  if (!activeInspection) {
+  const limit = getMaxActiveChecklistsForRole(assigneeRole);
+  if (activeInspections.length < limit) {
     return;
   }
 
   throw new Error(
-    `Finish or resume the active checklist at ${activeInspection.propertyName} before starting another one`
+    getChecklistActiveLimitBlockReason({
+      role: assigneeRole,
+      activeCount: activeInspections.length,
+    })
   );
 }
 
@@ -232,6 +237,7 @@ export const create = mutation({
     const existingInspection = job?.linkedInspectionId
       ? await ctx.db.get(job.linkedInspectionId)
       : null;
+    const property = await ctx.db.get(args.propertyId);
     const lifecycleDecision = validateChecklistStartFromJob({
       jobIdProvided: !!args.jobId,
       job: job
@@ -239,6 +245,7 @@ export const create = mutation({
             propertyId: job.propertyId,
             status: job.status,
             jobType: job.jobType,
+            scheduledStart: job.scheduledStart,
             linkedInspectionId: job.linkedInspectionId,
             assigneeId: job.assigneeId,
           }
@@ -250,13 +257,13 @@ export const create = mutation({
         role: actor.role,
       },
       existingInspectionExists: !!existingInspection,
+      currentTime: Date.now(),
+      propertyTimeZone: property?.timezone,
     });
 
     if (lifecycleDecision.existingInspectionId && existingInspection) {
       return existingInspection._id;
     }
-
-    const property = await ctx.db.get(args.propertyId);
 
     if (!property || !property.isActive || property.isArchived === true) {
       throw new Error("Property not found or inactive");
@@ -282,7 +289,11 @@ export const create = mutation({
       }
     );
 
-    await assertNoOtherActiveInspection(ctx, assigneeId);
+    await assertActiveInspectionCapacity(
+      ctx,
+      assigneeId,
+      assignmentRoleForChecklistType(args.type)
+    );
 
     const inspectionId = await ctx.db.insert("inspections", {
       propertyId: args.propertyId,

@@ -11,6 +11,11 @@ import {
   servicePlanTypeValidator,
 } from "./lib/validators";
 import { getJobDeleteBlockReason } from "./lib/jobDeletion";
+import {
+  getChecklistActiveLimitBlockReason,
+  getJobChecklistStartTiming,
+  getMaxActiveChecklistsForRole,
+} from "./lib/jobLifecycle";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BACK_TO_BACK_ARRIVAL_HOUR = 16;
@@ -46,22 +51,123 @@ function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
 
+function buildChecklistStartState(params: {
+  job: Pick<
+    Doc<"jobs">,
+    "assigneeId" | "linkedInspectionId" | "scheduledStart" | "status"
+  >;
+  checklistType: ReturnType<typeof checklistTypeForJobType>;
+  propertyTimeZone?: string;
+  assigneeRole?: "CLEANER" | "INSPECTOR";
+  activeInspectionCount?: number;
+}) {
+  if (params.job.linkedInspectionId) {
+    return {
+      canStartChecklist: true,
+      checklistStartBlockReason: undefined,
+    };
+  }
+
+  if (params.job.assigneeId === undefined) {
+    return {
+      canStartChecklist: false,
+      checklistStartBlockReason: "Assign this job before starting a checklist",
+    };
+  }
+
+  if (params.job.status === "COMPLETED" || params.job.status === "CANCELLED") {
+    return {
+      canStartChecklist: false,
+      checklistStartBlockReason: "This job cannot start a checklist",
+    };
+  }
+
+  if (params.checklistType === null) {
+    return {
+      canStartChecklist: false,
+      checklistStartBlockReason: "This job type does not support checklist execution",
+    };
+  }
+
+  if (!params.assigneeRole) {
+    return {
+      canStartChecklist: false,
+      checklistStartBlockReason: "Assigned worker account is unavailable",
+    };
+  }
+
+  const timing = getJobChecklistStartTiming({
+    scheduledStart: params.job.scheduledStart,
+    currentTime: Date.now(),
+    timeZone: params.propertyTimeZone,
+  });
+  if (!timing.canStart) {
+    return {
+      canStartChecklist: false,
+      checklistStartBlockReason: timing.blockReason,
+    };
+  }
+
+  const activeInspectionCount = params.activeInspectionCount ?? 0;
+  const activeLimit = getMaxActiveChecklistsForRole(params.assigneeRole);
+  if (activeInspectionCount >= activeLimit) {
+    return {
+      canStartChecklist: false,
+      checklistStartBlockReason: getChecklistActiveLimitBlockReason({
+        role: params.assigneeRole,
+        activeCount: activeInspectionCount,
+      }),
+    };
+  }
+
+  return {
+    canStartChecklist: true,
+    checklistStartBlockReason: undefined,
+  };
+}
+
 async function hydrateJobListItems(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
   const propertyIds = [...new Set(jobs.map((job) => job.propertyId))];
   const assigneeIds = [...new Set(jobs.map((job) => job.assigneeId).filter(isDefined))];
 
-  const [properties, assignees] = await Promise.all([
+  const [properties, assignees, activeInspectionCounts] = await Promise.all([
     Promise.all(propertyIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
     Promise.all(assigneeIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
+    Promise.all(
+      assigneeIds.map(async (id) => {
+        const activeInspections = await ctx.db
+          .query("inspections")
+          .withIndex("by_assignee_status", (q) =>
+            q.eq("assigneeId", id).eq("status", "IN_PROGRESS")
+          )
+          .collect();
+
+        return [id, activeInspections.length] as const;
+      })
+    ),
   ]);
 
   const propertyById = new Map(properties);
   const assigneeById = new Map(assignees);
+  const activeInspectionCountByAssigneeId = new Map(activeInspectionCounts);
 
   return jobs.map((job) => {
     const property = propertyById.get(job.propertyId) ?? null;
     const assignee = job.assigneeId ? (assigneeById.get(job.assigneeId) ?? null) : null;
     const checklistType = checklistTypeForJobType(job.jobType);
+    const assigneeRole =
+      assignee?.role === "CLEANER" || assignee?.role === "INSPECTOR"
+        ? assignee.role
+        : undefined;
+    const startState = buildChecklistStartState({
+      job,
+      checklistType,
+      propertyTimeZone: property?.timezone,
+      assigneeRole,
+      activeInspectionCount: job.assigneeId
+        ? activeInspectionCountByAssigneeId.get(job.assigneeId)
+        : undefined,
+    });
 
     return {
       _id: job._id,
@@ -80,11 +186,8 @@ async function hydrateJobListItems(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
       isBackToBack: job.isBackToBack === true,
       assigneeName: assignee?.name ?? null,
       checklistType,
-      canStartChecklist:
-        job.assigneeId !== undefined &&
-        job.status !== "COMPLETED" &&
-        job.status !== "CANCELLED" &&
-        checklistType !== null,
+      canStartChecklist: startState.canStartChecklist,
+      checklistStartBlockReason: startState.checklistStartBlockReason,
     };
   });
 }
@@ -383,17 +486,38 @@ export const getById = query({
       throw new Error("You do not have access to this job");
     }
 
-    const [property, servicePlan, assignee, linkedInspection] = await Promise.all([
+    const [property, servicePlan, assignee, linkedInspection, activeInspections] = await Promise.all([
       ctx.db.get(job.propertyId),
       job.servicePlanId ? ctx.db.get(job.servicePlanId) : Promise.resolve(null),
       job.assigneeId ? ctx.db.get(job.assigneeId) : Promise.resolve(null),
       job.linkedInspectionId ? ctx.db.get(job.linkedInspectionId) : Promise.resolve(null),
+      job.assigneeId
+        ? ctx.db
+            .query("inspections")
+            .withIndex("by_assignee_status", (q) =>
+              q.eq("assigneeId", job.assigneeId as Id<"users">).eq("status", "IN_PROGRESS")
+            )
+            .collect()
+        : Promise.resolve([]),
     ]);
 
     const events = await ctx.db
       .query("jobEvents")
       .withIndex("by_job", (q) => q.eq("jobId", job._id))
       .collect();
+
+    const checklistType = checklistTypeForJobType(job.jobType);
+    const assigneeRole =
+      assignee?.role === "CLEANER" || assignee?.role === "INSPECTOR"
+        ? assignee.role
+        : undefined;
+    const startState = buildChecklistStartState({
+      job,
+      checklistType,
+      propertyTimeZone: property?.timezone,
+      assigneeRole,
+      activeInspectionCount: activeInspections.length,
+    });
 
     return {
       ...job,
@@ -402,7 +526,9 @@ export const getById = query({
       servicePlan,
       assignee,
       linkedInspection,
-      checklistType: checklistTypeForJobType(job.jobType),
+      checklistType,
+      canStartChecklist: startState.canStartChecklist,
+      checklistStartBlockReason: startState.checklistStartBlockReason,
       events: events.sort((a, b) => b.createdAt - a.createdAt),
     };
   },

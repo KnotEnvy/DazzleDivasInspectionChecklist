@@ -1,7 +1,7 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Id } from "convex/_generated/dataModel";
-import { Camera, Download } from "lucide-react";
+import { Camera, ChevronDown, ChevronUp, Download } from "lucide-react";
 import toast from "react-hot-toast";
 import { EmptyState } from "@/components/EmptyState";
 import type { PhotoKind } from "@/lib/offlineOutbox";
@@ -164,6 +164,17 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
     onCompleteRoom,
   } = props;
   const [savingBackupId, setSavingBackupId] = useState<string | null>(null);
+  const [notesExpanded, setNotesExpanded] = useState(false);
+
+  useEffect(() => {
+    setNotesExpanded(false);
+  }, [room?._id]);
+
+  useEffect(() => {
+    if (roomNotes.trim().length > 0) {
+      setNotesExpanded(true);
+    }
+  }, [roomNotes]);
 
   if (room === undefined) {
     return (
@@ -492,27 +503,51 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
         )}
       </div>
 
-      <div className="rounded-2xl border border-border bg-slate-50 p-4">
-        <div className="mb-2">
-          <h3 className="font-semibold">Step 3A: Room notes</h3>
-          <p className="text-sm text-slate-600">
-            Capture exceptions, follow-up details, or anything the next shift should know.
-          </p>
-        </div>
-        <textarea
-          className="input min-h-28"
-          disabled={inspectionStatus === "COMPLETED"}
-          onChange={(event) => setRoomNotes(event.target.value)}
-          value={roomNotes}
-        />
+      <div
+        className={`rounded-2xl border transition ${
+          notesExpanded
+            ? "border-border bg-slate-50 p-3"
+            : "border-border/80 bg-white px-3 py-2"
+        }`}
+      >
         <button
-          className="field-button secondary mt-3 px-4"
-          disabled={inspectionStatus === "COMPLETED" || savingNotes}
-          onClick={() => void onSaveNotes()}
+          aria-expanded={notesExpanded}
+          className="flex w-full items-center justify-between gap-3 text-left"
+          onClick={() => setNotesExpanded((current) => !current)}
           type="button"
         >
-          {savingNotes ? "Saving..." : "Save Notes"}
+          <div>
+            <h3 className="font-semibold">Step 3A: Room Notes</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {notesExpanded ? (
+              <ChevronUp className="h-4 w-4 text-slate-500" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-slate-500" />
+            )}
+          </div>
         </button>
+        {notesExpanded ? (
+          <div className="mt-3 space-y-3">
+            <textarea
+              className="input min-h-20"
+              disabled={inspectionStatus === "COMPLETED"}
+              onChange={(event) => setRoomNotes(event.target.value)}
+              placeholder="Add optional room notes"
+              value={roomNotes}
+            />
+            <div className="flex justify-end">
+              <button
+                className="field-button secondary px-4"
+                disabled={inspectionStatus === "COMPLETED" || savingNotes}
+                onClick={() => void onSaveNotes()}
+                type="button"
+              >
+                {savingNotes ? "Saving..." : "Save Notes"}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border border-border bg-white p-4">

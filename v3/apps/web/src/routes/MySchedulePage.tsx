@@ -49,6 +49,7 @@ type ScheduleJob = {
   arrivalDeadline?: number;
   checklistType: "CLEANING" | "INSPECTION" | null;
   canStartChecklist: boolean;
+  checklistStartBlockReason?: string;
 };
 
 type JobDetail = {
@@ -187,9 +188,10 @@ export function MySchedulePage() {
   const windowEnd = useMemo(() => {
     return new Date(windowStart.getTime() + 13 * DAY_MS + (23 * 60 + 59) * 60 * 1000);
   }, [windowStart]);
+  const overdueWindowStart = useMemo(() => windowStart.getTime() - 7 * DAY_MS, [windowStart]);
 
   const jobs = useQuery(api.jobs.listMyUpcoming, {
-    from: windowStart.getTime(),
+    from: overdueWindowStart,
     to: windowEnd.getTime(),
   }) as ScheduleJob[] | undefined;
 
@@ -283,7 +285,13 @@ export function MySchedulePage() {
   async function handleOpenChecklist(
     job: Pick<
       ScheduleJob,
-      "_id" | "propertyId" | "assigneeId" | "linkedInspectionId" | "checklistType"
+      | "_id"
+      | "propertyId"
+      | "assigneeId"
+      | "linkedInspectionId"
+      | "checklistType"
+      | "canStartChecklist"
+      | "checklistStartBlockReason"
     >
   ) {
     if (job.linkedInspectionId) {
@@ -298,6 +306,11 @@ export function MySchedulePage() {
 
     if (!job.assigneeId) {
       toast.error("This job must be assigned before a checklist can be started");
+      return;
+    }
+
+    if (!job.canStartChecklist) {
+      toast.error(job.checklistStartBlockReason ?? "This checklist is not ready to start");
       return;
     }
 
@@ -535,6 +548,7 @@ export function MySchedulePage() {
                 startingChecklist ||
                 !selectedListJob.assigneeId ||
                 selectedListJob.checklistType === null ||
+                (!selectedListJob.linkedInspectionId && !selectedListJob.canStartChecklist) ||
                 selectedListJob.status === "COMPLETED" ||
                 selectedListJob.status === "CANCELLED"
               }
@@ -547,6 +561,9 @@ export function MySchedulePage() {
                   ? "Checklist Queued"
                   : checklistActionLabel(selectedListJob)}
             </button>
+            {!selectedListJob.linkedInspectionId && selectedListJob.checklistStartBlockReason ? (
+              <p className="text-sm text-amber-700">{selectedListJob.checklistStartBlockReason}</p>
+            ) : null}
             <div className="grid gap-2 grid-cols-2">
               <button
                 className="field-button secondary w-full px-3"

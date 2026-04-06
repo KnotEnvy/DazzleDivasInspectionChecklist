@@ -87,6 +87,7 @@ type ScheduleJob = {
   arrivalDeadline?: number;
   checklistType: "CLEANING" | "INSPECTION" | null;
   canStartChecklist: boolean;
+  checklistStartBlockReason?: string;
   status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
   jobType: "CLEANING" | "INSPECTION" | "DEEP_CLEAN" | "MAINTENANCE";
 };
@@ -146,7 +147,7 @@ export function DashboardPage() {
   const active = useQuery(api.inspections.listActive) as ActiveInspection[] | undefined;
   const mine = useQuery(api.propertyAssignments.listMine) as AssignedProperty[] | undefined;
   const jobs = useQuery(api.jobs.listMyUpcoming, {
-    from: startOfToday(),
+    from: startOfToday() - 7 * DAY_MS,
     to: startOfToday() + 14 * DAY_MS,
   }) as ScheduleJob[] | undefined;
 
@@ -720,6 +721,9 @@ export function DashboardPage() {
                           </p>
                         )}
                         <p className="mt-1 text-sm text-slate-500">{job.propertyAddress}</p>
+                        {!job.linkedInspectionId && !job.canStartChecklist && job.checklistStartBlockReason ? (
+                          <p className="mt-2 text-sm text-amber-700">{job.checklistStartBlockReason}</p>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-1.5">
                         {isFirst && level && label && (
@@ -728,7 +732,7 @@ export function DashboardPage() {
                           </span>
                         )}
                         <span className="rounded-full border border-border bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                          {job.linkedInspectionId ? "Resume Ready" : job.canStartChecklist ? "Start Ready" : job.status}
+                          {job.linkedInspectionId ? "Resume Ready" : job.canStartChecklist ? "Start Ready" : "Not Ready"}
                         </span>
                       </div>
                     </div>
