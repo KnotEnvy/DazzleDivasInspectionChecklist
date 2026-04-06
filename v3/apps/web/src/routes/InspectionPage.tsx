@@ -671,9 +671,14 @@ export function InspectionPage() {
         toast.success("Room marked complete");
       }
 
-      const nextPendingRoom = inspectionView?.roomInspections.find(
-        (room) => room._id !== selectedRoomView._id && room.status !== "COMPLETED"
-      );
+      const currentRoomIndex =
+        inspectionView?.roomInspections.findIndex((room) => room._id === selectedRoomView._id) ?? -1;
+      const nextPendingRoom =
+        currentRoomIndex >= 0
+          ? inspectionView?.roomInspections
+              .slice(currentRoomIndex + 1)
+              .find((room) => room.status !== "COMPLETED")
+          : undefined;
       if (nextPendingRoom) {
         setSelectedRoomId(null);
         requestAnimationFrame(() =>

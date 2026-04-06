@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Id } from "convex/_generated/dataModel";
 import { Camera, ChevronDown, ChevronUp, Download } from "lucide-react";
@@ -165,6 +165,8 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
   } = props;
   const [savingBackupId, setSavingBackupId] = useState<string | null>(null);
   const [notesExpanded, setNotesExpanded] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setNotesExpanded(false);
@@ -194,6 +196,24 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
   const effectivePhotoCount = room.photos.length + pendingDirectPhotoCount;
   const roomHasEnoughPhotos = effectivePhotoCount >= room.requiredPhotoMin;
   const hasAnyPhotoCards = room.photos.length > 0 || pendingDirectPhotoCount > 0;
+  const prefersAndroidCameraCapture =
+    typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+
+  function openCameraInput() {
+    if (inspectionStatus === "COMPLETED") {
+      return;
+    }
+
+    cameraInputRef.current?.click();
+  }
+
+  function openGalleryInput() {
+    if (inspectionStatus === "COMPLETED") {
+      return;
+    }
+
+    galleryInputRef.current?.click();
+  }
 
   async function handleSaveBackup(photo: RoomDetail["photos"][number]) {
     setSavingBackupId(String(photo._id));
@@ -324,8 +344,9 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
         <div className="mb-3">
           <h3 className="font-semibold">Step 2: Add proof photos</h3>
           <p className="text-sm text-slate-600">
-            Use your device's normal photo picker. On phones, this should offer the familiar menu to
-            take a photo or choose one from the library.
+            {prefersAndroidCameraCapture
+              ? "Add Photo opens the camera on Android. Use Gallery when you need to attach an existing image."
+              : "Use your device's normal photo picker. On phones, this should offer the familiar menu to take a photo or choose one from the library."}
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
@@ -347,23 +368,50 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
           </label>
           <div className="space-y-2 text-sm font-medium text-slate-700">
             <span className="block">Add Photos</span>
-            <label
-              className={`field-button primary inline-flex cursor-pointer items-center px-4 ${
-                inspectionStatus === "COMPLETED" ? "pointer-events-none opacity-60" : ""
-              }`}
-            >
-              <Camera className="mr-2 h-4 w-4" />
-              Add Photo
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="field-button primary inline-flex items-center px-4"
+                disabled={inspectionStatus === "COMPLETED"}
+                onClick={openCameraInput}
+                type="button"
+              >
+                <Camera className="mr-2 h-4 w-4" />
+                Add Photo
+              </button>
+              {prefersAndroidCameraCapture ? (
+                <button
+                  className="field-button secondary inline-flex items-center px-4"
+                  disabled={inspectionStatus === "COMPLETED"}
+                  onClick={openGalleryInput}
+                  type="button"
+                >
+                  Gallery
+                </button>
+              ) : null}
               <input
                 accept="image/*"
-                aria-label="Add photo"
+                aria-label={prefersAndroidCameraCapture ? "Take photo" : "Add photo"}
+                capture={prefersAndroidCameraCapture ? "environment" : undefined}
                 className="sr-only"
                 disabled={inspectionStatus === "COMPLETED"}
-                multiple
+                multiple={!prefersAndroidCameraCapture}
                 onChange={(event) => void onPhotoUpload(event)}
+                ref={cameraInputRef}
                 type="file"
               />
-            </label>
+              {prefersAndroidCameraCapture ? (
+                <input
+                  accept="image/*"
+                  aria-label="Choose photo from gallery"
+                  className="sr-only"
+                  disabled={inspectionStatus === "COMPLETED"}
+                  multiple
+                  onChange={(event) => void onPhotoUpload(event)}
+                  ref={galleryInputRef}
+                  type="file"
+                />
+              ) : null}
+            </div>
             <p className="text-xs font-normal text-slate-500">
               Pending local photos can be backed up to Photos or Files below if you need a manual
               fallback.
@@ -382,7 +430,11 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
             <EmptyState
               icon={<Camera className="h-7 w-7" />}
               heading="No photos captured yet"
-              description="Tap Add Photo to use your device's normal camera or library flow."
+              description={
+                prefersAndroidCameraCapture
+                  ? "Tap Add Photo to open the camera, or Gallery to attach an existing image."
+                  : "Tap Add Photo to use your device's normal camera or library flow."
+              }
             />
           </div>
         ) : (
