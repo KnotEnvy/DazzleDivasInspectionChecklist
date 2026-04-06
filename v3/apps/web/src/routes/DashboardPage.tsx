@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ButterflyEmptyState } from "@/components/ButterflyEmptyState";
 import { EmptyState } from "@/components/EmptyState";
+import { MotivationBanner } from "@/components/MotivationBanner";
 import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
 import { statusTone } from "@/lib/statusColors";
 import {
@@ -644,15 +645,7 @@ export function DashboardPage() {
 
   return (
     <div className="animate-fade-in space-y-5">
-      <section className="rounded-2xl border border-border bg-white p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
-          Welcome Back
-        </p>
-        <h1 className="mt-2 text-2xl font-bold">
-          {user?.name ? `Hi, ${user.name}` : "Welcome"}
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">{copy.heroDescription}</p>
-      </section>
+      <MotivationBanner userName={user?.name} />
 
       <section className="grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
         <div className="rounded-2xl border border-border bg-white p-4">

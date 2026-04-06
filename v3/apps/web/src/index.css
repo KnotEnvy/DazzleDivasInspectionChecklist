@@ -232,12 +232,58 @@ input[type="checkbox"] {
   .butterfly-scene-animated .butterfly-z-3 {
     animation-delay: 0.9s;
   }
+
+  /* ── Motivation Banner Animations ── */
+  @keyframes motivation-enter {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes motivation-text {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes motivation-icon-float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-6px) rotate(3deg); }
+  }
+
+  @keyframes motivation-icon-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+
+  .motivation-banner {
+    animation: motivation-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .motivation-text-enter {
+    animation: motivation-text 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: 0.15s;
+  }
+
+  .motivation-text-delay {
+    animation-delay: 0.3s;
+  }
+
+  .motivation-icon-float {
+    animation: motivation-icon-float 6s ease-in-out infinite;
+  }
+
+  .motivation-icon-pulse {
+    animation: motivation-icon-pulse 3s ease-in-out infinite;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in,
   .animate-slide-up,
-  .butterfly-scene-animated .butterfly-z {
+  .butterfly-scene-animated .butterfly-z,
+  .motivation-banner,
+  .motivation-text-enter,
+  .motivation-icon-float,
+  .motivation-icon-pulse {
     animation: none;
   }
 }
