@@ -358,9 +358,9 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
               fallback.
             </p>
             {pendingDirectPhotoCount > 0 ? (
-              <p className="text-xs font-normal text-brand-700">
+              <p className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-brand-500" />
                 {pendingDirectPhotoCount} photo{pendingDirectPhotoCount === 1 ? "" : "s"} uploading
-                in background.
               </p>
             ) : null}
           </div>
@@ -393,11 +393,17 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
                   ) : photo.blob ? (
                     <PendingPhotoPreview alt={photo.fileName} blob={photo.blob} />
                   ) : (
-                    <div className="flex h-40 items-center justify-center bg-slate-100 text-sm text-slate-500">
+                    <div className={`flex h-40 items-center justify-center text-sm ${
+                      photo.hasConflict
+                        ? "bg-rose-50 text-rose-600"
+                        : photo.isPendingUpload
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-slate-100 text-slate-500"
+                    }`}>
                       {photo.hasConflict
                         ? "Sync needs review"
                         : photo.isPendingUpload
-                          ? "Pending local upload"
+                          ? "Queued — waiting to upload"
                           : "Preview unavailable"}
                     </div>
                   )}
@@ -411,9 +417,9 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
                     <p className="text-xs text-slate-500">
                       {photo.kind ?? "GENERAL"}
                       {photo.hasConflict
-                        ? " | sync needs review"
+                        ? <span className="font-semibold text-rose-600"> | needs review</span>
                         : photo.isPendingUpload
-                          ? " | queued locally"
+                          ? <span className="font-semibold text-amber-600"> | queued locally</span>
                           : ""}
                     </p>
                   </div>
@@ -468,13 +474,14 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
             {Array.from({ length: pendingDirectPhotoCount }).map((_, index) => (
               <div
                 key={`pending-direct-photo-${index}`}
-                className="overflow-hidden rounded-2xl border border-border bg-white"
+                className="overflow-hidden rounded-2xl border border-brand-200 bg-white"
               >
-                <div className="flex h-40 items-center justify-center bg-slate-100 text-sm text-slate-500">
-                  Uploading in background...
+                <div className="flex h-40 flex-col items-center justify-center gap-2 bg-brand-50/50">
+                  <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-brand-400" />
+                  <span className="text-sm font-semibold text-brand-700">Uploading...</span>
                 </div>
                 <div className="space-y-1 p-3">
-                  <p className="text-sm font-semibold">Photo upload in progress</p>
+                  <p className="text-sm font-semibold text-slate-800">Upload in progress</p>
                   <p className="text-xs text-slate-500">
                     This photo will appear here when the upload finishes.
                   </p>
@@ -504,7 +511,7 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
           onClick={() => void onSaveNotes()}
           type="button"
         >
-          {savingNotes ? "Saving..." : "Save Room Notes"}
+          {savingNotes ? "Saving..." : "Save Notes"}
         </button>
       </div>
 
@@ -536,7 +543,7 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
               }}
               type="button"
             >
-              {completingRoomId === room._id ? "Completing..." : "Complete Room"}
+              {completingRoomId === room._id ? "Completing..." : "Mark Room Complete"}
             </button>
             <button
               className="field-button ghost flex-1 px-4"

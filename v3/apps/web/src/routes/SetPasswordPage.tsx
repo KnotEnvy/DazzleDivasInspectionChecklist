@@ -129,12 +129,21 @@ export function SetPasswordPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md items-center px-4">
-      <div className="glass-panel w-full p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
+      <div className="glass-panel w-full p-6 sm:p-8">
+        <div className="mb-4 flex justify-center">
+          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-white/90 p-1 shadow-sm ring-1 ring-brand-100">
+            <img
+              alt="Dazzle Divas logo"
+              className="h-full w-full object-contain"
+              src="/pink-dazzleLogo.WEBP"
+            />
+          </div>
+        </div>
+        <p className="text-center text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
           Dazzle Divas
         </p>
-        <h1 className="mt-1 text-2xl font-bold">Set your password</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="mt-1 text-center text-2xl font-bold">Set Your Password</h1>
+        <p className="mt-1 text-center text-sm text-slate-600">
           Finish your account setup and sign in to Dazzle Divas Cleaning Hub.
         </p>
 

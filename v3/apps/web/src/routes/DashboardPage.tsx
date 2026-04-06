@@ -16,6 +16,13 @@ import { ButterflyEmptyState } from "@/components/ButterflyEmptyState";
 import { EmptyState } from "@/components/EmptyState";
 import { OfflineQueuePanel } from "@/components/OfflineQueuePanel";
 import { statusTone } from "@/lib/statusColors";
+import {
+  urgencyBorderClass,
+  urgencyLabelText,
+  urgencyLabelTone,
+  getUrgencyLevel,
+  formatDeadlineCountdown,
+} from "@/lib/urgency";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxItems } from "@/hooks/useOutboxItems";
@@ -58,6 +65,7 @@ type AdminDispatchJob = {
   assigneeName?: string | null;
   priority?: string;
   isBackToBack?: boolean;
+  arrivalDeadline?: number;
   checklistType: string | null;
 };
 
@@ -76,6 +84,7 @@ type ScheduleJob = {
   scheduledEnd: number;
   linkedInspectionId?: string;
   isBackToBack?: boolean;
+  arrivalDeadline?: number;
   checklistType: "CLEANING" | "INSPECTION" | null;
   canStartChecklist: boolean;
   status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
@@ -268,12 +277,15 @@ export function DashboardPage() {
               {needsAttention.slice(0, 6).map((job) => (
                 <div
                   key={job._id}
-                  className="rounded-xl border border-amber-200 bg-white p-3"
+                  className={`rounded-xl border border-amber-200 bg-white p-3 ${
+                    job.isBackToBack ? "b2b-card-accent" : ""
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-slate-900">
                         {job.propertyName}
+                        {job.isBackToBack && <span className="b2b-badge ml-2">B2B</span>}
                       </p>
                       <p className="text-xs text-slate-600">
                         {new Date(job.scheduledStart).toLocaleTimeString([], {
@@ -335,7 +347,9 @@ export function DashboardPage() {
                 {adminTodayJobs.map((job) => (
                   <Link
                     key={job._id}
-                    className="flex items-center gap-2 rounded-xl border border-border p-2 transition hover:border-brand-300 sm:gap-3 sm:p-3"
+                    className={`flex items-center gap-2 rounded-xl border border-border p-2 transition hover:border-brand-300 sm:gap-3 sm:p-3 ${
+                      urgencyBorderClass(job.scheduledStart)
+                    } ${job.isBackToBack ? "bg-rose-50/30" : ""}`}
                     to="/schedule"
                   >
                     <div className="w-12 shrink-0 text-center sm:w-14">
@@ -349,9 +363,10 @@ export function DashboardPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">
                         {job.propertyName}
+                        {job.isBackToBack && <span className="b2b-badge ml-2">B2B</span>}
                       </p>
                       <p className="truncate text-xs text-slate-500">
-                        {job.jobType}
+                        {job.isBackToBack ? "B2B Turnover" : job.jobType}
                         {job.assigneeName
                           ? ` · ${job.assigneeName}`
                           : ""}
@@ -672,39 +687,74 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {nextChecklistJobs.map((job, index) => (
-                <div
-                  key={job._id}
-                  className={`rounded-2xl border p-4 ${
-                    index === 0 ? "border-brand-300 bg-brand-50" : "border-border bg-slate-50"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{job.propertyName}</p>
-                      <p className="mt-1 text-sm text-slate-600">{formatJobWindow(job)}</p>
-                      <p className="mt-1 text-sm text-slate-500">{job.propertyAddress}</p>
+              {nextChecklistJobs.map((job, index) => {
+                const level = getUrgencyLevel(job.scheduledStart);
+                const label = urgencyLabelText(job.scheduledStart);
+                const isFirst = index === 0;
+                return (
+                  <div
+                    key={job._id}
+                    className={`rounded-2xl border p-4 ${
+                      job.isBackToBack
+                        ? "b2b-card-accent border-rose-300"
+                        : isFirst
+                          ? `${urgencyBorderClass(job.scheduledStart) || "border-l-4 border-l-brand-500"} border-brand-300 bg-brand-50`
+                          : "border-border bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className={isFirst ? "text-lg font-bold" : "font-semibold"}>
+                          {job.propertyName}
+                          {job.isBackToBack && <span className="b2b-badge ml-2 align-middle">B2B</span>}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">{formatJobWindow(job)}</p>
+                        {isFirst && job.scheduledStart > Date.now() && (
+                          <p className="mt-0.5 text-xs font-semibold text-brand-600">
+                            Starts {formatDeadlineCountdown(job.scheduledStart)}
+                          </p>
+                        )}
+                        {job.isBackToBack && job.arrivalDeadline && (
+                          <p className="mt-0.5 text-sm font-semibold text-rose-700">
+                            Guest arrival {formatDeadlineCountdown(job.arrivalDeadline)}
+                          </p>
+                        )}
+                        <p className="mt-1 text-sm text-slate-500">{job.propertyAddress}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {isFirst && level && label && (
+                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${urgencyLabelTone(level)}`}>
+                            {label}
+                          </span>
+                        )}
+                        <span className="rounded-full border border-border bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                          {job.linkedInspectionId ? "Resume Ready" : job.canStartChecklist ? "Start Ready" : job.status}
+                        </span>
+                      </div>
                     </div>
-                    <span className="rounded-full border border-border bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                      {job.linkedInspectionId ? "Resume Ready" : job.canStartChecklist ? "Start Ready" : job.status}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {job.linkedInspectionId ? (
-                      <Link className="field-button primary px-4" to={`/checklists/${job.linkedInspectionId}`}>
-                        {copy.primaryAction}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {job.linkedInspectionId ? (
+                        <Link
+                          className={`field-button ${isFirst ? "go min-h-[52px] px-6 text-base" : "primary px-4"}`}
+                          to={`/checklists/${job.linkedInspectionId}`}
+                        >
+                          {copy.primaryAction}
+                        </Link>
+                      ) : (
+                        <Link
+                          className={`field-button ${isFirst ? "go min-h-[52px] px-6 text-base" : "primary px-4"}`}
+                          to="/my-schedule"
+                        >
+                          {copy.secondaryAction}
+                        </Link>
+                      )}
+                      <Link className="field-button secondary px-4" to="/my-schedule">
+                        View Schedule
                       </Link>
-                    ) : (
-                      <Link className="field-button primary px-4" to="/my-schedule">
-                        {copy.secondaryAction}
-                      </Link>
-                    )}
-                    <Link className="field-button secondary px-4" to="/my-schedule">
-                      View Schedule
-                    </Link>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -744,12 +794,20 @@ export function DashboardPage() {
           ) : (
             <div className="mt-4 space-y-3">
               {todayJobs.slice(0, 3).map((job) => (
-                <div key={job._id} className="rounded-2xl border border-border bg-slate-50 p-3">
+                <div
+                  key={job._id}
+                  className={`rounded-2xl border border-border p-3 ${
+                    job.isBackToBack ? "b2b-card-accent" : "bg-slate-50"
+                  }`}
+                >
                   <div className="flex items-center gap-2 text-sm text-slate-600">
                     <Clock3 className="h-4 w-4" />
                     <span>{formatJobWindow(job)}</span>
                   </div>
-                  <p className="mt-2 font-semibold">{job.propertyName}</p>
+                  <p className="mt-2 font-semibold">
+                    {job.propertyName}
+                    {job.isBackToBack && <span className="b2b-badge ml-2">B2B</span>}
+                  </p>
                   <div className="mt-1 flex items-center gap-2 text-sm text-slate-500">
                     <MapPin className="h-4 w-4" />
                     <span>{job.propertyAddress}</span>

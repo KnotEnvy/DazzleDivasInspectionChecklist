@@ -36,7 +36,8 @@
       "Bash(cd \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web\" && npx vite build 2>&1 | tail -10)",
       "Bash(cd \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web\" && npx vite build 2>&1 | tail -5)",
       "Bash(cd \"D:/Javascript Webapps/DazzleDivasInspectionChecklist/v3/apps/web\" && npx vite build 2>&1 | tail -15)",
-      "Bash(bunx --bun tsc --noEmit --project apps/web/tsconfig.json)"
+      "Bash(bunx --bun tsc --noEmit --project apps/web/tsconfig.json)",
+      "Bash(grep -E \"\\\\.tsx$|\\\\.ts$\")"
     ]
   }
 }

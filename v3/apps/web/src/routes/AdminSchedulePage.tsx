@@ -12,6 +12,12 @@ import {
   Plus,
 } from "lucide-react";
 import { statusTone } from "@/lib/statusColors";
+import {
+  urgencyBorderClass,
+  urgencyLabelText,
+  getUrgencyLevel,
+  urgencyLabelTone,
+} from "@/lib/urgency";
 import { EmptyState } from "@/components/EmptyState";
 
 type JobStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
@@ -234,13 +240,6 @@ function buildBackToBackArrivalLocalValue(startValue: string) {
   return toDatetimeLocalValue(arrivalDeadline.getTime());
 }
 
-function BackToBackBadge() {
-  return (
-    <span className="inline-flex rounded-full border border-rose-300 bg-rose-100 px-2 py-0.5 text-[11px] font-bold tracking-[0.12em] text-rose-700">
-      B2B
-    </span>
-  );
-}
 
 function summarizeTurnoverIntake(job: {
   intakeSource?: IntakeSource;
@@ -291,22 +290,6 @@ function requiredRoleForJobType(jobType: JobType) {
   return jobType === "INSPECTION" ? "INSPECTOR" : "CLEANER";
 }
 
-function urgencyBorder(scheduledStart: number) {
-  const hoursUntil = (scheduledStart - Date.now()) / (1000 * 60 * 60);
-  if (hoursUntil < 0) return "border-l-4 border-l-rose-500";
-  if (hoursUntil <= 24) return "border-l-4 border-l-amber-400";
-  if (hoursUntil <= 48) return "border-l-4 border-l-sky-300";
-  return "";
-}
-
-function urgencyLabel(scheduledStart: number) {
-  const hoursUntil = (scheduledStart - Date.now()) / (1000 * 60 * 60);
-  if (hoursUntil < 0) return "Overdue";
-  if (hoursUntil <= 6) return "Due soon";
-  if (hoursUntil <= 24) return "Within 24h";
-  if (hoursUntil <= 48) return "Within 48h";
-  return null;
-}
 
 function getDeleteBlockReason(job: DispatchDetail | null | undefined) {
   if (!job) {
@@ -1132,11 +1115,14 @@ export function AdminSchedulePage() {
           ) : (
             <div className="space-y-2">
               {(showAllUnassigned ? unassignedJobs : unassignedJobs.slice(0, 5)).map((job) => {
-                const urgency = urgencyLabel(job.scheduledStart);
+                const urgency = urgencyLabelText(job.scheduledStart);
+                const level = getUrgencyLevel(job.scheduledStart);
                 return (
                 <div
                   key={job._id}
-                  className={`rounded-2xl border p-3 transition ${urgencyBorder(job.scheduledStart)} ${
+                  className={`rounded-2xl border p-3 transition ${urgencyBorderClass(job.scheduledStart)} ${
+                    job.isBackToBack ? "b2b-card-accent" : ""
+                  } ${
                     selectedJobId === job._id
                       ? "border-brand-500 bg-brand-50"
                       : "border-border bg-slate-50"
@@ -1150,14 +1136,10 @@ export function AdminSchedulePage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <p className="font-semibold">{job.propertyName}</p>
-                        {job.isBackToBack && <BackToBackBadge />}
+                        {job.isBackToBack && <span className="b2b-badge">B2B</span>}
                       </div>
-                      {urgency && (
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                          urgency === "Overdue" ? "bg-rose-100 text-rose-700"
-                            : urgency === "Due soon" ? "bg-amber-100 text-amber-700"
-                            : "bg-sky-100 text-sky-700"
-                        }`}>
+                      {urgency && level && (
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${urgencyLabelTone(level)}`}>
                           {urgency}
                         </span>
                       )}
@@ -2025,7 +2007,7 @@ function JobRow({
               {new Date(job.scheduledStart).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             </p>
             <span className="truncate text-sm font-semibold text-slate-700">{job.propertyName}</span>
-            {job.isBackToBack && <BackToBackBadge />}
+            {job.isBackToBack && <span className="b2b-badge">B2B</span>}
           </div>
           <p className="mt-0.5 text-xs text-slate-500">
             {job.assigneeName ?? "Unassigned"} &middot; {job.isBackToBack ? "B2B Turnover" : job.jobType}

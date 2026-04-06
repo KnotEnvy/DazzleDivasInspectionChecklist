@@ -128,6 +128,25 @@ a {
   background: #fff1f2;
 }
 
+.b2b-card-accent {
+  border-left: 4px solid #be123c;
+  background: linear-gradient(90deg, rgba(255, 228, 230, 0.35) 0%, transparent 40%);
+}
+
+.b2b-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9999px;
+  border: 1px solid #fda4af;
+  background: #ffe4e6;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #be123c;
+}
+
 .input {
   width: 100%;
   border-radius: 12px;

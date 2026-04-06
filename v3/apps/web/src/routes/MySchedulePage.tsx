@@ -16,6 +16,13 @@ import {
 } from "@/lib/offlineOutbox";
 import { buildJobStatusOverlay } from "@/lib/offlineInspectionState";
 import { statusTone } from "@/lib/statusColors";
+import {
+  urgencyBorderClass,
+  urgencyLabelText,
+  urgencyLabelTone,
+  getUrgencyLevel,
+  formatDeadlineCountdown,
+} from "@/lib/urgency";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -39,6 +46,7 @@ type ScheduleJob = {
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   assigneeName?: string | null;
   isBackToBack?: boolean;
+  arrivalDeadline?: number;
   checklistType: "CLEANING" | "INSPECTION" | null;
   canStartChecklist: boolean;
 };
@@ -423,6 +431,14 @@ export function MySchedulePage() {
                             minute: "2-digit",
                           })}
                         </span>
+                        {job.isBackToBack && (
+                          <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-rose-500" />
+                        )}
+                        {!job.isBackToBack && urgencyLabelText(job.scheduledStart) && (
+                          <span className={`ml-1 inline-block h-1.5 w-1.5 rounded-full ${
+                            urgencyLabelText(job.scheduledStart) === "Overdue" ? "bg-rose-500" : "bg-amber-400"
+                          }`} />
+                        )}
                         <span className="ml-1 text-slate-600">{job.propertyName}</span>
                       </button>
                     ))
@@ -435,7 +451,13 @@ export function MySchedulePage() {
       </section>
 
       {/* ── Selected job detail (Worker Focus) ── */}
-      <section className="rounded-2xl border border-border border-l-4 border-l-brand-600 bg-white p-4 shadow-sm">
+      <section className={`rounded-2xl border border-border bg-white p-4 shadow-sm ${
+        selectedListJob?.isBackToBack
+          ? "b2b-card-accent"
+          : selectedListJob
+            ? urgencyBorderClass(selectedListJob.scheduledStart) || "border-l-4 border-l-brand-600"
+            : "border-l-4 border-l-brand-600"
+      }`}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-700">
@@ -443,22 +465,39 @@ export function MySchedulePage() {
             </p>
             <h2 className="text-lg font-bold lg:text-xl">
               {selectedListJob ? selectedListJob.propertyName : "No job selected"}
+              {selectedListJob?.isBackToBack && <span className="b2b-badge ml-2 align-middle">B2B</span>}
             </h2>
             {selectedListJob && (
               <p className="text-sm text-slate-600">
                 {selectedListJob.isBackToBack ? "B2B Turnover" : selectedListJob.jobType} | {formatJobWindow(selectedListJob)}
               </p>
             )}
+            {selectedListJob?.isBackToBack && selectedListJob.arrivalDeadline && (
+              <p className="mt-0.5 text-sm font-semibold text-rose-700">
+                Guest arrival {formatDeadlineCountdown(selectedListJob.arrivalDeadline)}
+              </p>
+            )}
           </div>
-          {selectedListJob && (
-            <span
-              className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
-                selectedListJob.status
-              )}`}
-            >
-              {selectedListJob.status}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {selectedListJob && (() => {
+              const level = getUrgencyLevel(selectedListJob.scheduledStart);
+              const label = urgencyLabelText(selectedListJob.scheduledStart);
+              return level && label ? (
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${urgencyLabelTone(level)}`}>
+                  {label}
+                </span>
+              ) : null;
+            })()}
+            {selectedListJob && (
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone(
+                  selectedListJob.status
+                )}`}
+              >
+                {selectedListJob.status}
+              </span>
+            )}
+          </div>
         </div>
 
         {!selectedListJob ? (
@@ -565,12 +604,17 @@ export function MySchedulePage() {
                     <button
                       key={nextJob._id}
                       aria-label={`Focus on ${nextJob.propertyName}`}
-                      className="flex w-full items-center gap-3 rounded-xl border border-border bg-slate-50 p-3 text-left transition hover:border-brand-300"
+                      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition hover:border-brand-300 ${
+                        urgencyBorderClass(nextJob.scheduledStart)
+                      } ${nextJob.isBackToBack ? "b2b-card-accent" : "border-border bg-slate-50"}`}
                       onClick={() => setSelectedJobId(nextJob._id)}
                       type="button"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold">{nextJob.propertyName}</p>
+                        <p className="truncate text-sm font-bold">
+                          {nextJob.propertyName}
+                          {nextJob.isBackToBack && <span className="b2b-badge ml-2">B2B</span>}
+                        </p>
                         <p className="text-xs text-slate-600">
                           {new Date(nextJob.scheduledStart).toLocaleDateString(undefined, {
                             weekday: "short",
@@ -620,6 +664,8 @@ export function MySchedulePage() {
                         key={job._id}
                         aria-label={`Focus on ${job.propertyName}`}
                         className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                          urgencyBorderClass(job.scheduledStart)
+                        } ${job.isBackToBack ? "b2b-card-accent" : ""} ${
                           selectedJobId === job._id
                             ? "border-brand-500 bg-brand-50"
                             : "border-border bg-slate-50 hover:border-brand-300"
@@ -628,7 +674,10 @@ export function MySchedulePage() {
                         type="button"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold">{job.propertyName}</p>
+                          <p className="truncate text-sm font-bold">
+                            {job.propertyName}
+                            {job.isBackToBack && <span className="b2b-badge ml-2">B2B</span>}
+                          </p>
                           <p className="text-xs text-slate-600">
                             {new Date(job.scheduledStart).toLocaleDateString(undefined, {
                               weekday: "short",
@@ -643,13 +692,24 @@ export function MySchedulePage() {
                             {job.isBackToBack ? "B2B Turnover" : job.jobType}
                           </p>
                         </div>
-                        <span
-                          className={`flex-shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(
-                            job.status
-                          )}`}
-                        >
-                          {job.status}
-                        </span>
+                        <div className="flex flex-shrink-0 items-center gap-1.5">
+                          {(() => {
+                            const level = getUrgencyLevel(job.scheduledStart);
+                            const label = urgencyLabelText(job.scheduledStart);
+                            return level && label ? (
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${urgencyLabelTone(level)}`}>
+                                {label}
+                              </span>
+                            ) : null;
+                          })()}
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(
+                              job.status
+                            )}`}
+                          >
+                            {job.status}
+                          </span>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -679,26 +739,47 @@ export function MySchedulePage() {
           <p className="text-sm text-slate-500">Job not found.</p>
         ) : (
           <div className="space-y-3 text-sm">
-            <div className="rounded-xl border border-border bg-slate-50 p-3">
+            <div className={`rounded-xl border border-border p-3 ${
+              selectedJobEffective.isBackToBack ? "b2b-card-accent" : "bg-slate-50"
+            }`}>
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-semibold">{selectedJobEffective.property?.name ?? "Unknown property"}</p>
+                  <p className="font-semibold">
+                    {selectedJobEffective.property?.name ?? "Unknown property"}
+                    {selectedJobEffective.isBackToBack && <span className="b2b-badge ml-2">B2B</span>}
+                  </p>
                   <p className="text-slate-600">
                     {selectedJobEffective.property?.address ?? "No address on file"}
                   </p>
                 </div>
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(
-                    selectedJobEffective.status
-                  )}`}
-                >
-                  {selectedJobEffective.status}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {(() => {
+                    const level = getUrgencyLevel(selectedJobEffective.scheduledStart);
+                    const label = urgencyLabelText(selectedJobEffective.scheduledStart);
+                    return level && label ? (
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${urgencyLabelTone(level)}`}>
+                        {label}
+                      </span>
+                    ) : null;
+                  })()}
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(
+                      selectedJobEffective.status
+                    )}`}
+                  >
+                    {selectedJobEffective.status}
+                  </span>
+                </div>
               </div>
               <p className="mt-2 text-xs text-slate-500">
                 {selectedJobEffective.isBackToBack ? "B2B Turnover" : selectedJobEffective.jobType} | Priority: {selectedJobEffective.priority ?? "MEDIUM"}
                 {selectedJobEffective.assignee ? ` | ${selectedJobEffective.assignee.name}` : ""}
               </p>
+              {selectedJobEffective.isBackToBack && selectedJobEffective.arrivalDeadline && (
+                <p className="mt-1 text-xs font-semibold text-rose-700">
+                  Guest arrival {formatDeadlineCountdown(selectedJobEffective.arrivalDeadline)}
+                </p>
+              )}
             </div>
 
             {selectedJobEffective.property?.serviceNotes && (
