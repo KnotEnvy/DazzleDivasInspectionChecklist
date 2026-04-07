@@ -4,6 +4,7 @@ import { useConvexAuth } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
+import { LoadingQuip } from "@/components/LoadingQuip";
 
 function formatAuthErrorMessage(error: unknown) {
   if (!(error instanceof Error)) {
@@ -29,7 +30,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   if (isLoading) {
-    return <div className="p-8 text-center">Loading...</div>;
+    return <LoadingQuip />;
   }
 
   if (isAuthenticated) {

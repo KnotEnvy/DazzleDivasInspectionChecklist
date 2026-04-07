@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
+import { LoadingQuip } from "@/components/LoadingQuip";
 import { AuthGuard } from "@/routes/AuthGuard";
 import { RoleGuard } from "@/routes/RoleGuard";
 import { OfflineSyncProvider } from "@/app/OfflineSyncProvider";
@@ -52,6 +53,7 @@ const NotFoundPage = lazy(() =>
 function RouteLoading() {
   return (
     <div className="space-y-4 animate-fade-in">
+      <LoadingQuip />
       <div className="grid gap-3 md:grid-cols-3">
         <div className="skeleton h-20 rounded-2xl" />
         <div className="skeleton h-20 rounded-2xl" />

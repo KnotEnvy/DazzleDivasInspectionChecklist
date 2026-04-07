@@ -23,6 +23,7 @@ import {
   getUrgencyLevel,
   formatDeadlineCountdown,
 } from "@/lib/urgency";
+import { getRandomQuip } from "@/lib/loadingQuips";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -203,6 +204,7 @@ export function MySchedulePage() {
   const createInspection = useMutation(api.inspections.create);
   const updateMyStatus = useMutation(api.jobs.updateMyStatus);
   const outboxOverlay = useMemo(() => buildJobStatusOverlay(outboxItems), [outboxItems]);
+  const loadingQuip = useMemo(() => getRandomQuip(), []);
   const scheduleQueueItems = useMemo(
     () =>
       outboxItems.filter(
@@ -516,7 +518,7 @@ export function MySchedulePage() {
         {!selectedListJob ? (
           <p className="mt-3 text-sm text-slate-500">
             {jobs === undefined
-              ? "Loading schedule..."
+              ? loadingQuip
               : `Your ${formatScheduleWindow(windowStart, windowEnd)} window is clear.`}
           </p>
         ) : (

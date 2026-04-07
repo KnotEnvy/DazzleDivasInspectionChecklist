@@ -4,6 +4,7 @@ import { useConvexAuth, useMutation } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
+import { LoadingQuip } from "@/components/LoadingQuip";
 import { api } from "convex/_generated/api";
 import {
   clearStoredPasswordSetupCode,
@@ -87,7 +88,7 @@ export function SetPasswordPage() {
   }, [completePasswordSetup, finishingSetup, isAuthenticated, navigate]);
 
   if (isLoading) {
-    return <div className="p-8 text-center">Loading...</div>;
+    return <LoadingQuip />;
   }
 
   if (isAuthenticated && !finishingSetup) {
