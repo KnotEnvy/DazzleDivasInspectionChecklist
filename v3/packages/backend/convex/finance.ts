@@ -11,6 +11,51 @@ import {
 } from "./lib/finance";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const FINANCE_BACKEND_UNAVAILABLE_MESSAGE =
+  "Finance data is unavailable on this Convex deployment. Deploy the latest Convex production schema/functions and refresh.";
+const FINANCE_STORAGE_ERROR_MARKERS = [
+  "financepropertyconfigs",
+  "workerpayprofiles",
+  "jobfinancials",
+  "financeevents",
+] as const;
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+function isFinanceStorageError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+  return FINANCE_STORAGE_ERROR_MARKERS.some((marker) => message.includes(marker));
+}
+
+async function withFinanceReadFallback<T>(operation: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isFinanceStorageError(error)) {
+      return fallback;
+    }
+
+    throw error;
+  }
+}
+
+async function withFinanceWriteGuard<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isFinanceStorageError(error)) {
+      throw new Error(FINANCE_BACKEND_UNAVAILABLE_MESSAGE);
+    }
+
+    throw error;
+  }
+}
 
 const optionalCurrencyValidator = v.optional(v.union(v.number(), v.null()));
 const workerRoleValidator = v.union(v.literal("CLEANER"), v.literal("INSPECTOR"));
@@ -47,21 +92,25 @@ function isCleaningJob(job: Pick<Doc<"jobs">, "jobType">) {
 }
 
 async function getPropertyConfigByPropertyId(ctx: QueryCtx | MutationCtx, propertyId: Id<"properties">) {
-  const configs = await ctx.db
-    .query("financePropertyConfigs")
-    .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
-    .collect();
+  return withFinanceReadFallback(async () => {
+    const configs = await ctx.db
+      .query("financePropertyConfigs")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect();
 
-  return configs.sort((left, right) => right._creationTime - left._creationTime)[0] ?? null;
+    return configs.sort((left, right) => right._creationTime - left._creationTime)[0] ?? null;
+  }, null);
 }
 
 async function getJobFinancialByJobId(ctx: QueryCtx | MutationCtx, jobId: Id<"jobs">) {
-  const records = await ctx.db
-    .query("jobFinancials")
-    .withIndex("by_job", (q) => q.eq("jobId", jobId))
-    .collect();
+  return withFinanceReadFallback(async () => {
+    const records = await ctx.db
+      .query("jobFinancials")
+      .withIndex("by_job", (q) => q.eq("jobId", jobId))
+      .collect();
 
-  return records.sort((left, right) => right._creationTime - left._creationTime)[0] ?? null;
+    return records.sort((left, right) => right._creationTime - left._creationTime)[0] ?? null;
+  }, null);
 }
 
 async function getLinkedJobForInspection(ctx: QueryCtx | MutationCtx, inspectionId: Id<"inspections">) {
@@ -83,22 +132,24 @@ async function getActiveWorkerPayProfile(
     return null;
   }
 
-  const profiles = await ctx.db
-    .query("workerPayProfiles")
-    .withIndex("by_user_role_active", (q) =>
-      q.eq("userId", userId).eq("role", role).eq("isActive", true)
-    )
-    .collect();
-
-  return (
-    profiles
-      .filter(
-        (profile) =>
-          profile.effectiveStart <= atTime &&
-          (profile.effectiveEnd === undefined || profile.effectiveEnd >= atTime)
+  return withFinanceReadFallback(async () => {
+    const profiles = await ctx.db
+      .query("workerPayProfiles")
+      .withIndex("by_user_role_active", (q) =>
+        q.eq("userId", userId).eq("role", role).eq("isActive", true)
       )
-      .sort((left, right) => right.effectiveStart - left.effectiveStart)[0] ?? null
-  );
+      .collect();
+
+    return (
+      profiles
+        .filter(
+          (profile) =>
+            profile.effectiveStart <= atTime &&
+            (profile.effectiveEnd === undefined || profile.effectiveEnd >= atTime)
+        )
+        .sort((left, right) => right.effectiveStart - left.effectiveStart)[0] ?? null
+    );
+  }, null);
 }
 
 function buildDerivedFinanceSnapshot(params: {
@@ -187,14 +238,16 @@ async function recordFinanceEvent(
     metadata?: Record<string, unknown>;
   }
 ) {
-  await ctx.db.insert("financeEvents", {
-    jobFinancialId: params.jobFinancialId,
-    jobId: params.jobId,
-    actorId: params.actorId,
-    eventType: params.eventType,
-    metadata: params.metadata ? JSON.stringify(params.metadata) : undefined,
-    createdAt: Date.now(),
-  });
+  await withFinanceWriteGuard(() =>
+    ctx.db.insert("financeEvents", {
+      jobFinancialId: params.jobFinancialId,
+      jobId: params.jobId,
+      actorId: params.actorId,
+      eventType: params.eventType,
+      metadata: params.metadata ? JSON.stringify(params.metadata) : undefined,
+      createdAt: Date.now(),
+    })
+  );
 }
 
 async function upsertJobFinancialRecord(
@@ -240,14 +293,16 @@ async function upsertJobFinancialRecord(
     updatedAt: Date.now(),
   };
 
-  if (existing) {
-    await ctx.db.patch(existing._id, payload);
-    return existing._id;
-  }
+  return withFinanceWriteGuard(async () => {
+    if (existing) {
+      await ctx.db.patch(existing._id, payload);
+      return existing._id;
+    }
 
-  return await ctx.db.insert("jobFinancials", {
-    jobId: job._id,
-    ...payload,
+    return await ctx.db.insert("jobFinancials", {
+      jobId: job._id,
+      ...payload,
+    });
   });
 }
 
@@ -325,7 +380,10 @@ export const listPropertyConfigs = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
 
-    const configs = await ctx.db.query("financePropertyConfigs").collect();
+    const configs = await withFinanceReadFallback(
+      () => ctx.db.query("financePropertyConfigs").collect(),
+      [] as Array<Doc<"financePropertyConfigs">>
+    );
     return configs.sort((left, right) => left._creationTime - right._creationTime);
   },
 });
@@ -363,14 +421,16 @@ export const upsertPropertyConfig = mutation({
       updatedById: actor._id,
     };
 
-    if (existing) {
-      await ctx.db.patch(existing._id, payload);
-      return existing._id;
-    }
+    return await withFinanceWriteGuard(async () => {
+      if (existing) {
+        await ctx.db.patch(existing._id, payload);
+        return existing._id;
+      }
 
-    return await ctx.db.insert("financePropertyConfigs", {
-      propertyId: args.propertyId,
-      ...payload,
+      return await ctx.db.insert("financePropertyConfigs", {
+        propertyId: args.propertyId,
+        ...payload,
+      });
     });
   },
 });
@@ -380,7 +440,10 @@ export const listWorkerPayProfiles = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
 
-    const profiles = await ctx.db.query("workerPayProfiles").collect();
+    const profiles = await withFinanceReadFallback(
+      () => ctx.db.query("workerPayProfiles").collect(),
+      [] as Array<Doc<"workerPayProfiles">>
+    );
     const activeProfiles = profiles.filter((profile) => profile.isActive);
     const latestByUserRole = new Map<string, (typeof activeProfiles)[number]>();
 
@@ -421,46 +484,48 @@ export const upsertWorkerPayProfile = mutation({
       throw new Error("Unit bonus cannot be negative");
     }
 
-    const profiles = await ctx.db
-      .query("workerPayProfiles")
-      .withIndex("by_user_role_active", (q) =>
-        q.eq("userId", args.userId).eq("role", args.role).eq("isActive", true)
-      )
-      .collect();
+    return await withFinanceWriteGuard(async () => {
+      const profiles = await ctx.db
+        .query("workerPayProfiles")
+        .withIndex("by_user_role_active", (q) =>
+          q.eq("userId", args.userId).eq("role", args.role).eq("isActive", true)
+        )
+        .collect();
 
-    const latest = profiles.sort((left, right) => right.effectiveStart - left.effectiveStart)[0];
-    const effectiveStart = latest?.effectiveStart ?? Date.now();
-    const payload = {
-      perRoomComboRate: roundCurrency(args.perRoomComboRate),
-      unitBonus: roundCurrency(args.unitBonus),
-      updatedAt: Date.now(),
-      updatedById: actor._id,
-      isActive: true,
-    };
-
-    for (const profile of profiles.slice(1)) {
-      await ctx.db.patch(profile._id, {
-        isActive: false,
-        effectiveEnd: Date.now(),
+      const latest = profiles.sort((left, right) => right.effectiveStart - left.effectiveStart)[0];
+      const effectiveStart = latest?.effectiveStart ?? Date.now();
+      const payload = {
+        perRoomComboRate: roundCurrency(args.perRoomComboRate),
+        unitBonus: roundCurrency(args.unitBonus),
         updatedAt: Date.now(),
         updatedById: actor._id,
+        isActive: true,
+      };
+
+      for (const profile of profiles.slice(1)) {
+        await ctx.db.patch(profile._id, {
+          isActive: false,
+          effectiveEnd: Date.now(),
+          updatedAt: Date.now(),
+          updatedById: actor._id,
+        });
+      }
+
+      if (latest) {
+        await ctx.db.patch(latest._id, payload);
+        return latest._id;
+      }
+
+      return await ctx.db.insert("workerPayProfiles", {
+        userId: args.userId,
+        role: args.role,
+        perRoomComboRate: payload.perRoomComboRate,
+        unitBonus: payload.unitBonus,
+        effectiveStart,
+        isActive: true,
+        updatedAt: payload.updatedAt,
+        updatedById: actor._id,
       });
-    }
-
-    if (latest) {
-      await ctx.db.patch(latest._id, payload);
-      return latest._id;
-    }
-
-    return await ctx.db.insert("workerPayProfiles", {
-      userId: args.userId,
-      role: args.role,
-      perRoomComboRate: payload.perRoomComboRate,
-      unitBonus: payload.unitBonus,
-      effectiveStart,
-      isActive: true,
-      updatedAt: payload.updatedAt,
-      updatedById: actor._id,
     });
   },
 });
@@ -872,10 +937,14 @@ export const listPayroll = query({
     await requireAdmin(ctx);
 
     const weekEnd = args.weekStart + 7 * DAY_MS;
-    const financials = (await ctx.db
-      .query("jobFinancials")
-      .withIndex("by_status", (q) => q.eq("status", "APPROVED"))
-      .collect()).filter((financial) => financial.financialScope === "CLEANING");
+    const financials = (await withFinanceReadFallback(
+      () =>
+        ctx.db
+          .query("jobFinancials")
+          .withIndex("by_status", (q) => q.eq("status", "APPROVED"))
+          .collect(),
+      [] as Array<Doc<"jobFinancials">>
+    )).filter((financial) => financial.financialScope === "CLEANING");
 
     const jobs = await Promise.all(financials.map((financial) => ctx.db.get(financial.jobId)));
     const relevantPairs = financials
