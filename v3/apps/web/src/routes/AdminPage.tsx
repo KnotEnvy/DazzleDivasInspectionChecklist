@@ -40,6 +40,15 @@ type StaffInviteResult = {
   inviteError?: string;
 };
 
+type WorkerPayProfile = {
+  _id: Id<"workerPayProfiles">;
+  userId: Id<"users">;
+  role: "CLEANER" | "INSPECTOR";
+  perRoomComboRate: number;
+  unitBonus: number;
+  effectiveStart: number;
+};
+
 function onboardingLabel(status?: PasswordSetupStatus) {
   switch (status) {
     case "INVITED":
@@ -71,17 +80,24 @@ function onboardingTone(status?: PasswordSetupStatus) {
 export function AdminPage() {
   const stats = useQuery(api.admin.stats) as AdminStats | undefined;
   const users = useQuery(api.users.list) as AdminUser[] | undefined;
+  const payProfiles = useQuery(api.finance.listWorkerPayProfiles) as WorkerPayProfile[] | undefined;
   const updateUser = useMutation(api.users.update);
+  const upsertWorkerPayProfile = useMutation(api.finance.upsertWorkerPayProfile);
   const createStaffAccount = useAction(api.users.createStaffAccount);
   const resendStaffInvite = useAction(api.users.resendStaffInvite);
 
   const [savingUserId, setSavingUserId] = useState<Id<"users"> | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const [sendingInviteUserId, setSendingInviteUserId] = useState<Id<"users"> | null>(null);
+  const [savingPayProfileUserId, setSavingPayProfileUserId] = useState<Id<"users"> | null>(null);
 
   const sortedUsers = useMemo(() => {
     return (users ?? []).slice().sort((a, b) => a.email.localeCompare(b.email));
   }, [users]);
+
+  const payProfileByUserId = useMemo(() => {
+    return new Map((payProfiles ?? []).map((profile) => [profile.userId, profile] as const));
+  }, [payProfiles]);
 
   async function handleUserUpdate(
     userId: Id<"users">,
@@ -125,9 +141,7 @@ export function AdminPage() {
       })) as StaffInviteResult;
       form.reset();
       toast.success(
-        result.inviteSent
-          ? "Staff account created and invite sent"
-          : "Staff account created"
+        result.inviteSent ? "Staff account created and invite sent" : "Staff account created"
       );
       if (result.inviteError) {
         toast.error(result.inviteError);
@@ -155,12 +169,49 @@ export function AdminPage() {
     }
   }
 
+  async function handleSavePayProfile(event: FormEvent<HTMLFormElement>, user: AdminUser) {
+    event.preventDefault();
+
+    if (user.role !== "CLEANER") {
+      return;
+    }
+
+    const formData = new FormData(event.currentTarget);
+    const perRoomComboRate = Number(String(formData.get("perRoomComboRate") ?? ""));
+    const unitBonus = Number(String(formData.get("unitBonus") ?? ""));
+
+    if (!Number.isFinite(perRoomComboRate) || perRoomComboRate <= 0) {
+      toast.error("Per-room combo rate must be greater than 0");
+      return;
+    }
+
+    if (!Number.isFinite(unitBonus) || unitBonus < 0) {
+      toast.error("Unit bonus cannot be negative");
+      return;
+    }
+
+    setSavingPayProfileUserId(user._id);
+    try {
+      await upsertWorkerPayProfile({
+        userId: user._id,
+        role: "CLEANER",
+        perRoomComboRate,
+        unitBonus,
+      });
+      toast.success("Cleaner pay profile saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save pay profile");
+    } finally {
+      setSavingPayProfileUserId(null);
+    }
+  }
+
   return (
     <div className="animate-fade-in space-y-5">
       <div>
         <h1 className="text-2xl font-bold">Admin Console</h1>
         <p className="text-sm text-slate-600">
-          Starter controls for operations, staffing, and invite-based onboarding.
+          Starter controls for operations, staffing, onboarding, and cleaner pay setup.
         </p>
       </div>
 
@@ -175,10 +226,10 @@ export function AdminPage() {
         <div className="mb-3">
           <h2 className="text-lg font-bold">Operations Setup</h2>
           <p className="text-sm text-slate-600">
-            Manage property records, recurring service plans, and live dispatch.
+            Manage property records, recurring service plans, dispatch, and the finance module.
           </p>
         </div>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-4">
           <Link className="field-button secondary px-4 py-2 text-center text-sm" to="/schedule">
             Open Dispatch Board
           </Link>
@@ -187,6 +238,9 @@ export function AdminPage() {
           </Link>
           <Link className="field-button primary px-4 py-2 text-center text-sm" to="/admin/properties">
             Open Property Management
+          </Link>
+          <Link className="field-button secondary px-4 py-2 text-center text-sm" to="/finance">
+            Open Finance Hub
           </Link>
         </div>
       </section>
@@ -262,96 +316,144 @@ export function AdminPage() {
           />
         ) : (
           <div className="space-y-2">
-            {sortedUsers.map((user) => (
-              <div key={user._id} className="rounded-xl border border-border p-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="font-semibold">{user.name}</p>
-                    <p className="truncate text-sm text-slate-600">{user.email}</p>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        user.role === "ADMIN"
-                          ? "bg-brand-100 text-brand-700"
-                          : user.role === "CLEANER"
-                            ? "bg-cyan-100 text-cyan-700"
-                            : "bg-slate-100 text-slate-600"
-                      }`}>
-                        {user.role}
-                      </span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        user.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                      }`}>
-                        {user.isActive ? "Active" : "Inactive"}
-                      </span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${onboardingTone(user.passwordSetupStatus)}`}>
-                        {onboardingLabel(user.passwordSetupStatus)}
-                      </span>
+            {sortedUsers.map((user) => {
+              const payProfile = payProfileByUserId.get(user._id);
+
+              return (
+                <div key={user._id} className="rounded-xl border border-border p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold">{user.name}</p>
+                      <p className="truncate text-sm text-slate-600">{user.email}</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          user.role === "ADMIN"
+                            ? "bg-brand-100 text-brand-700"
+                            : user.role === "CLEANER"
+                              ? "bg-cyan-100 text-cyan-700"
+                              : "bg-slate-100 text-slate-600"
+                        }`}>
+                          {user.role}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          user.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                        }`}>
+                          {user.isActive ? "Active" : "Inactive"}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${onboardingTone(user.passwordSetupStatus)}`}>
+                          {onboardingLabel(user.passwordSetupStatus)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {user.provisionedByAdmin ? "Admin provisioned" : "Self-signup"}
+                        {user.createdAt ? ` | ${new Date(user.createdAt).toLocaleDateString()}` : ""}
+                        {user.inviteSentAt ? ` | invite sent ${new Date(user.inviteSentAt).toLocaleString()}` : ""}
+                      </p>
+                      {user.inviteDeliveryError ? (
+                        <p className="mt-1 text-xs text-rose-600">Last invite error: {user.inviteDeliveryError}</p>
+                      ) : null}
+
+                      {user.role === "CLEANER" ? (
+                        <form
+                          key={`${user._id}:${payProfile?._id ?? "none"}:${payProfile?.perRoomComboRate ?? ""}:${payProfile?.unitBonus ?? ""}`}
+                          className="mt-3 rounded-xl border border-border bg-slate-50 p-3"
+                          onSubmit={(event) => void handleSavePayProfile(event, user)}
+                        >
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cleaner Pay Profile</p>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                            <label className="text-sm font-medium text-slate-700">
+                              Per-room combo rate
+                              <input
+                                className="input mt-1"
+                                defaultValue={payProfile ? String(payProfile.perRoomComboRate) : ""}
+                                name="perRoomComboRate"
+                                step="0.01"
+                                type="number"
+                              />
+                            </label>
+                            <label className="text-sm font-medium text-slate-700">
+                              Unit bonus
+                              <input
+                                className="input mt-1"
+                                defaultValue={payProfile ? String(payProfile.unitBonus) : "15"}
+                                name="unitBonus"
+                                step="0.01"
+                                type="number"
+                              />
+                            </label>
+                            <div className="flex items-end">
+                              <button
+                                className="field-button secondary w-full px-4"
+                                disabled={savingPayProfileUserId === user._id}
+                                type="submit"
+                              >
+                                {savingPayProfileUserId === user._id ? "Saving..." : "Save Pay Profile"}
+                              </button>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            Current formula: room combo units x worker rate + unit bonus.
+                          </p>
+                        </form>
+                      ) : null}
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {user.provisionedByAdmin ? "Admin provisioned" : "Self-signup"}
-                      {user.createdAt ? ` | ${new Date(user.createdAt).toLocaleDateString()}` : ""}
-                      {user.inviteSentAt ? ` | invite sent ${new Date(user.inviteSentAt).toLocaleString()}` : ""}
-                    </p>
-                    {user.inviteDeliveryError ? (
-                      <p className="mt-1 text-xs text-rose-600">Last invite error: {user.inviteDeliveryError}</p>
-                    ) : null}
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
-                    <label className="text-sm font-medium text-slate-700">
-                      Role
-                      <select
-                        className="input mt-1"
-                        value={user.role}
-                        disabled={savingUserId === user._id}
-                        onChange={(event) =>
-                          void handleUserUpdate(
-                            user._id,
-                            { role: event.target.value as UserRole },
-                            "Role updated"
-                          )
-                        }
-                      >
-                        <option value="ADMIN">ADMIN</option>
-                        <option value="CLEANER">CLEANER</option>
-                        <option value="INSPECTOR">INSPECTOR</option>
-                      </select>
-                    </label>
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
+                      <label className="text-sm font-medium text-slate-700">
+                        Role
+                        <select
+                          className="input mt-1"
+                          value={user.role}
+                          disabled={savingUserId === user._id}
+                          onChange={(event) =>
+                            void handleUserUpdate(
+                              user._id,
+                              { role: event.target.value as UserRole },
+                              "Role updated"
+                            )
+                          }
+                        >
+                          <option value="ADMIN">ADMIN</option>
+                          <option value="CLEANER">CLEANER</option>
+                          <option value="INSPECTOR">INSPECTOR</option>
+                        </select>
+                      </label>
 
-                    <label className="text-sm font-medium text-slate-700">
-                      Status
-                      <select
-                        className="input mt-1"
-                        value={user.isActive ? "ACTIVE" : "INACTIVE"}
-                        disabled={savingUserId === user._id}
-                        onChange={(event) =>
-                          void handleUserUpdate(
-                            user._id,
-                            { isActive: event.target.value === "ACTIVE" },
-                            "Status updated"
-                          )
-                        }
-                      >
-                        <option value="ACTIVE">ACTIVE</option>
-                        <option value="INACTIVE">INACTIVE</option>
-                      </select>
-                    </label>
+                      <label className="text-sm font-medium text-slate-700">
+                        Status
+                        <select
+                          className="input mt-1"
+                          value={user.isActive ? "ACTIVE" : "INACTIVE"}
+                          disabled={savingUserId === user._id}
+                          onChange={(event) =>
+                            void handleUserUpdate(
+                              user._id,
+                              { isActive: event.target.value === "ACTIVE" },
+                              "Status updated"
+                            )
+                          }
+                        >
+                          <option value="ACTIVE">ACTIVE</option>
+                          <option value="INACTIVE">INACTIVE</option>
+                        </select>
+                      </label>
 
-                    {user.passwordSetupStatus === "INVITED" ? (
-                      <button
-                        className="field-button secondary col-span-2 inline-flex items-center justify-center gap-2 px-4 sm:col-span-1"
-                        disabled={sendingInviteUserId === user._id || !user.isActive}
-                        onClick={() => void handleResendInvite(user)}
-                        type="button"
-                      >
-                        <Mail className="h-4 w-4" />
-                        {sendingInviteUserId === user._id ? "Sending..." : "Resend Invite"}
-                      </button>
-                    ) : null}
+                      {user.passwordSetupStatus === "INVITED" ? (
+                        <button
+                          className="field-button secondary col-span-2 inline-flex items-center justify-center gap-2 px-4 sm:col-span-1"
+                          disabled={sendingInviteUserId === user._id || !user.isActive}
+                          onClick={() => void handleResendInvite(user)}
+                          type="button"
+                        >
+                          <Mail className="h-4 w-4" />
+                          {sendingInviteUserId === user._id ? "Sending..." : "Resend Invite"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -362,8 +464,8 @@ export function AdminPage() {
 function Card({ label, value }: { label: string; value: number | undefined }) {
   return (
     <div className="rounded-2xl border border-border bg-white p-4">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="text-2xl font-bold">{value ?? "..."}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-2 text-3xl font-bold">{value ?? "..."}</p>
     </div>
   );
 }

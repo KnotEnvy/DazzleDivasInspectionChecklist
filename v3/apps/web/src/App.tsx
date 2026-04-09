@@ -43,6 +43,9 @@ const AdminSchedulePage = lazy(() =>
 const AdminTemplatesPage = lazy(() =>
   import("@/routes/AdminTemplatesPage").then((module) => ({ default: module.AdminTemplatesPage }))
 );
+const FinancePage = lazy(() =>
+  import("@/routes/FinancePage").then((module) => ({ default: module.FinancePage }))
+);
 const MySchedulePage = lazy(() =>
   import("@/routes/MySchedulePage").then((module) => ({ default: module.MySchedulePage }))
 );
@@ -87,10 +90,7 @@ export default function App() {
         <Route index element={withSuspense(<DashboardPage />)} />
         <Route path="checklists/new" element={withSuspense(<NewChecklistPage />)} />
         <Route path="checklists/active" element={withSuspense(<ActiveInspectionsPage />)} />
-        <Route
-          path="checklists/:inspectionId"
-          element={withSuspense(<InspectionPage />)}
-        />
+        <Route path="checklists/:inspectionId" element={withSuspense(<InspectionPage />)} />
         <Route path="history" element={withSuspense(<HistoryPage />)} />
         <Route path="my-schedule" element={withSuspense(<MySchedulePage />)} />
         <Route
@@ -122,6 +122,14 @@ export default function App() {
           element={
             <RoleGuard role="ADMIN">
               {withSuspense(<AdminTemplatesPage />)}
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="finance"
+          element={
+            <RoleGuard role="ADMIN">
+              {withSuspense(<FinancePage />)}
             </RoleGuard>
           }
         />

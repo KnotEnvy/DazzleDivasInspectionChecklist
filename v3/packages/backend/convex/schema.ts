@@ -265,7 +265,75 @@ const schema = defineSchema({
   })
     .index("by_room_inspection", ["roomInspectionId"])
     .index("by_inspection", ["inspectionId"]),
+
+
+  financePropertyConfigs: defineTable({
+    propertyId: v.id("properties"),
+    cleaningRevenuePerJob: v.number(),
+    roomComboUnits: v.number(),
+    notes: v.optional(v.string()),
+    updatedAt: v.number(),
+    updatedById: v.id("users"),
+  }).index("by_property", ["propertyId"]),
+
+  workerPayProfiles: defineTable({
+    userId: v.id("users"),
+    role: v.union(v.literal("CLEANER"), v.literal("INSPECTOR")),
+    perRoomComboRate: v.number(),
+    unitBonus: v.number(),
+    effectiveStart: v.number(),
+    effectiveEnd: v.optional(v.number()),
+    isActive: v.boolean(),
+    updatedAt: v.number(),
+    updatedById: v.id("users"),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_role_active", ["userId", "role", "isActive"]),
+
+  jobFinancials: defineTable({
+    jobId: v.id("jobs"),
+    inspectionId: v.optional(v.id("inspections")),
+    propertyId: v.id("properties"),
+    assigneeId: v.optional(v.id("users")),
+    jobType: v.union(
+      v.literal("CLEANING"),
+      v.literal("INSPECTION"),
+      v.literal("DEEP_CLEAN"),
+      v.literal("MAINTENANCE")
+    ),
+    financialScope: v.literal("CLEANING"),
+    revenueAmountSnapshot: v.optional(v.number()),
+    roomComboUnitsSnapshot: v.optional(v.number()),
+    perRoomComboRateSnapshot: v.optional(v.number()),
+    unitBonusSnapshot: v.optional(v.number()),
+    payrollAmountSnapshot: v.optional(v.number()),
+    adminNotes: v.optional(v.string()),
+    status: v.union(v.literal("DRAFT"), v.literal("PENDING_REVIEW"), v.literal("APPROVED")),
+    approvedAt: v.optional(v.number()),
+    approvedById: v.optional(v.id("users")),
+    unlockedAt: v.optional(v.number()),
+    unlockedById: v.optional(v.id("users")),
+    unlockReason: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_job", ["jobId"])
+    .index("by_inspection", ["inspectionId"])
+    .index("by_status", ["status"])
+    .index("by_property", ["propertyId"])
+    .index("by_assignee", ["assigneeId"]),
+
+  financeEvents: defineTable({
+    jobFinancialId: v.id("jobFinancials"),
+    jobId: v.id("jobs"),
+    actorId: v.id("users"),
+    eventType: v.string(),
+    metadata: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_job_financial", ["jobFinancialId"])
+    .index("by_job", ["jobId"]),
 });
 
 export default schema;
+
 

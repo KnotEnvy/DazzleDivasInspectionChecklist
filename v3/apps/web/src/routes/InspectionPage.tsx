@@ -7,6 +7,7 @@ import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { CompletedInspectionReview } from "@/components/CompletedInspectionReview";
+import { InspectionFinancePanel, type InspectionFinanceReview } from "@/components/InspectionFinancePanel";
 import { InspectionRoomPanel } from "@/components/InspectionRoomPanel";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
@@ -123,6 +124,16 @@ type PendingDirectPhotoUpload = {
 
 const MAX_DIRECT_PHOTO_UPLOADS = 2;
 
+function parseFinanceDraftValue(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function createClientUploadId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -155,6 +166,10 @@ export function InspectionPage() {
     api.inspections.getCompletedReview,
     inspectionId && isCompletedAdminReview ? { inspectionId } : "skip"
   ) as CompletedReview | null | undefined;
+  const financeReview = useQuery(
+    api.finance.getInspectionReview,
+    inspectionId && isCompletedAdminReview ? { inspectionId } : "skip"
+  ) as InspectionFinanceReview | null | undefined;
 
   const completeInspection = useMutation(api.inspections.complete);
   const setTaskCompleted = useMutation(api.taskResults.setCompleted);
@@ -164,6 +179,9 @@ export function InspectionPage() {
   const removePhoto = useMutation(api.photos.remove);
   const generatePhotoUploadUrl = useMutation(api.photos.generateUploadUrl);
   const savePhoto = useMutation(api.photos.save);
+  const saveJobFinancialDraft = useMutation(api.finance.saveJobFinancialDraft);
+  const approveJobFinancial = useMutation(api.finance.approveJobFinancial);
+  const unlockJobFinancial = useMutation(api.finance.unlockJobFinancial);
 
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [roomNotes, setRoomNotes] = useState("");
@@ -176,6 +194,9 @@ export function InspectionPage() {
   const [removingPhotoId, setRemovingPhotoId] = useState<Id<"photos"> | null>(null);
   const [completingRoomId, setCompletingRoomId] = useState<Id<"roomInspections"> | null>(null);
   const [completingInspection, setCompletingInspection] = useState(false);
+  const [savingFinance, setSavingFinance] = useState(false);
+  const [approvingFinance, setApprovingFinance] = useState(false);
+  const [unlockingFinance, setUnlockingFinance] = useState(false);
   const lastHydratedRoomNotes = useRef("");
   const lastHydratedRoomId = useRef<string | null>(null);
   const lastHydratedInspectionNotes = useRef("");
@@ -694,6 +715,83 @@ export function InspectionPage() {
     }
   }
 
+  async function handleSaveFinanceDraft(draft: {
+    revenueAmount: string;
+    roomComboUnits: string;
+    perRoomComboRate: string;
+    unitBonus: string;
+    adminNotes: string;
+  }) {
+    if (!financeReview) {
+      return;
+    }
+
+    setSavingFinance(true);
+    try {
+      await saveJobFinancialDraft({
+        jobId: financeReview.jobId as Id<"jobs">,
+        revenueAmount: parseFinanceDraftValue(draft.revenueAmount),
+        roomComboUnits: parseFinanceDraftValue(draft.roomComboUnits),
+        perRoomComboRate: parseFinanceDraftValue(draft.perRoomComboRate),
+        unitBonus: parseFinanceDraftValue(draft.unitBonus),
+        adminNotes: draft.adminNotes.trim() || undefined,
+      });
+      toast.success("Finance draft saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save finance draft");
+    } finally {
+      setSavingFinance(false);
+    }
+  }
+
+  async function handleApproveFinance(draft: {
+    revenueAmount: string;
+    roomComboUnits: string;
+    perRoomComboRate: string;
+    unitBonus: string;
+    adminNotes: string;
+  }) {
+    if (!financeReview) {
+      return;
+    }
+
+    setApprovingFinance(true);
+    try {
+      await approveJobFinancial({
+        jobId: financeReview.jobId as Id<"jobs">,
+        revenueAmount: parseFinanceDraftValue(draft.revenueAmount),
+        roomComboUnits: parseFinanceDraftValue(draft.roomComboUnits),
+        perRoomComboRate: parseFinanceDraftValue(draft.perRoomComboRate),
+        unitBonus: parseFinanceDraftValue(draft.unitBonus),
+        adminNotes: draft.adminNotes.trim() || undefined,
+      });
+      toast.success("Finance approved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to approve finance");
+    } finally {
+      setApprovingFinance(false);
+    }
+  }
+
+  async function handleUnlockFinance(reason: string) {
+    if (!financeReview) {
+      return;
+    }
+
+    setUnlockingFinance(true);
+    try {
+      await unlockJobFinancial({
+        jobId: financeReview.jobId as Id<"jobs">,
+        reason,
+      });
+      toast.success("Finance approval unlocked");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to unlock finance approval");
+    } finally {
+      setUnlockingFinance(false);
+    }
+  }
+
   async function handleCompleteInspection() {
     if (!inspectionId) {
       return;
@@ -745,7 +843,7 @@ export function InspectionPage() {
   }
 
   if (isCompletedAdminReview) {
-    if (completedReview === undefined) {
+    if (completedReview === undefined || financeReview === undefined) {
       return (
         <div className="space-y-4">
           <div className="skeleton h-6 w-2/3 rounded" />
@@ -775,6 +873,16 @@ export function InspectionPage() {
             Back to History
           </Link>
         </div>
+
+        <InspectionFinancePanel
+          approving={approvingFinance}
+          onApprove={handleApproveFinance}
+          onSave={handleSaveFinanceDraft}
+          onUnlock={handleUnlockFinance}
+          review={financeReview}
+          saving={savingFinance}
+          unlocking={unlockingFinance}
+        />
 
         <CompletedInspectionReview review={completedReview} />
       </div>
@@ -1058,6 +1166,8 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+
 
 
 

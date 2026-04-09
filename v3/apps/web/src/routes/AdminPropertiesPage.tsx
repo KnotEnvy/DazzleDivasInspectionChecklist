@@ -111,6 +111,14 @@ type PropertyAssignment = {
   user?: AssignmentUser | null;
 };
 
+type PropertyFinanceConfig = {
+  _id: Id<"financePropertyConfigs">;
+  propertyId: Id<"properties">;
+  cleaningRevenuePerJob: number;
+  roomComboUnits: number;
+  notes?: string;
+};
+
 const weekdayLabels: Array<{ value: number; label: string }> = [
   { value: 0, label: "Sun" },
   { value: 1, label: "Mon" },
@@ -133,6 +141,31 @@ function parseOptionalCount(value: string) {
   }
 
   return Math.floor(parsed);
+}
+
+function deriveDefaultRoomComboUnits(params: { bedrooms?: number; bathrooms?: number }) {
+  const bedrooms = Math.max(0, params.bedrooms ?? 0);
+  const bathrooms = Math.max(0, params.bathrooms ?? 0);
+
+  if (bedrooms === 0 && bathrooms === 0) {
+    return undefined;
+  }
+
+  return Math.round(((bedrooms + bathrooms) / 2) * 100) / 100;
+}
+
+function parseOptionalDecimal(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.round(parsed * 100) / 100;
 }
 
 function buildOptionalField<T>(key: string, value: T | undefined) {
@@ -217,6 +250,10 @@ export function AdminPropertiesPage() {
   const createProperty = useMutation(api.properties.create);
   const updateProperty = useMutation(api.properties.update);
   const archiveProperty = useMutation(api.properties.archive);
+  const propertyFinanceConfigs = useQuery(api.finance.listPropertyConfigs) as
+    | PropertyFinanceConfig[]
+    | undefined;
+  const upsertPropertyConfig = useMutation(api.finance.upsertPropertyConfig);
   const createPlan = useMutation(api.servicePlans.create);
   const setPlanActive = useMutation(api.servicePlans.setActive);
   const setPlanDefaultAssignee = useMutation(api.servicePlans.setDefaultAssignee);
@@ -236,6 +273,9 @@ export function AdminPropertiesPage() {
     accessInstructions: "",
     entryMethod: "",
     serviceNotes: "",
+    cleaningRevenuePerJob: "",
+    roomComboUnits: "",
+    financeNotes: "",
   });
 
   const selectedProperty = useMemo(() => {
@@ -254,6 +294,19 @@ export function AdminPropertiesPage() {
     entryMethod: "",
     serviceNotes: "",
   });
+  const [financeForm, setFinanceForm] = useState({
+    cleaningRevenuePerJob: "",
+    roomComboUnits: "",
+    notes: "",
+  });
+
+  const selectedPropertyFinanceConfig = useMemo(() => {
+    if (!selectedProperty) {
+      return null;
+    }
+
+    return (propertyFinanceConfigs ?? []).find((config) => config.propertyId === selectedProperty._id) ?? null;
+  }, [propertyFinanceConfigs, selectedProperty]);
 
   const selectedPropertyFormDefaults = useMemo<PropertyFormState | null>(() => {
     if (!selectedProperty) {
@@ -321,6 +374,34 @@ export function AdminPropertiesPage() {
       return selectedPropertyFormDefaults;
     });
   }, [selectedPropertyFormDefaults]);
+
+  useEffect(() => {
+    if (!selectedProperty) {
+      setFinanceForm({
+        cleaningRevenuePerJob: "",
+        roomComboUnits: "",
+        notes: "",
+      });
+      return;
+    }
+
+    const derivedRoomComboUnits = deriveDefaultRoomComboUnits({
+      bedrooms: selectedProperty.bedrooms,
+      bathrooms: selectedProperty.bathrooms,
+    });
+
+    setFinanceForm({
+      cleaningRevenuePerJob: selectedPropertyFinanceConfig
+        ? String(selectedPropertyFinanceConfig.cleaningRevenuePerJob)
+        : "",
+      roomComboUnits: selectedPropertyFinanceConfig
+        ? String(selectedPropertyFinanceConfig.roomComboUnits)
+        : derivedRoomComboUnits !== undefined
+          ? String(derivedRoomComboUnits)
+          : "",
+      notes: selectedPropertyFinanceConfig?.notes ?? "",
+    });
+  }, [selectedProperty, selectedPropertyFinanceConfig]);
 
   const jobsWindow = useMemo(() => {
     const now = Date.now();
@@ -442,8 +523,32 @@ export function AdminPropertiesPage() {
     event.preventDefault();
     const bedrooms = parseOptionalCount(createForm.bedrooms);
     const bathrooms = parseOptionalCount(createForm.bathrooms);
+    const cleaningRevenuePerJob = parseOptionalDecimal(createForm.cleaningRevenuePerJob);
+    const roomComboUnitsInput = parseOptionalDecimal(createForm.roomComboUnits);
     if (bedrooms === null || bathrooms === null) {
       toast.error("Bedrooms and bathrooms must be positive numbers when provided");
+      return;
+    }
+
+    if (cleaningRevenuePerJob === null || roomComboUnitsInput === null) {
+      toast.error("Cleaning revenue and room combo units must be positive numbers when provided");
+      return;
+    }
+
+    const derivedRoomComboUnits = deriveDefaultRoomComboUnits({ bedrooms, bathrooms });
+    const roomComboUnits = roomComboUnitsInput ?? derivedRoomComboUnits;
+    const shouldSaveFinance =
+      cleaningRevenuePerJob !== undefined ||
+      roomComboUnits !== undefined ||
+      createForm.financeNotes.trim().length > 0;
+
+    if (shouldSaveFinance && cleaningRevenuePerJob === undefined) {
+      toast.error("Enter a cleaning revenue per job before saving property finance settings");
+      return;
+    }
+
+    if (shouldSaveFinance && roomComboUnits === undefined) {
+      toast.error("Set room combo units or provide bedrooms and bathrooms for this property");
       return;
     }
 
@@ -466,6 +571,15 @@ export function AdminPropertiesPage() {
         ...buildOptionalField("serviceNotes", createForm.serviceNotes.trim() || undefined),
       });
 
+      if (shouldSaveFinance && cleaningRevenuePerJob !== undefined && roomComboUnits !== undefined) {
+        await upsertPropertyConfig({
+          propertyId,
+          cleaningRevenuePerJob,
+          roomComboUnits,
+          notes: createForm.financeNotes.trim() || undefined,
+        });
+      }
+
       toast.success("Property created");
       setCreateForm({
         name: "",
@@ -478,6 +592,9 @@ export function AdminPropertiesPage() {
         accessInstructions: "",
         entryMethod: "",
         serviceNotes: "",
+        cleaningRevenuePerJob: "",
+        roomComboUnits: "",
+        financeNotes: "",
       });
       setSelectedPropertyId(propertyId);
     } catch (error) {
@@ -579,6 +696,40 @@ export function AdminPropertiesPage() {
       toast.success("Assignment removed");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to remove assignment");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSavePropertyFinance() {
+    if (!selectedPropertyId) {
+      return;
+    }
+
+    const cleaningRevenuePerJob = Number(financeForm.cleaningRevenuePerJob);
+    const roomComboUnits = Number(financeForm.roomComboUnits);
+
+    if (!Number.isFinite(cleaningRevenuePerJob) || cleaningRevenuePerJob <= 0) {
+      toast.error("Cleaning revenue per job must be greater than 0");
+      return;
+    }
+
+    if (!Number.isFinite(roomComboUnits) || roomComboUnits <= 0) {
+      toast.error("Room combo units must be greater than 0");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await upsertPropertyConfig({
+        propertyId: selectedPropertyId,
+        cleaningRevenuePerJob,
+        roomComboUnits,
+        notes: financeForm.notes.trim() || undefined,
+      });
+      toast.success("Property finance settings saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save property finance settings");
     } finally {
       setIsSaving(false);
     }
@@ -857,6 +1008,60 @@ export function AdminPropertiesPage() {
                 }
               />
             </label>
+            <div className="rounded-2xl border border-border bg-slate-50 p-4">
+              <div className="mb-3">
+                <h3 className="text-base font-bold">Cleaning Finance</h3>
+                <p className="text-sm text-slate-600">
+                  Optionally save the revenue rate and room combo units when you create the property.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Cleaning revenue per job
+                  <input
+                    className="input mt-1"
+                    value={createForm.cleaningRevenuePerJob}
+                    onChange={(event) =>
+                      setCreateForm((current) => ({ ...current, cleaningRevenuePerJob: event.target.value }))
+                    }
+                    step="0.01"
+                    type="number"
+                    placeholder="Optional"
+                  />
+                </label>
+                <label className="block text-sm font-semibold text-slate-700">
+                  Room combo units
+                  <input
+                    className="input mt-1"
+                    value={createForm.roomComboUnits}
+                    onChange={(event) =>
+                      setCreateForm((current) => ({ ...current, roomComboUnits: event.target.value }))
+                    }
+                    step="0.5"
+                    type="number"
+                    placeholder={(() => {
+                      const bedrooms = parseOptionalCount(createForm.bedrooms);
+                      const bathrooms = parseOptionalCount(createForm.bathrooms);
+                      const derived =
+                        bedrooms !== null && bathrooms !== null
+                          ? deriveDefaultRoomComboUnits({ bedrooms, bathrooms })
+                          : undefined;
+                      return derived !== undefined ? `Suggested: ${derived}` : "Optional";
+                    })()}
+                  />
+                </label>
+              </div>
+              <label className="mt-3 block text-sm font-semibold text-slate-700">
+                Finance notes
+                <textarea
+                  className="input mt-1 min-h-20"
+                  value={createForm.financeNotes}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, financeNotes: event.target.value }))
+                  }
+                />
+              </label>
+            </div>
             <button className="field-button primary px-4" disabled={isSaving} type="submit">
               Create Property
             </button>
@@ -1115,6 +1320,66 @@ export function AdminPropertiesPage() {
                 value={editForm.serviceNotes}
               />
             </label>
+            <div className="rounded-2xl border border-border bg-slate-50 p-4">
+              <div className="mb-3">
+                <h3 className="text-base font-bold">Cleaning Finance</h3>
+                <p className="text-sm text-slate-600">
+                  Set the revenue earned per clean and the room combo units that drive cleaner payroll.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Cleaning revenue per job
+                  <input
+                    className="input mt-1"
+                    onChange={(event) =>
+                      setFinanceForm((current) => ({ ...current, cleaningRevenuePerJob: event.target.value }))
+                    }
+                    step="0.01"
+                    type="number"
+                    value={financeForm.cleaningRevenuePerJob}
+                  />
+                </label>
+                <label className="block text-sm font-semibold text-slate-700">
+                  Room combo units
+                  <input
+                    className="input mt-1"
+                    onChange={(event) =>
+                      setFinanceForm((current) => ({ ...current, roomComboUnits: event.target.value }))
+                    }
+                    step="0.5"
+                    type="number"
+                    value={financeForm.roomComboUnits}
+                  />
+                </label>
+              </div>
+              <label className="mt-3 block text-sm font-semibold text-slate-700">
+                Finance notes
+                <textarea
+                  className="input mt-1 min-h-20"
+                  onChange={(event) =>
+                    setFinanceForm((current) => ({ ...current, notes: event.target.value }))
+                  }
+                  value={financeForm.notes}
+                />
+              </label>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  className="field-button secondary px-4"
+                  disabled={isSaving}
+                  onClick={() => void handleSavePropertyFinance()}
+                  type="button"
+                >
+                  Save Finance Settings
+                </button>
+                {!selectedPropertyFinanceConfig && financeForm.roomComboUnits ? (
+                  <span className="rounded-full bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700">
+                    Using property geometry default until saved
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
             <button
               className="field-button primary px-4"
               disabled={isSaving}

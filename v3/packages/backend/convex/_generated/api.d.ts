@@ -11,10 +11,12 @@
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as devTools from "../devTools.js";
+import type * as finance from "../finance.js";
 import type * as http from "../http.js";
 import type * as inspections from "../inspections.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_checklistTemplates from "../lib/checklistTemplates.js";
+import type * as lib_finance from "../lib/finance.js";
 import type * as lib_inspectionMetrics from "../lib/inspectionMetrics.js";
 import type * as lib_inspectionReporting from "../lib/inspectionReporting.js";
 import type * as lib_jobDeletion from "../lib/jobDeletion.js";
@@ -43,10 +45,12 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
   devTools: typeof devTools;
+  finance: typeof finance;
   http: typeof http;
   inspections: typeof inspections;
   jobs: typeof jobs;
   "lib/checklistTemplates": typeof lib_checklistTemplates;
+  "lib/finance": typeof lib_finance;
   "lib/inspectionMetrics": typeof lib_inspectionMetrics;
   "lib/inspectionReporting": typeof lib_inspectionReporting;
   "lib/jobDeletion": typeof lib_jobDeletion;

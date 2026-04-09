@@ -6,6 +6,7 @@ import {
   ClipboardList,
   ClipboardPenLine,
   Clock3,
+  DollarSign,
   House,
   MoreHorizontal,
   Shield,
@@ -158,6 +159,16 @@ export function AppShell() {
             <ClipboardPenLine className="mr-1 inline-block h-4 w-4" /> Templates
           </NavLink>
         )}
+        {isAdmin && (
+          <NavLink
+            to="/finance"
+            className={({ isActive }) =>
+              `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
+            }
+          >
+            <DollarSign className="mr-1 inline-block h-4 w-4" /> Finance
+          </NavLink>
+        )}
       </nav>
 
       <main className="glass-panel flex-1 p-4 lg:p-6">
@@ -221,6 +232,14 @@ export function AppShell() {
                     role="menuitem"
                   >
                     <ClipboardPenLine className="mr-2 inline-block h-4 w-4" /> Templates
+                  </NavLink>
+                  <NavLink
+                    to="/finance"
+                    className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-brand-50"
+                    onClick={() => setMoreOpen(false)}
+                    role="menuitem"
+                  >
+                    <DollarSign className="mr-2 inline-block h-4 w-4" /> Finance
                   </NavLink>
                   <button
                     className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50"

@@ -10,6 +10,7 @@ type CompletedInspection = {
   completedAt?: number;
   propertyName: string;
   type: string;
+  assigneeName?: string;
   issueCount?: number;
 };
 
@@ -74,6 +75,9 @@ function HistorySection({
                     <p className="font-semibold">{item.propertyName}</p>
                     <p className="mt-1 text-sm text-slate-600">
                       {item.type} | Finished {formatCompletionTime(completedAt, referenceDate)}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Cleaner: {item.assigneeName?.trim() || "Unassigned"}
                     </p>
                   </div>
                   {(item.issueCount ?? 0) > 0 ? (
