@@ -1,97 +1,107 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: April 1, 2026
+Updated: April 8, 2026
 
 ## Purpose
 This is the active high-level handoff for the next working team.
-The app is live in production with real business data and real field usage.
+The app is live in production with real business data, real staff usage, and a newly added finance workflow that admins are expected to rely on.
 Treat this repository like operating infrastructure, not a rebuild sandbox.
 
 ## Current Product State
 ### Live and working
 - Production auth runs through Convex Auth.
 - Admins manage staff, properties, templates, schedules, recurring plans, and disposable jobs.
-- Cleaners and inspectors complete real field checklists.
-- Admin completed-checklist review is live.
+- Cleaners and inspectors complete field checklists room by room.
+- Completed-work review is live for admins.
 - Photo review and iPhone-friendly save/export flows are live.
-- Offline queue/replay is live and has already been used in practice.
-- The first full day with all staff accounts active completed successfully after the latest production fixes.
+- Offline queue/replay is live and remains business-critical for field use.
+- The finance module is now live for admin operations.
+
+### Finance v1 is now part of the core app
+The new finance section is not a prototype stub. It is the first real back-office layer built on top of jobs/checklists.
+
+Current finance behavior:
+- admin-only `Finance` tab exists in the main app shell
+- finance includes `Overview`, `Payroll`, `Revenue`, and `Jobs` views
+- payroll weeks run Thursday through Wednesday
+- weekly payroll rows show the date the clean was performed
+- properties store their own finance config, not one shared global setting
+- property creation supports setting finance defaults at create time
+- cleaners can have pay profiles with room-combo rate and unit bonus
+- completed checklist review includes a finance panel for draft review, approval, and unlock
+- revenue/payroll stay live-derived for unapproved work and become locked snapshots once approved
+- finance is currently cleaning-focused and admin-facing; exports and broader accounting workflows are still future work
 
 ### Operating reality
 - There is real production data.
 - Do not wipe production data.
 - Do not delete templates unless explicitly requested.
 - Any schema/auth/env change must be treated as a rollout change.
-- Cloudflare Pages and Convex deploy separately. Do not assume a frontend deploy updated production backend behavior.
-- Convex production is warning that the project is above Free plan limits. Bandwidth, storage, and usage headroom are active operational concerns.
+- Cloudflare Pages and Convex deploy separately. Do not assume a frontend deploy updated backend behavior.
+- Convex production is warning that the project is above or near Free plan limits. Bandwidth, storage, and usage headroom are active operational concerns.
 
-## Source Of Truth
-Current active docs:
-- `README.md`
-- `FINAL_TEAM_HANDOFF.md`
-- `NEXT_TEAM_HANDOFF.md`
+## What Changed Since The Previous Handoff
+### Checklist execution and field workflow
+- A job-linked checklist can only be started on the day it is due or later.
+- Start is blocked before 7:00 AM in the property's local timezone.
+- Cleaners can now have up to 3 active checklists.
+- Inspectors can now have up to 5 active checklists.
+- Step 3A (`Room Notes`) was compacted so it collapses into the heading only.
+- On Android, `Add Photo` now uses a camera-targeted capture path and a separate gallery option.
+- Marking a room complete now scrolls to the next room in list order without auto-expanding it.
 
-Historical setup and checkpoint docs live in `archive/` and should be treated as reference only.
+### Admin/history quality-of-life updates
+- `History -> Finished Today` now shows the cleaner name at a glance.
+- Finance property settings were fixed to be truly per-property and to rehydrate correctly when switching between properties.
 
-## Recent Production Fixes That Matter
-### Dispatch and turnover operations
-- Quick Add Turnover now supports B2B jobs.
-- B2B jobs automatically set the guest-arrival deadline to 4:00 PM on the same day.
-- Quick Add defaults to a 10:00 AM start and automatically sets the end four hours later.
-- Cleaners can now be assigned multiple overlapping jobs in dispatch.
-- The server still enforces one active checklist at a time for a worker.
-- Turnover creation now uses a two-step confirmation to reduce accidental incomplete jobs.
+### Finance rollout
+- Admin-only finance reporting and approval is now wired into the product.
+- Property finance settings and cleaner pay profiles are editable in the admin UI.
+- Job financial review/approval is embedded in completed checklist review.
+- Thursday-to-Wednesday weekly payroll reporting is the current business rule.
 
-### Production incidents resolved
-- `users:listActiveStaff` crashed production because the query was brittle against bad or legacy user data. It was hardened server-side.
-- Dispatch reassignment still blocked overlapping cleaner jobs even after create/reschedule rules were relaxed. `jobs.reassign` was patched in production.
-- Mobile photo uploads could appear to save, then disappear, while outbox conflicts accumulated. The frontend sync path was hardened so retryable photo failures stay retryable and conflicted local photos remain visible in the checklist.
-
-### Deployment lesson repeated again
-- Some fixes were backend-only, some frontend-only, and some required both. The next team must verify the deployment surface for every change before rollout is called complete.
-
-## Priority Workstreams
-### 1. Mobile checklist and photo confidence
-Primary goal: make field workers trust what they just captured.
+## Priority Workstreams For The Next Team
+### 1. Cleaner/admin workflow polish from real usage
+Primary goal: improve daily speed and clarity without changing the underlying business workflow casually.
 
 Focus:
-- real-device testing on iPhone with weak connectivity
-- confidence messaging during background photo upload
-- conflict recovery that makes sense to non-technical cleaners
-- avoiding UI states where recently captured evidence appears to vanish
+- cleaner friction in checklist execution
+- admin friction in dispatch, review, and finance flows
+- small, high-signal reductions in taps, confusion, and missed context
+- preserving current workflow shape while making it more forgiving and more obvious
 
-### 2. Dispatch and admin throughput
-Primary goal: improve operator speed without changing the real business workflow casually.
-
-Focus:
-- same-day turnover visibility
-- B2B clarity in admin schedule and worker schedule views
-- assignment speed for cleaners carrying multiple same-time jobs
-- small reductions in accidental admin actions
-
-### 3. Auth, roster, and production hardening
-Primary goal: keep user management boring and reliable.
+### 2. Finance reliability and operational usefulness
+Primary goal: make finance trustworthy enough that admins stop maintaining shadow spreadsheets.
 
 Focus:
-- invite email delivery
-- password setup completion state
-- accurate admin roster status
-- defensive handling of legacy or malformed user data
+- edge cases in payroll/revenue review
+- clearer status distinctions between forecast, pending review, and approved
+- better filtering, summaries, and audit clarity
+- future export/reporting needs only after the current approval flow feels stable
+
+### 3. Mobile checklist and photo confidence
+Primary goal: make field workers trust what they just captured and completed.
+
+Focus:
+- real-device testing on both iPhone and Android
+- confidence messaging during capture/upload/retry
+- weak-connectivity behavior that feels obvious to non-technical cleaners
+- protecting the current offline queue/replay stability
 
 ### 4. Deployment and rollout discipline
 Primary goal: stop production drift between Cloudflare and Convex.
 
 Rule:
 - Any schema-backed UI change is not done until Convex production is deployed and verified.
-- Any web-only change is not done until Cloudflare/frontend production is deployed and smoke-checked.
+- Any web-only change is not done until the frontend deploy is live and smoke-checked.
 
 ### 5. Convex usage and capacity
-Primary goal: keep the app online and responsive under growing real usage.
+Primary goal: keep the app online and responsive under real usage growth.
 
 Focus:
 - inspect Convex bandwidth, storage, and function usage in the dashboard
-- understand what photos, exports, and query volume cost in practice
-- decide whether to reduce usage, change behavior, or move off the Free plan immediately
+- understand the cost of photos, finance queries, and history/reporting volume
+- decide whether to reduce usage or move plans before growth forces the decision
 
 ## Validation Standard
 Before shipping meaningful changes, validate:
@@ -103,17 +113,20 @@ Before shipping meaningful changes, validate:
 - Cleaner and inspector schedule access
 - Quick Add Turnover including B2B behavior
 - Assign multiple same-time jobs to the same cleaner in dispatch
-- Start only one active checklist at a time for a worker
-- Checklist completion with photos
-- Rapid successive photo capture on a real phone
+- Checklist start gating for future jobs and pre-7:00 AM attempts
+- Cleaner active-checklist limit of 3 and inspector limit of 5
+- Checklist completion with photos on a real phone where possible
+- Android camera capture flow
 - Conflict recovery and offline queue behavior for at least one worker scenario
 - Admin review of completed work
-- Photo export/save flow
-- Property create/edit including Client / Account
+- Finance approval/unlock on a completed job
+- Payroll totals and Thursday-through-Wednesday grouping
+- Property create/edit including finance config
+- History `Finished Today` cleaner attribution
 
 ## Recommended Next Moves
-1. Build the next enhancement batch from real dispatch and field usage, not speculation.
-2. Re-run mobile photo QA on a real iPhone in weak connectivity conditions before changing that flow again.
-3. Audit Convex production usage and plan headroom before the next photo-heavy or query-heavy feature batch.
-4. Keep fixes narrow and verify both frontend and backend deploy needs before calling rollout complete.
-
+1. Build the next enhancement batch from real cleaner/admin feedback, not speculation.
+2. Keep finance changes narrow until admins trust the current numbers and approval flow day to day.
+3. Re-run real-device photo QA on both iPhone and Android before changing capture flows again.
+4. Audit Convex production usage before the next reporting-heavy or photo-heavy batch.
+5. Keep fixes additive and always verify whether the rollout needs frontend deploy, Convex deploy, or both.

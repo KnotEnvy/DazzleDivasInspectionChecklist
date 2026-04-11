@@ -1,34 +1,38 @@
 # Dazzle Divas v3
 
-Updated: April 1, 2026
+Updated: April 8, 2026
 
 ## Status
-v3 is the active production app for Dazzle Divas field operations.
+`v3` is the active production app for Dazzle Divas field operations and back-office management.
 
-The app is now in daily use across active staff accounts. This repository should be treated as a live production codebase with real operational data, not as a rebuild sandbox.
+This codebase now supports live daily operations across scheduling, checklist execution, completed-work review, and the first production finance workflow. Treat it like business infrastructure with real production data, not as a sandbox for broad rewrites.
 
 ## Production Summary
-Currently live and working:
+Currently live and actively used:
 - admin staffing, property, template, schedule, and disposable-job management
 - cleaner and inspector checklist execution
-- issue notes and proof photo capture
-- admin completed-checklist review
-- photo save/download flows, including iPhone-sized exports
-- offline queueing and replay
+- proof photo capture and room-level notes
+- admin completed-checklist review and photo saving/export
+- offline queueing and replay for field work
 - invite-based staff onboarding
+- admin finance tracking for payroll, revenue, and job-level finance review
 
 Recent production improvements that matter:
-- quick-add turnover now supports B2B jobs, default 10:00 AM starts, auto 4-hour windows, cleaner multi-assignment, and a two-step create confirmation
-- admin dispatch now allows assigning the same cleaner to multiple overlapping jobs while still enforcing one active checklist at a time
-- the `users:listActiveStaff` production crash was fixed by hardening staff hydration against brittle data
-- the mobile photo/offline sync path was hardened so retryable upload failures do not get trapped as false conflicts and conflicted local photos stay visible to the worker
+- quick-add turnover supports B2B jobs, default 10:00 AM starts, automatic 4-hour windows, cleaner multi-assignment, and a two-step create confirmation
+- checklist start rules now block future jobs until the due date and only allow starts beginning at 7:00 AM local property time
+- cleaners can have up to 3 active checklists and inspectors up to 5
+- Android workers now get a camera-targeted capture flow instead of being pushed into gallery-only behavior
+- room completion now advances to the next room in list order without auto-expanding it
+- history cards show the cleaner name for finished work
+- finance now includes property-level revenue settings, cleaner pay profiles, job financial review/approval, revenue views, payroll views, and Thursday-through-Wednesday weekly payroll grouping
 
 Current emphasis:
-- fix live production bugs from real field usage
-- improve dispatch/admin throughput without changing workflow shape casually
-- improve mobile checklist and photo confidence on real phones
-- keep production deployment/configuration reliable
-- reduce Convex bandwidth and plan pressure before it affects field operations
+- keep production stable while improving workflows from real cleaner/admin feedback
+- tighten admin throughput and reduce small sources of friction
+- improve field confidence on mobile capture, progress, and completion flows
+- keep finance accurate, understandable, and easy for admins to operate
+- maintain rollout discipline across separate Cloudflare and Convex deploys
+- reduce Convex bandwidth and plan pressure before it affects operations
 
 ## Stack
 - Web: React 19 + Vite 6 + Tailwind 4 + React Router 7
@@ -52,16 +56,17 @@ v3/
 - [NEXT_TEAM_HANDOFF.md](./NEXT_TEAM_HANDOFF.md)
 - [README.md](./README.md)
 
-Older rollout, setup, and checkpoint docs have been moved to `archive/` for local reference only.
+Older rollout, setup, and checkpoint docs live in `archive/` for reference only.
 
 ## Guardrails
 - Do not wipe production data.
 - Do not delete templates unless explicitly requested.
 - Do not break completed-history integrity.
 - Do not break offline queue/replay behavior.
-- Do not make auth/env changes casually.
+- Do not casually change auth, env wiring, or redirect behavior.
 - Do not assume a frontend deploy also updated Convex production.
-- Treat Convex plan-limit and bandwidth warnings as operational issues, not backlog trivia.
+- Treat Convex plan-limit and bandwidth warnings as operational issues.
+- Prefer narrow, additive changes over rewrites.
 
 ## Local Setup
 ```bash
@@ -92,4 +97,3 @@ For rollout smoke coverage:
 ```bash
 bun run smoke:rollout
 ```
-
