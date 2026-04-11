@@ -678,12 +678,21 @@ export const reschedule = mutation({
     jobId: v.id("jobs"),
     scheduledStart: v.number(),
     scheduledEnd: v.number(),
+    isBackToBack: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { actor, job, servicePlan } = await getJobForAdminUpdate(ctx, args.jobId);
+    const nextIsBackToBack = args.isBackToBack ?? (job.isBackToBack === true);
+    const hasTimingChange =
+      job.scheduledStart !== args.scheduledStart || job.scheduledEnd !== args.scheduledEnd;
+    const hasBackToBackChange = nextIsBackToBack !== (job.isBackToBack === true);
 
     if (args.scheduledEnd <= args.scheduledStart) {
       throw new Error("Scheduled end must be after scheduled start");
+    }
+
+    if (nextIsBackToBack && job.jobType !== "CLEANING") {
+      throw new Error("Only cleaning jobs can be marked as B2B");
     }
 
     const requiredRole = requiredAssignmentRoleForJob(job, servicePlan);
@@ -691,7 +700,7 @@ export const reschedule = mutation({
       job.assigneeId &&
       requiredRole !== "CLEANER" &&
       isDispatchActiveStatus(job.status) &&
-      (job.scheduledStart !== args.scheduledStart || job.scheduledEnd !== args.scheduledEnd)
+      hasTimingChange
     ) {
       await assertNoAssigneeConflict(ctx, {
         assigneeId: job.assigneeId,
@@ -701,31 +710,34 @@ export const reschedule = mutation({
       });
     }
 
+    const nextArrivalDeadline = nextIsBackToBack
+      ? buildBackToBackArrivalDeadline(args.scheduledStart)
+      : undefined;
+
     await ctx.db.patch(job._id, {
       scheduledStart: args.scheduledStart,
       scheduledEnd: args.scheduledEnd,
-      ...(job.isBackToBack === true
-        ? {
-            arrivalDeadline: buildBackToBackArrivalDeadline(args.scheduledStart),
-          }
-        : {}),
+      isBackToBack: nextIsBackToBack ? true : undefined,
+      arrivalDeadline: nextArrivalDeadline,
     });
 
-    await recordJobEvent(ctx, {
-      jobId: job._id,
-      actorId: actor._id,
-      eventType: "JOB_RESCHEDULED",
-      metadata: {
-        previousScheduledStart: job.scheduledStart,
-        previousScheduledEnd: job.scheduledEnd,
-        nextScheduledStart: args.scheduledStart,
-        nextScheduledEnd: args.scheduledEnd,
-        nextArrivalDeadline:
-          job.isBackToBack === true
-            ? buildBackToBackArrivalDeadline(args.scheduledStart)
-            : job.arrivalDeadline ?? null,
-      },
-    });
+    if (hasTimingChange || hasBackToBackChange) {
+      await recordJobEvent(ctx, {
+        jobId: job._id,
+        actorId: actor._id,
+        eventType: hasTimingChange ? "JOB_RESCHEDULED" : "JOB_BACK_TO_BACK_UPDATED",
+        metadata: {
+          previousScheduledStart: job.scheduledStart,
+          previousScheduledEnd: job.scheduledEnd,
+          nextScheduledStart: args.scheduledStart,
+          nextScheduledEnd: args.scheduledEnd,
+          previousIsBackToBack: job.isBackToBack === true,
+          nextIsBackToBack,
+          previousArrivalDeadline: job.arrivalDeadline ?? null,
+          nextArrivalDeadline: nextArrivalDeadline ?? null,
+        },
+      });
+    }
 
     return job._id;
   },

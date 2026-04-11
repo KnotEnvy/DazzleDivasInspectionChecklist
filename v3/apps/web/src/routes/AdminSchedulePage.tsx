@@ -346,6 +346,7 @@ export function AdminSchedulePage() {
   const [scheduledStartInput, setScheduledStartInput] = useState("");
   const [scheduledEndInput, setScheduledEndInput] = useState("");
   const [statusInput, setStatusInput] = useState<JobStatus>("SCHEDULED");
+  const [isBackToBackInput, setIsBackToBackInput] = useState(false);
   const [savingAction, setSavingAction] = useState<SavingAction>(null);
   const [quickAssigningJobId, setQuickAssigningJobId] = useState<Id<"jobs"> | null>(null);
   const [quickAssigneeByJobId, setQuickAssigneeByJobId] = useState<
@@ -565,6 +566,7 @@ export function AdminSchedulePage() {
     setScheduledStartInput(toDatetimeLocalValue(selectedJob.scheduledStart));
     setScheduledEndInput(toDatetimeLocalValue(selectedJob.scheduledEnd));
     setStatusInput(selectedJob.status);
+    setIsBackToBackInput(selectedJob.isBackToBack === true);
     setConfirmAction(null);
   }, [selectedJob]);
 
@@ -714,10 +716,11 @@ export function AdminSchedulePage() {
     const hasTimingChange =
       scheduledStartInput !== toDatetimeLocalValue(selectedJob.scheduledStart) ||
       scheduledEndInput !== toDatetimeLocalValue(selectedJob.scheduledEnd);
+    const hasBackToBackChange = (selectedJob.isBackToBack === true) !== isBackToBackInput;
     const hasStatusChange =
       selectedJob.status !== "COMPLETED" && statusInput !== selectedJob.status;
 
-    if (!hasAssignmentChange && !hasTimingChange && !hasStatusChange) {
+    if (!hasAssignmentChange && !hasTimingChange && !hasBackToBackChange && !hasStatusChange) {
       toast("No dispatch changes to save");
       return;
     }
@@ -741,11 +744,12 @@ export function AdminSchedulePage() {
         });
       }
 
-      if (hasTimingChange) {
+      if (hasTimingChange || hasBackToBackChange) {
         await rescheduleJob({
           jobId: selectedJob._id,
           scheduledStart,
           scheduledEnd,
+          isBackToBack: isBackToBackInput,
         });
       }
 
@@ -829,11 +833,13 @@ export function AdminSchedulePage() {
   }
 
   const selectedAssigneeValue = selectedJob?.assignee?._id ?? "";
+  const canEditBackToBack = selectedJob?.jobType === "CLEANING";
   const hasDispatchChanges =
     !!selectedJob &&
     (assigneeId !== selectedAssigneeValue ||
       scheduledStartInput !== toDatetimeLocalValue(selectedJob.scheduledStart) ||
       scheduledEndInput !== toDatetimeLocalValue(selectedJob.scheduledEnd) ||
+      (selectedJob.isBackToBack === true) !== isBackToBackInput ||
       (selectedJob.status !== "COMPLETED" && statusInput !== selectedJob.status));
   const deleteBlockReason = getDeleteBlockReason(selectedJob);
   const canDeleteSelectedJob = !!selectedJob && deleteBlockReason === null;
@@ -1910,6 +1916,26 @@ export function AdminSchedulePage() {
                       </option>
                     ))}
                   </select>
+                </label>
+
+                <label className="block text-sm font-medium text-slate-700">
+                  <span className="flex items-center gap-2">
+                    <input
+                      className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                      checked={isBackToBackInput}
+                      disabled={controlsLocked || !canEditBackToBack}
+                      onChange={(event) => setIsBackToBackInput(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>Back-to-back turnover</span>
+                  </span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {canEditBackToBack
+                      ? isBackToBackInput
+                        ? "B2B keeps the guest arrival deadline locked to 4:00 PM on the scheduled day."
+                        : "Turn this on when a same-day guest arrival makes the clean a B2B turnover."
+                      : "Only cleaning jobs can be upgraded to or removed from B2B."}
+                  </span>
                 </label>
 
                 {confirmAction === "cancelStatus" ? (
