@@ -42,6 +42,8 @@ type ScheduleJob = {
   linkedInspectionId?: Id<"inspections">;
   propertyName: string;
   propertyAddress: string;
+  propertyBedrooms?: number;
+  propertyBathrooms?: number;
   status: JobStatus;
   jobType: JobType;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
@@ -72,6 +74,8 @@ type JobDetail = {
   property?: {
     name: string;
     address: string;
+    bedrooms?: number;
+    bathrooms?: number;
     timezone?: string;
     serviceNotes?: string;
     accessInstructions?: string;
@@ -122,6 +126,16 @@ function formatScheduleWindow(start: Date, end: Date) {
 
 function formatOptionalDateTime(timestamp?: number) {
   return timestamp ? new Date(timestamp).toLocaleString() : null;
+}
+
+function formatPropertyRoomCounts(params: { bedrooms?: number; bathrooms?: number }) {
+  if (typeof params.bedrooms !== "number" && typeof params.bathrooms !== "number") {
+    return null;
+  }
+
+  const bedrooms = typeof params.bedrooms === "number" ? params.bedrooms : "?";
+  const bathrooms = typeof params.bathrooms === "number" ? params.bathrooms : "?";
+  return String(bedrooms) + "/" + String(bathrooms);
 }
 
 function summarizeTurnoverIntake(job: {
@@ -383,6 +397,10 @@ export function MySchedulePage() {
     : selectedJob;
   const selectedJobIsMine =
     !!selectedJob?.assigneeId && !!user?._id && selectedJob.assigneeId === user._id;
+  const selectedPropertyRoomCounts = formatPropertyRoomCounts({
+    bedrooms: selectedJobEffective?.property?.bedrooms ?? selectedListJob?.propertyBedrooms,
+    bathrooms: selectedJobEffective?.property?.bathrooms ?? selectedListJob?.propertyBathrooms,
+  });
   const statusControlsLocked =
     !selectedJob ||
     !selectedJobIsMine ||
@@ -527,6 +545,9 @@ export function MySchedulePage() {
               <p className="font-semibold text-slate-900">
                 {selectedJobEffective?.property?.address ?? selectedListJob.propertyAddress}
               </p>
+              {selectedPropertyRoomCounts && (
+                <p className="mt-1 text-slate-500">Rooms: {selectedPropertyRoomCounts}</p>
+              )}
               <p className="mt-1 text-slate-600">
                 Priority: {selectedJobEffective?.priority ?? selectedListJob.priority ?? "MEDIUM"}
                 {(selectedJobEffective?.assignee?.name ?? selectedListJob.assigneeName)
@@ -770,6 +791,9 @@ export function MySchedulePage() {
                   <p className="text-slate-600">
                     {selectedJobEffective.property?.address ?? "No address on file"}
                   </p>
+                  {selectedPropertyRoomCounts && (
+                    <p className="mt-1 text-xs font-medium text-slate-500">Rooms: {selectedPropertyRoomCounts}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5">
                   {(() => {

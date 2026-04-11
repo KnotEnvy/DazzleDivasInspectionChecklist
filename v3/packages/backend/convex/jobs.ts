@@ -179,6 +179,8 @@ async function hydrateJobListItems(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
       linkedInspectionId: job.linkedInspectionId,
       propertyName: property?.name ?? "Unknown property",
       propertyAddress: property?.address ?? "",
+      propertyBedrooms: property?.bedrooms,
+      propertyBathrooms: property?.bathrooms,
       status: job.status,
       jobType: job.jobType,
       priority: job.priority,
