@@ -2,7 +2,7 @@
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
   CalendarDays,
@@ -333,9 +333,11 @@ function buildDefaultCreateForm() {
 
 export function AdminSchedulePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [anchorDate, setAnchorDate] = useState(() => startOfDayLocal(new Date()));
   const [selectedJobId, setSelectedJobId] = useState<Id<"jobs"> | null>(null);
+  const requestedJobId = searchParams.get("jobId") as Id<"jobs"> | null;
   const [assigneeFilter, setAssigneeFilter] = useState<"ALL" | "UNASSIGNED" | Id<"users">>("ALL");
   const [propertyFilter, setPropertyFilter] = useState<"ALL" | Id<"properties">>("ALL");
   const [statusFilter, setStatusFilter] = useState<"ALL" | JobStatus>("ALL");
@@ -515,10 +517,45 @@ export function AdminSchedulePage() {
       setSelectedJobId(null);
       return;
     }
-    if (!selectedJobId || !filteredJobs.some((job) => job._id === selectedJobId)) {
-      setSelectedJobId(filteredJobs[0]._id);
+
+    if (selectedJobId && filteredJobs.some((job) => job._id === selectedJobId)) {
+      return;
     }
-  }, [filteredJobs, selectedJobId]);
+
+    if (requestedJobId && filteredJobs.some((job) => job._id === requestedJobId)) {
+      setSelectedJobId(requestedJobId);
+      return;
+    }
+
+    setSelectedJobId(filteredJobs[0]._id);
+  }, [filteredJobs, requestedJobId, selectedJobId]);
+
+  useEffect(() => {
+    if (jobs === undefined) {
+      return;
+    }
+
+    const currentJobId = searchParams.get("jobId");
+
+    if (selectedJobId) {
+      if (currentJobId === selectedJobId) {
+        return;
+      }
+
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("jobId", selectedJobId);
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+
+    if (!currentJobId) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("jobId");
+    setSearchParams(nextParams, { replace: true });
+  }, [jobs, searchParams, selectedJobId, setSearchParams]);
 
   useEffect(() => {
     if (!selectedJob) {
@@ -1702,7 +1739,7 @@ export function AdminSchedulePage() {
 
         </div>
 
-        <aside className="xl:sticky xl:top-4 xl:self-start rounded-2xl border border-border bg-white p-4">
+        <aside id="dispatch-drawer" className="xl:sticky xl:top-4 xl:self-start rounded-2xl border border-border bg-white p-4">
           <h2 className="mb-3 text-lg font-bold">Dispatch Drawer</h2>
           {!selectedJobId ? (
             <EmptyState
@@ -2034,5 +2071,8 @@ function JobRow({
     </button>
   );
 }
+
+
+
 
 

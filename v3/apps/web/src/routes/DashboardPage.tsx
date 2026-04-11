@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+﻿import { Link } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import {
@@ -62,6 +62,7 @@ type AdminDispatchJob = {
   scheduledEnd: number;
   status: JobStatus;
   jobType: string;
+  linkedInspectionId?: string;
   assigneeId?: string;
   assigneeName?: string | null;
   priority?: string;
@@ -138,6 +139,18 @@ function workerChecklistRank(job: ScheduleJob) {
   }
 
   return 4;
+}
+
+function buildAdminJobDestination(job: Pick<AdminDispatchJob, "_id" | "status" | "linkedInspectionId">) {
+  if (job.status === "IN_PROGRESS" && job.linkedInspectionId) {
+    return `/checklists/${job.linkedInspectionId}`;
+  }
+
+  if (job.status === "COMPLETED") {
+    return job.linkedInspectionId ? `/checklists/${job.linkedInspectionId}` : "/history";
+  }
+
+  return `/schedule?jobId=${job._id}#dispatch-drawer`;
 }
 
 export function DashboardPage() {
@@ -218,7 +231,7 @@ export function DashboardPage() {
 
     return (
       <div className="animate-fade-in space-y-5">
-        {/* ── Header ── */}
+        {/* â”€â”€ Header â”€â”€ */}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
@@ -237,7 +250,7 @@ export function DashboardPage() {
           </p>
         </div>
 
-        {/* ── KPI pills ── */}
+        {/* â”€â”€ KPI pills â”€â”€ */}
         <section className="flex flex-wrap gap-2 text-xs font-semibold">
           <span className="rounded-full bg-brand-50 px-3 py-1.5 text-brand-700">
             {adminTodayJobs.length} jobs today
@@ -265,7 +278,7 @@ export function DashboardPage() {
           </span>
         </section>
 
-        {/* ── Needs Attention (unassigned + blocked) ── */}
+        {/* â”€â”€ Needs Attention (unassigned + blocked) â”€â”€ */}
         {needsAttention.length > 0 && (
           <section className="rounded-2xl border border-amber-300 bg-amber-50/60 p-4">
             <div className="mb-3 flex items-center gap-2">
@@ -309,7 +322,7 @@ export function DashboardPage() {
                   </div>
                   <Link
                     className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800"
-                    to="/schedule"
+                    to={buildAdminJobDestination(job)}
                   >
                     Open in Dispatch <ArrowRight className="h-3 w-3" />
                   </Link>
@@ -319,7 +332,7 @@ export function DashboardPage() {
           </section>
         )}
 
-        {/* ── Today's Operations + Staff On Duty ── */}
+        {/* â”€â”€ Today's Operations + Staff On Duty â”€â”€ */}
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(300px,1fr)]">
           {/* Today's Timeline */}
           <div className="overflow-hidden rounded-2xl border border-border bg-white p-3 sm:p-4">
@@ -352,7 +365,7 @@ export function DashboardPage() {
                     className={`flex items-center gap-2 rounded-xl border border-border p-2 transition hover:border-brand-300 sm:gap-3 sm:p-3 ${
                       urgencyBorderClass(job.scheduledStart)
                     } ${job.isBackToBack ? "bg-rose-50/30" : ""}`}
-                    to="/schedule"
+                    to={buildAdminJobDestination(job)}
                   >
                     <div className="w-12 shrink-0 text-center sm:w-14">
                       <p className="text-xs font-bold text-slate-900 sm:text-sm">
@@ -370,7 +383,7 @@ export function DashboardPage() {
                       <p className="truncate text-xs text-slate-500">
                         {job.isBackToBack ? "B2B Turnover" : job.jobType}
                         {job.assigneeName
-                          ? ` · ${job.assigneeName}`
+                          ? ` Â· ${job.assigneeName}`
                           : ""}
                       </p>
                     </div>
@@ -466,7 +479,7 @@ export function DashboardPage() {
           </div>
         </section>
 
-        {/* ── Week Ahead ── */}
+        {/* â”€â”€ Week Ahead â”€â”€ */}
         <section className="rounded-2xl border border-border bg-white p-4">
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-lg font-bold">Week Ahead</h2>
@@ -535,7 +548,7 @@ export function DashboardPage() {
           )}
         </section>
 
-        {/* ── Active Checklists ── */}
+        {/* â”€â”€ Active Checklists â”€â”€ */}
         <section className="rounded-2xl border border-border bg-white p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-lg font-bold">Active Checklists</h2>
@@ -564,7 +577,7 @@ export function DashboardPage() {
                 >
                   <p className="font-semibold">{inspection.propertyName}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {inspection.type} · {inspection.status}
+                    {inspection.type} Â· {inspection.status}
                   </p>
                 </Link>
               ))}
@@ -572,7 +585,7 @@ export function DashboardPage() {
           )}
         </section>
 
-        {/* ── Quick Actions ── */}
+        {/* â”€â”€ Quick Actions â”€â”€ */}
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <QuickAction
             icon={<CalendarDays className="h-5 w-5" />}
@@ -923,3 +936,7 @@ function QuickAction({
     </Link>
   );
 }
+
+
+
+
