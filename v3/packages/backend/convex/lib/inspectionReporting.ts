@@ -7,6 +7,7 @@
   status: "IN_PROGRESS" | "COMPLETED";
   assigneeName?: string;
   notes?: string;
+  financialApproved?: boolean;
 };
 
 type ReportInspectionLike = HistoryInspectionLike;
@@ -120,11 +121,15 @@ export function buildCompletedPhotoExportFileName(params: {
 
 export function buildCompletedInspectionHistoryItem(
   inspection: HistoryInspectionLike,
-  issueCount: number
+  issueCount: number,
+  options?: {
+    financialApproved?: boolean;
+  }
 ) {
   return {
     ...inspection,
     issueCount,
+    financialApproved: options?.financialApproved === true,
   };
 }
 

@@ -2,7 +2,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
   requireAuth,
   requireAdmin,
@@ -103,6 +103,37 @@ async function assertActiveInspectionCapacity(
   );
 }
 
+async function loadFinancialApprovalByInspectionId(
+  ctx: QueryCtx,
+  inspections: Array<Pick<Doc<"inspections">, "_id" | "type">>
+) {
+  const entries = await Promise.all(
+    inspections.map(async (inspection) => {
+      if (inspection.type !== "CLEANING") {
+        return [inspection._id, false] as const;
+      }
+
+      const linkedJob = await ctx.db
+        .query("jobs")
+        .withIndex("by_linked_inspection", (q) => q.eq("linkedInspectionId", inspection._id))
+        .unique();
+
+      if (!linkedJob) {
+        return [inspection._id, false] as const;
+      }
+
+      const jobFinancial = await ctx.db
+        .query("jobFinancials")
+        .withIndex("by_job", (q) => q.eq("jobId", linkedJob._id))
+        .unique();
+
+      return [inspection._id, jobFinancial?.status === "APPROVED"] as const;
+    })
+  );
+
+  return new Map(entries);
+}
+
 export const listActive = query({
   args: {},
   handler: async (ctx) => {
@@ -144,13 +175,21 @@ export const listCompleted = query({
             .order("desc")
             .collect();
 
+    const financialApprovalByInspectionId = await loadFinancialApprovalByInspectionId(
+      ctx,
+      inspections
+    );
+
     return await Promise.all(
       inspections.map(async (inspection) => {
         return buildCompletedInspectionHistoryItem(
           inspection,
           typeof inspection.issueCount === "number"
             ? inspection.issueCount
-            : await loadInspectionIssueCount(ctx, inspection._id)
+            : await loadInspectionIssueCount(ctx, inspection._id),
+          {
+            financialApproved: financialApprovalByInspectionId.get(inspection._id) === true,
+          }
         );
       })
     );
@@ -179,6 +218,11 @@ export const listCompletedPaginated = query({
             .order("desc")
             .paginate(args.paginationOpts);
 
+    const financialApprovalByInspectionId = await loadFinancialApprovalByInspectionId(
+      ctx,
+      results.page
+    );
+
     return {
       ...results,
       page: await Promise.all(
@@ -187,7 +231,10 @@ export const listCompletedPaginated = query({
             inspection,
             typeof inspection.issueCount === "number"
               ? inspection.issueCount
-              : await loadInspectionIssueCount(ctx, inspection._id)
+              : await loadInspectionIssueCount(ctx, inspection._id),
+            {
+              financialApproved: financialApprovalByInspectionId.get(inspection._id) === true,
+            }
           );
         })
       ),

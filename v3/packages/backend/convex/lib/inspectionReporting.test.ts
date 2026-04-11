@@ -22,6 +22,26 @@ describe("buildCompletedInspectionHistoryItem", () => {
 
     expect(result.propertyName).toBe("Palm House");
     expect(result.issueCount).toBe(2);
+    expect(result.financialApproved).toBe(false);
+  });
+
+  it("can mark a completed history row as financially approved", () => {
+    const result = buildCompletedInspectionHistoryItem(
+      {
+        _id: "inspection-2",
+        _creationTime: Date.UTC(2026, 2, 3),
+        completedAt: Date.UTC(2026, 2, 4),
+        propertyName: "Seabreeze",
+        type: "CLEANING",
+        status: "COMPLETED",
+      },
+      0,
+      {
+        financialApproved: true,
+      }
+    );
+
+    expect(result.financialApproved).toBe(true);
   });
 });
 
