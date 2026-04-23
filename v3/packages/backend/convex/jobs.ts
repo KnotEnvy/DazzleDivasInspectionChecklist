@@ -788,6 +788,67 @@ export const updateStatus = mutation({
   },
 });
 
+export const completeByAdmin = mutation({
+  args: {
+    jobId: v.id("jobs"),
+  },
+  handler: async (ctx, args) => {
+    const { actor, job, property } = await getJobForAdminUpdate(ctx, args.jobId);
+
+    if (job.linkedInspectionId) {
+      throw new Error("Jobs with linked checklists must be completed from the checklist flow");
+    }
+
+    if (job.status === "CANCELLED") {
+      throw new Error("Cancelled jobs cannot be auto-completed");
+    }
+
+    const checklistType = checklistTypeForJobType(job.jobType);
+    if (!checklistType) {
+      throw new Error("This job type cannot be auto-completed into history");
+    }
+
+    const assignee = job.assigneeId ? await ctx.db.get(job.assigneeId) : null;
+    const inspectionAssigneeId = assignee?._id ?? actor._id;
+    const inspectionAssigneeName = assignee?.name ?? actor.name;
+    const completedAt = Date.now();
+
+    const inspectionId = await ctx.db.insert("inspections", {
+      propertyId: job.propertyId,
+      propertyName: property.name,
+      type: checklistType,
+      assigneeId: inspectionAssigneeId,
+      assigneeName: inspectionAssigneeName,
+      createdById: actor._id,
+      status: "COMPLETED",
+      issueCount: 0,
+      completedAt,
+      notes: "Completed from dispatch by admin",
+    });
+
+    await ctx.db.patch(job._id, {
+      linkedInspectionId: inspectionId,
+      status: "COMPLETED",
+      completedAt,
+    });
+
+    await recordJobEvent(ctx, {
+      jobId: job._id,
+      actorId: actor._id,
+      eventType: "JOB_ADMIN_COMPLETED",
+      metadata: {
+        previousStatus: job.status,
+        completedAt,
+        inspectionId,
+        checklistType,
+        source: "admin_dispatch",
+      },
+    });
+
+    return job._id;
+  },
+});
+
 export const remove = mutation({
   args: {
     jobId: v.id("jobs"),

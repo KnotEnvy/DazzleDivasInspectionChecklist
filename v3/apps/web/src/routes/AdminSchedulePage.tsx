@@ -33,6 +33,7 @@ type SavingAction =
   | "status"
   | "saveAll"
   | "checklist"
+  | "complete"
   | "delete"
   | null;
 
@@ -396,6 +397,7 @@ export function AdminSchedulePage() {
   const reassignJob = useMutation(api.jobs.reassign);
   const rescheduleJob = useMutation(api.jobs.reschedule);
   const updateStatus = useMutation(api.jobs.updateStatus);
+  const completeJobByAdmin = useMutation(api.jobs.completeByAdmin);
   const deleteJob = useMutation(api.jobs.remove);
   const createInspection = useMutation(api.inspections.create);
 
@@ -768,6 +770,25 @@ export function AdminSchedulePage() {
     }
   }
 
+  async function handleCompleteJob() {
+    if (!selectedJob) {
+      return;
+    }
+
+    setSavingAction("complete");
+    try {
+      await completeJobByAdmin({
+        jobId: selectedJob._id,
+      });
+      toast.success("Job marked completed");
+      setConfirmAction(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to complete job");
+    } finally {
+      setSavingAction(null);
+    }
+  }
+
   async function handleChecklist() {
     if (!selectedJob) {
       return;
@@ -841,6 +862,18 @@ export function AdminSchedulePage() {
       scheduledEndInput !== toDatetimeLocalValue(selectedJob.scheduledEnd) ||
       (selectedJob.isBackToBack === true) !== isBackToBackInput ||
       (selectedJob.status !== "COMPLETED" && statusInput !== selectedJob.status));
+  const autoCompleteBlockReason = !selectedJob
+    ? "Select a job to complete"
+    : selectedJob.linkedInspectionId
+      ? "Linked checklist jobs must be completed from the checklist flow."
+      : selectedJob.status === "CANCELLED"
+        ? "Cancelled jobs cannot be auto-completed."
+        : selectedJob.status === "COMPLETED"
+          ? "This job is already completed."
+          : selectedJob.property?.isActive === false || selectedJob.property?.isArchived === true
+            ? "Jobs on archived or inactive properties cannot be auto-completed."
+            : null;
+  const canAutoCompleteSelectedJob = !!selectedJob && autoCompleteBlockReason === null;
   const deleteBlockReason = getDeleteBlockReason(selectedJob);
   const canDeleteSelectedJob = !!selectedJob && deleteBlockReason === null;
   const windowLabel =
@@ -1981,6 +2014,43 @@ export function AdminSchedulePage() {
               </section>
 
               {/* Delete — compact */}
+              <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                <p className="text-xs text-emerald-800">
+                  {autoCompleteBlockReason ?? "Use this for owner-completed work that needs to leave dispatch without a checklist or photo review."}
+                </p>
+                {confirmAction === "completeJob" ? (
+                  <div className="animate-slide-up mt-2 flex gap-2">
+                    <button
+                      className="field-button primary flex-1 px-4"
+                      disabled={!canAutoCompleteSelectedJob || savingAction === "complete"}
+                      onClick={() => {
+                        setConfirmAction(null);
+                        void handleCompleteJob();
+                      }}
+                      type="button"
+                    >
+                      {savingAction === "complete" ? "Completing..." : "Confirm Complete"}
+                    </button>
+                    <button
+                      className="field-button ghost flex-1 px-4"
+                      onClick={() => setConfirmAction(null)}
+                      type="button"
+                    >
+                      Keep Open
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="field-button primary mt-2 w-full px-4"
+                    disabled={!canAutoCompleteSelectedJob || savingAction === "complete"}
+                    onClick={() => setConfirmAction("completeJob")}
+                    type="button"
+                  >
+                    Auto-Complete Job
+                  </button>
+                )}
+              </section>
+
               <section className="rounded-xl border border-rose-200 bg-rose-50 p-3">
                 <p className="text-xs text-rose-700">
                   {deleteBlockReason ?? "Remove this dispatch entry. Linked, in-progress, and completed jobs stay protected."}
