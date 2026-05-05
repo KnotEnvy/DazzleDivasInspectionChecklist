@@ -295,6 +295,7 @@ export const create = mutation({
             scheduledStart: job.scheduledStart,
             linkedInspectionId: job.linkedInspectionId,
             assigneeId: job.assigneeId,
+            additionalAssigneeIds: job.additionalAssigneeIds,
           }
         : null,
       propertyId: args.propertyId,
@@ -402,9 +403,17 @@ export const create = mutation({
     }
 
     if (job) {
+      const currentAdditionalAssigneeIds = job.additionalAssigneeIds ?? [];
+      const nextAdditionalAssigneeIds =
+        job.assigneeId || assigneeId === job.assigneeId
+          ? currentAdditionalAssigneeIds
+          : currentAdditionalAssigneeIds.filter((assignedId) => assignedId !== assigneeId);
+
       await ctx.db.patch(job._id, {
         linkedInspectionId: inspectionId,
-        assigneeId,
+        assigneeId: job.assigneeId ?? assigneeId,
+        additionalAssigneeIds:
+          nextAdditionalAssigneeIds.length > 0 ? nextAdditionalAssigneeIds : undefined,
         status: "IN_PROGRESS",
       });
 
@@ -473,6 +482,119 @@ export const complete = mutation({
         createdAt: completedAt,
       });
     }
+  },
+});
+
+export const deleteCompletedFromHistory = mutation({
+  args: {
+    inspectionId: v.id("inspections"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireAdmin(ctx);
+    const reason = args.reason.trim();
+
+    if (reason.length < 10) {
+      throw new Error("Deletion reason must be at least 10 characters");
+    }
+
+    const inspection = await ctx.db.get(args.inspectionId);
+    if (!inspection) {
+      throw new Error("Completed checklist not found");
+    }
+
+    if (inspection.status !== "COMPLETED") {
+      throw new Error("Only completed checklist history can be deleted here");
+    }
+
+    const linkedJobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_linked_inspection", (q) => q.eq("linkedInspectionId", args.inspectionId))
+      .collect();
+    const primaryJob = linkedJobs.sort((left, right) => right._creationTime - left._creationTime)[0];
+
+    await ctx.db.insert("deletedHistoryAudits", {
+      inspectionId: inspection._id,
+      jobId: primaryJob?._id,
+      propertyId: inspection.propertyId,
+      propertyName: inspection.propertyName,
+      checklistType: inspection.type,
+      assigneeId: inspection.assigneeId,
+      assigneeName: inspection.assigneeName,
+      completedAt: inspection.completedAt,
+      deletedById: actor._id,
+      deletedByName: actor.name,
+      reason,
+      deletedAt: Date.now(),
+    });
+
+    for (const job of linkedJobs) {
+      const financials = await ctx.db
+        .query("jobFinancials")
+        .withIndex("by_job", (q) => q.eq("jobId", job._id))
+        .collect();
+
+      for (const financial of financials) {
+        const financeEvents = await ctx.db
+          .query("financeEvents")
+          .withIndex("by_job_financial", (q) => q.eq("jobFinancialId", financial._id))
+          .collect();
+
+        for (const event of financeEvents) {
+          await ctx.db.delete(event._id);
+        }
+
+        await ctx.db.delete(financial._id);
+      }
+
+      const jobEvents = await ctx.db
+        .query("jobEvents")
+        .withIndex("by_job", (q) => q.eq("jobId", job._id))
+        .collect();
+
+      for (const event of jobEvents) {
+        await ctx.db.delete(event._id);
+      }
+
+      await ctx.db.delete(job._id);
+    }
+
+    const photos = await ctx.db
+      .query("photos")
+      .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
+      .collect();
+
+    for (const photo of photos) {
+      await ctx.storage.delete(photo.storageId);
+      await ctx.db.delete(photo._id);
+    }
+
+    const taskResults = await ctx.db
+      .query("taskResults")
+      .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
+      .collect();
+
+    for (const taskResult of taskResults) {
+      await ctx.db.delete(taskResult._id);
+    }
+
+    const roomInspections = await ctx.db
+      .query("roomInspections")
+      .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
+      .collect();
+
+    for (const roomInspection of roomInspections) {
+      await ctx.db.delete(roomInspection._id);
+    }
+
+    await ctx.db.delete(inspection._id);
+
+    return {
+      deletedInspectionId: inspection._id,
+      deletedJobCount: linkedJobs.length,
+      deletedPhotoCount: photos.length,
+      auditReason: reason,
+    };
   },
 });
 

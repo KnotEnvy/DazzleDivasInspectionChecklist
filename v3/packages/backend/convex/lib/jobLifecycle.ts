@@ -133,6 +133,7 @@ export type ChecklistStartJobLike<
   scheduledStart?: number;
   linkedInspectionId?: TInspectionId;
   assigneeId?: TUserId;
+  additionalAssigneeIds?: TUserId[];
 };
 
 export type ChecklistStartActorLike<TUserId extends string = string> = {
@@ -262,19 +263,24 @@ export function validateChecklistStartFromJob<
   }
 
   if (job.linkedInspectionId && params.existingInspectionExists) {
+    const isAssignedWorker =
+      params.actor.role !== "ADMIN" &&
+      (job.assigneeId === params.actor._id ||
+        (job.additionalAssigneeIds ?? []).includes(params.actor._id));
+
     return {
       existingInspectionId: job.linkedInspectionId,
       skipPropertyAssignmentCheck: true,
-      isAssignedWorkerForLinkedJob:
-        params.actor.role !== "ADMIN" && job.assigneeId === params.actor._id,
-      nextAssigneeId: job.assigneeId,
+      isAssignedWorkerForLinkedJob: isAssignedWorker,
+      nextAssigneeId: isAssignedWorker ? params.actor._id : job.assigneeId,
     };
   }
 
   if (
     params.actor.role !== "ADMIN" &&
     job.assigneeId &&
-    job.assigneeId !== params.actor._id
+    job.assigneeId !== params.actor._id &&
+    !(job.additionalAssigneeIds ?? []).includes(params.actor._id)
   ) {
     throw new Error("You are not assigned to this job");
   }
@@ -295,8 +301,15 @@ export function validateChecklistStartFromJob<
     existingInspectionId: undefined,
     skipPropertyAssignmentCheck: true,
     isAssignedWorkerForLinkedJob:
-      params.actor.role !== "ADMIN" && job.assigneeId === params.actor._id,
-    nextAssigneeId: job.assigneeId,
+      params.actor.role !== "ADMIN" &&
+      (job.assigneeId === params.actor._id ||
+        (job.additionalAssigneeIds ?? []).includes(params.actor._id)),
+    nextAssigneeId:
+      params.actor.role !== "ADMIN" &&
+      (job.assigneeId === params.actor._id ||
+        (job.additionalAssigneeIds ?? []).includes(params.actor._id))
+        ? params.actor._id
+        : job.assigneeId,
   };
 }
 

@@ -6,6 +6,8 @@ export type InspectionFinanceReview = {
   inspectionId: string;
   propertyName: string;
   assigneeName: string;
+  assigneeNames?: string[];
+  assignmentCount?: number;
   scheduledStart: number;
   completedAt?: number;
   jobStatus: string;
@@ -95,6 +97,10 @@ export function InspectionFinancePanel(props: {
   }
 
   const locked = review.financeStatus === "APPROVED";
+  const workerLabel =
+    review.assigneeNames && review.assigneeNames.length > 0
+      ? review.assigneeNames.join(" + ")
+      : review.assigneeName;
 
   return (
     <section className="rounded-2xl border border-border bg-white p-4">
@@ -103,6 +109,10 @@ export function InspectionFinancePanel(props: {
           <h2 className="text-lg font-bold">Finance Approval</h2>
           <p className="text-sm text-slate-600">
             Review the revenue and payroll snapshot before this job counts in realized totals.
+          </p>
+          <p className="mt-1 text-xs font-semibold text-brand-700">
+            Workers: {workerLabel}
+            {(review.assignmentCount ?? 1) > 1 ? ` | Split ${review.assignmentCount} ways` : ""}
           </p>
         </div>
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${

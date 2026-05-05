@@ -24,6 +24,8 @@ type FinanceJob = {
   clientLabel?: string;
   assigneeId?: Id<"users">;
   assigneeName: string;
+  assigneeNames?: string[];
+  assignmentCount?: number;
   scheduledStart: number;
   completedAt?: number;
   jobStatus: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "BLOCKED";
@@ -67,10 +69,21 @@ type PayrollWorker = {
     unitBonus?: number;
     payrollAmount?: number;
     revenueAmount?: number;
+    assignmentCount?: number;
   }>;
 };
 
-type FinanceTab = "overview" | "payroll" | "revenue" | "jobs";
+type ClientSummary = {
+  clientLabel: string;
+  forecastRevenue: number;
+  pendingReviewRevenue: number;
+  realizedRevenue: number;
+  approvedPayroll: number;
+  grossMargin: number;
+  jobs: FinanceJob[];
+};
+
+type FinanceTab = "overview" | "payroll" | "revenue" | "clients" | "jobs";
 
 function startOfDay(date: Date) {
   const next = new Date(date);
@@ -140,6 +153,12 @@ function statusTone(status: FinanceJob["financeStatus"]) {
   }
 }
 
+function formatWorkerLabel(job: Pick<FinanceJob, "assigneeName" | "assigneeNames">) {
+  return job.assigneeNames && job.assigneeNames.length > 0
+    ? job.assigneeNames.join(" + ")
+    : job.assigneeName;
+}
+
 export function FinancePage() {
   const today = useMemo(() => startOfDay(new Date()), []);
   const [activeTab, setActiveTab] = useState<FinanceTab>("overview");
@@ -179,6 +198,47 @@ export function FinancePage() {
     () => (jobs ?? []).filter((job) => job.financeStatus === "FORECAST"),
     [jobs]
   );
+  const clientSummaries = useMemo(() => {
+    const summaries = new Map<string, ClientSummary>();
+
+    for (const job of jobs ?? []) {
+      const clientLabel = job.clientLabel?.trim() || "No client label";
+      const existing = summaries.get(clientLabel) ?? {
+        clientLabel,
+        forecastRevenue: 0,
+        pendingReviewRevenue: 0,
+        realizedRevenue: 0,
+        approvedPayroll: 0,
+        grossMargin: 0,
+        jobs: [],
+      };
+
+      if (job.financeStatus === "APPROVED") {
+        existing.realizedRevenue += job.revenueAmount ?? 0;
+        existing.approvedPayroll += job.payrollAmount ?? 0;
+        existing.grossMargin += job.grossMargin ?? 0;
+      } else if (job.jobStatus === "COMPLETED") {
+        existing.pendingReviewRevenue += job.revenueAmount ?? 0;
+      } else {
+        existing.forecastRevenue += job.revenueAmount ?? 0;
+      }
+
+      existing.jobs.push(job);
+      summaries.set(clientLabel, existing);
+    }
+
+    return Array.from(summaries.values())
+      .map((summary) => ({
+        ...summary,
+        forecastRevenue: Math.round(summary.forecastRevenue * 100) / 100,
+        pendingReviewRevenue: Math.round(summary.pendingReviewRevenue * 100) / 100,
+        realizedRevenue: Math.round(summary.realizedRevenue * 100) / 100,
+        approvedPayroll: Math.round(summary.approvedPayroll * 100) / 100,
+        grossMargin: Math.round(summary.grossMargin * 100) / 100,
+        jobs: summary.jobs.sort((left, right) => right.scheduledStart - left.scheduledStart),
+      }))
+      .sort((left, right) => right.realizedRevenue - left.realizedRevenue);
+  }, [jobs]);
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -234,6 +294,7 @@ export function FinancePage() {
             ["overview", "Overview"],
             ["payroll", "Payroll"],
             ["revenue", "Revenue"],
+            ["clients", "Clients"],
             ["jobs", "Jobs"],
           ] as const).map(([tab, label]) => (
             <button
@@ -312,6 +373,11 @@ export function FinancePage() {
                           <p className="text-slate-500">
                             {job.roomComboUnits ?? "--"} combos x {formatCurrency(job.perRoomComboRate)} + {formatCurrency(job.unitBonus)}
                           </p>
+                          {(job.assignmentCount ?? 1) > 1 ? (
+                            <p className="text-xs font-semibold text-brand-700">
+                              Split {job.assignmentCount} ways
+                            </p>
+                          ) : null}
                         </div>
                         <div className="text-right">
                           <p className="font-semibold">{formatCurrency(job.payrollAmount)}</p>
@@ -361,6 +427,60 @@ export function FinancePage() {
         </section>
       ) : null}
 
+      {activeTab === "clients" ? (
+        <section className="rounded-2xl border border-border bg-white p-4">
+          <div className="mb-3">
+            <h2 className="text-lg font-bold">Revenue And Jobs By Client</h2>
+            <p className="text-sm text-slate-600">Client rollups use the client label saved on each property.</p>
+          </div>
+          {jobs === undefined ? (
+            <div className="space-y-3">
+              <div className="skeleton h-20 rounded-2xl" />
+              <div className="skeleton h-20 rounded-2xl" />
+            </div>
+          ) : clientSummaries.length === 0 ? (
+            <p className="text-sm text-slate-500">No client revenue or jobs in this date window.</p>
+          ) : (
+            <div className="space-y-3">
+              {clientSummaries.map((client) => (
+                <div key={client.clientLabel} className="rounded-2xl border border-border bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{client.clientLabel}</p>
+                      <p className="text-sm text-slate-600">
+                        {client.jobs.length} cleaning job{client.jobs.length === 1 ? "" : "s"} in range
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-right text-sm md:grid-cols-4">
+                      <RevenueCell label="Forecast" value={formatCurrency(client.forecastRevenue)} />
+                      <RevenueCell label="Pending" value={formatCurrency(client.pendingReviewRevenue)} />
+                      <RevenueCell label="Realized" value={formatCurrency(client.realizedRevenue)} />
+                      <RevenueCell label="Gross" value={formatCurrency(client.grossMargin)} />
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {client.jobs.map((job) => (
+                      <div key={job.jobId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-white px-3 py-2 text-sm">
+                        <div>
+                          <p className="font-medium">{job.propertyName}</p>
+                          <p className="text-slate-500">
+                            {formatWorkerLabel(job)} | {new Date(job.scheduledStart).toLocaleString()} | {job.jobStatus}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">{formatCurrency(job.revenueAmount)}</p>
+                          <p className="text-xs text-slate-500">{job.financeStatus}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
+
       {activeTab === "jobs" ? (
         <section className="rounded-2xl border border-border bg-white p-4">
           <div className="mb-3">
@@ -385,8 +505,13 @@ export function FinancePage() {
                         </span>
                       </div>
                       <p className="text-sm text-slate-600">
-                        {job.assigneeName} | {new Date(job.scheduledStart).toLocaleString()} | {job.jobStatus}
+                        {formatWorkerLabel(job)} | {new Date(job.scheduledStart).toLocaleString()} | {job.jobStatus}
                       </p>
+                      {(job.assignmentCount ?? 1) > 1 ? (
+                        <p className="text-xs font-semibold text-brand-700">
+                          Payroll split {job.assignmentCount} ways
+                        </p>
+                      ) : null}
                       {job.clientLabel ? (
                         <p className="text-xs font-semibold text-brand-700">Client: {job.clientLabel}</p>
                       ) : null}

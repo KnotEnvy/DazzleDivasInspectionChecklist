@@ -91,6 +91,31 @@ function isCleaningJob(job: Pick<Doc<"jobs">, "jobType">) {
   return job.jobType === "CLEANING";
 }
 
+function getAssignedWorkerIds(job: Pick<Doc<"jobs">, "assigneeId" | "additionalAssigneeIds">) {
+  return [...new Set([job.assigneeId, ...(job.additionalAssigneeIds ?? [])].filter(isDefined))];
+}
+
+function getSplitCount(job: Pick<Doc<"jobs">, "assigneeId" | "additionalAssigneeIds">) {
+  return Math.max(1, getAssignedWorkerIds(job).length);
+}
+
+function calculateCleanerPayrollShare(params: {
+  roomComboUnits?: number;
+  perRoomComboRate?: number;
+  unitBonus?: number;
+  splitCount: number;
+}) {
+  return calculateCleanerPayroll({
+    roomComboUnits:
+      params.roomComboUnits === undefined
+        ? undefined
+        : roundCurrency(params.roomComboUnits / params.splitCount),
+    perRoomComboRate: params.perRoomComboRate,
+    unitBonus:
+      params.unitBonus === undefined ? undefined : roundCurrency(params.unitBonus / params.splitCount),
+  });
+}
+
 async function getPropertyConfigByPropertyId(ctx: QueryCtx | MutationCtx, propertyId: Id<"properties">) {
   return withFinanceReadFallback(async () => {
     const configs = await ctx.db
@@ -312,7 +337,7 @@ async function loadFinanceRows(
 ) {
   const relevantJobs = jobs.filter(isCleaningJob);
   const propertyIds = [...new Set(relevantJobs.map((job) => job.propertyId))];
-  const assigneeIds = [...new Set(relevantJobs.map((job) => job.assigneeId).filter(isDefined))];
+  const assigneeIds = [...new Set(relevantJobs.flatMap(getAssignedWorkerIds))];
   const [properties, users, propertyConfigs, jobFinancials] = await Promise.all([
     Promise.all(propertyIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
     Promise.all(assigneeIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
@@ -336,6 +361,9 @@ async function loadFinanceRows(
   return relevantJobs.map((job) => {
     const property = propertyById.get(job.propertyId) ?? null;
     const user = job.assigneeId ? (userById.get(job.assigneeId) ?? null) : null;
+    const assignedWorkers = getAssignedWorkerIds(job)
+      .map((assigneeId) => userById.get(assigneeId))
+      .filter(isDefined);
     const propertyConfig = propertyConfigById.get(job.propertyId) ?? null;
     const jobFinancial = jobFinancialByJobId.get(job._id) ?? null;
     const workerPayProfile = job.assigneeId
@@ -357,6 +385,9 @@ async function loadFinanceRows(
       clientLabel: property?.clientLabel ?? undefined,
       assigneeId: job.assigneeId,
       assigneeName: user?.name ?? "Unassigned",
+      assigneeIds: getAssignedWorkerIds(job),
+      assigneeNames: assignedWorkers.map((worker) => worker.name),
+      assignmentCount: getSplitCount(job),
       scheduledStart: job.scheduledStart,
       completedAt: job.completedAt,
       jobStatus: job.status,
@@ -553,6 +584,9 @@ export const getInspectionReview = query({
       getPropertyConfigByPropertyId(ctx, job.propertyId),
       getActiveWorkerPayProfile(ctx, job.assigneeId, "CLEANER", Date.now()),
     ]);
+    const assignedWorkers = await Promise.all(
+      getAssignedWorkerIds(job).map(async (assigneeId) => ctx.db.get(assigneeId))
+    );
     const snapshot = buildDerivedFinanceSnapshot({
       job,
       property,
@@ -566,6 +600,8 @@ export const getInspectionReview = query({
       inspectionId: inspection._id,
       propertyName: inspection.propertyName,
       assigneeName: inspection.assigneeName,
+      assigneeNames: assignedWorkers.filter(isDefined).map((worker) => worker.name),
+      assignmentCount: getSplitCount(job),
       scheduledStart: job.scheduledStart,
       completedAt: job.completedAt ?? inspection.completedAt,
       jobStatus: job.status,
@@ -957,7 +993,7 @@ export const listPayroll = query({
           (pair.job.completedAt ?? 0) < weekEnd
       );
 
-    const assigneeIds = [...new Set(relevantPairs.map((pair) => pair.job.assigneeId).filter(isDefined))];
+    const assigneeIds = [...new Set(relevantPairs.flatMap((pair) => getAssignedWorkerIds(pair.job)))];
     const propertyIds = [...new Set(relevantPairs.map((pair) => pair.job.propertyId))];
     const [users, properties] = await Promise.all([
       Promise.all(assigneeIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
@@ -982,43 +1018,65 @@ export const listPayroll = query({
         unitBonus?: number;
         payrollAmount?: number;
         revenueAmount?: number;
+        assignmentCount: number;
       }>;
     }>();
 
     for (const pair of relevantPairs) {
-      if (!pair.job.assigneeId) {
+      const assignedWorkerIds = getAssignedWorkerIds(pair.job);
+      if (assignedWorkerIds.length === 0) {
         continue;
       }
 
-      const key = String(pair.job.assigneeId);
-      const entry = payrollByAssignee.get(key) ?? {
-        assigneeId: pair.job.assigneeId,
-        assigneeName: userById.get(pair.job.assigneeId)?.name ?? "Unknown worker",
-        totalPayroll: 0,
-        totalRevenue: 0,
-        grossMargin: 0,
-        jobs: [],
-      };
-
-      entry.totalPayroll += pair.financial.payrollAmountSnapshot ?? 0;
-      entry.totalRevenue += pair.financial.revenueAmountSnapshot ?? 0;
-      entry.grossMargin += calculateGrossMargin(
-        pair.financial.revenueAmountSnapshot,
-        pair.financial.payrollAmountSnapshot
-      ) ?? 0;
-      entry.jobs.push({
-        jobId: pair.job._id,
-        inspectionId: pair.job.linkedInspectionId,
-        propertyName: propertyById.get(pair.job.propertyId)?.name ?? "Unknown property",
-        completedAt: pair.job.completedAt,
+      const splitCount = getSplitCount(pair.job);
+      const splitRoomComboUnits =
+        pair.financial.roomComboUnitsSnapshot === undefined
+          ? undefined
+          : roundCurrency(pair.financial.roomComboUnitsSnapshot / splitCount);
+      const splitUnitBonus =
+        pair.financial.unitBonusSnapshot === undefined
+          ? undefined
+          : roundCurrency(pair.financial.unitBonusSnapshot / splitCount);
+      const splitPayrollAmount = calculateCleanerPayrollShare({
         roomComboUnits: pair.financial.roomComboUnitsSnapshot,
         perRoomComboRate: pair.financial.perRoomComboRateSnapshot,
         unitBonus: pair.financial.unitBonusSnapshot,
-        payrollAmount: pair.financial.payrollAmountSnapshot,
-        revenueAmount: pair.financial.revenueAmountSnapshot,
+        splitCount,
       });
+      const splitRevenueAmount =
+        pair.financial.revenueAmountSnapshot === undefined
+          ? undefined
+          : roundCurrency(pair.financial.revenueAmountSnapshot / splitCount);
 
-      payrollByAssignee.set(key, entry);
+      for (const assignedWorkerId of assignedWorkerIds) {
+        const key = String(assignedWorkerId);
+        const entry = payrollByAssignee.get(key) ?? {
+          assigneeId: assignedWorkerId,
+          assigneeName: userById.get(assignedWorkerId)?.name ?? "Unknown worker",
+          totalPayroll: 0,
+          totalRevenue: 0,
+          grossMargin: 0,
+          jobs: [],
+        };
+
+        entry.totalPayroll += splitPayrollAmount ?? 0;
+        entry.totalRevenue += splitRevenueAmount ?? 0;
+        entry.grossMargin += calculateGrossMargin(splitRevenueAmount, splitPayrollAmount) ?? 0;
+        entry.jobs.push({
+          jobId: pair.job._id,
+          inspectionId: pair.job.linkedInspectionId,
+          propertyName: propertyById.get(pair.job.propertyId)?.name ?? "Unknown property",
+          completedAt: pair.job.completedAt,
+          roomComboUnits: splitRoomComboUnits,
+          perRoomComboRate: pair.financial.perRoomComboRateSnapshot,
+          unitBonus: splitUnitBonus,
+          payrollAmount: splitPayrollAmount,
+          revenueAmount: splitRevenueAmount,
+          assignmentCount: splitCount,
+        });
+
+        payrollByAssignee.set(key, entry);
+      }
     }
 
     return Array.from(payrollByAssignee.values())

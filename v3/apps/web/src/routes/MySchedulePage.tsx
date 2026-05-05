@@ -48,6 +48,7 @@ type ScheduleJob = {
   jobType: JobType;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   assigneeName?: string | null;
+  assigneeNames?: string[];
   isBackToBack?: boolean;
   arrivalDeadline?: number;
   checklistType: "CLEANING" | "INSPECTION" | null;
@@ -59,6 +60,8 @@ type JobDetail = {
   _id: Id<"jobs">;
   propertyId: Id<"properties">;
   assigneeId?: Id<"users">;
+  assigneeIds?: Id<"users">[];
+  assigneeNames?: string[];
   scheduledStart: number;
   scheduledEnd: number;
   status: JobStatus;
@@ -126,6 +129,28 @@ function formatScheduleWindow(start: Date, end: Date) {
 
 function formatOptionalDateTime(timestamp?: number) {
   return timestamp ? new Date(timestamp).toLocaleString() : null;
+}
+
+function getJobAssigneeNames(job: {
+  assigneeName?: string | null;
+  assigneeNames?: string[];
+}) {
+  return job.assigneeNames && job.assigneeNames.length > 0
+    ? job.assigneeNames
+    : job.assigneeName
+      ? [job.assigneeName]
+      : [];
+}
+
+function formatJobAssigneeLabel(job: {
+  assigneeName?: string | null;
+  assigneeNames?: string[];
+}) {
+  const names = getJobAssigneeNames(job);
+  if (names.length === 0) {
+    return "Unassigned";
+  }
+  return names.join(" + ");
 }
 
 function formatPropertyRoomCounts(params: { bedrooms?: number; bathrooms?: number }) {
@@ -396,7 +421,9 @@ export function MySchedulePage() {
       }
     : selectedJob;
   const selectedJobIsMine =
-    !!selectedJob?.assigneeId && !!user?._id && selectedJob.assigneeId === user._id;
+    !!selectedJob &&
+    !!user?._id &&
+    (selectedJob.assigneeIds ?? (selectedJob.assigneeId ? [selectedJob.assigneeId] : [])).includes(user._id);
   const selectedPropertyRoomCounts = formatPropertyRoomCounts({
     bedrooms: selectedJobEffective?.property?.bedrooms ?? selectedListJob?.propertyBedrooms,
     bathrooms: selectedJobEffective?.property?.bathrooms ?? selectedListJob?.propertyBathrooms,
@@ -550,9 +577,7 @@ export function MySchedulePage() {
               )}
               <p className="mt-1 text-slate-600">
                 Priority: {selectedJobEffective?.priority ?? selectedListJob.priority ?? "MEDIUM"}
-                {(selectedJobEffective?.assignee?.name ?? selectedListJob.assigneeName)
-                  ? ` | ${selectedJobEffective?.assignee?.name ?? selectedListJob.assigneeName}`
-                  : ""}
+                {` | ${formatJobAssigneeLabel(selectedJobEffective ?? selectedListJob)}`}
               </p>
               {selectedJobEffective?.notes && (
                 <p className="mt-2 text-slate-600">{selectedJobEffective.notes}</p>

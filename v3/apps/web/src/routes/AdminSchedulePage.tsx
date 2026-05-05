@@ -55,7 +55,10 @@ type DispatchJob = {
   arrivalDeadline?: number;
   isBackToBack?: boolean;
   assigneeId?: Id<"users">;
+  assigneeIds?: Id<"users">[];
   assigneeName?: string | null;
+  assigneeNames?: string[];
+  assignmentCount?: number;
   checklistType: "CLEANING" | "INSPECTION" | null;
 };
 
@@ -72,6 +75,7 @@ type DispatchDetail = {
   arrivalDeadline?: number;
   isBackToBack?: boolean;
   assigneeId?: Id<"users">;
+  assigneeIds?: Id<"users">[];
   notes?: string;
   linkedInspectionId?: Id<"inspections">;
   checklistType: "CLEANING" | "INSPECTION" | null;
@@ -96,6 +100,14 @@ type DispatchDetail = {
     role: UserRole;
     isActive: boolean;
   } | null;
+  assignees?: Array<{
+    _id: Id<"users">;
+    name: string;
+    role: UserRole;
+    isActive: boolean;
+  }>;
+  assigneeNames?: string[];
+  assignmentCount?: number;
   events: Array<{
     _id: Id<"jobEvents">;
     eventType: string;
@@ -227,6 +239,28 @@ function formatOptionalDateTime(timestamp?: number) {
   return timestamp ? new Date(timestamp).toLocaleString() : null;
 }
 
+function getJobAssigneeNames(job: {
+  assigneeName?: string | null;
+  assigneeNames?: string[];
+}) {
+  return job.assigneeNames && job.assigneeNames.length > 0
+    ? job.assigneeNames
+    : job.assigneeName
+      ? [job.assigneeName]
+      : [];
+}
+
+function formatJobAssigneeLabel(job: {
+  assigneeName?: string | null;
+  assigneeNames?: string[];
+}) {
+  const names = getJobAssigneeNames(job);
+  if (names.length === 0) {
+    return "Unassigned";
+  }
+  return names.join(" + ");
+}
+
 function shiftDatetimeLocalValue(value: string, offsetMs: number) {
   const timestamp = fromDatetimeLocalValue(value);
   return Number.isFinite(timestamp) ? toDatetimeLocalValue(timestamp + offsetMs) : "";
@@ -321,7 +355,7 @@ function buildDefaultCreateForm() {
   return {
     propertyId: "" as Id<"properties"> | "",
     jobType: "CLEANING" as JobType,
-    assigneeId: "" as Id<"users"> | "",
+    assigneeIds: [] as Id<"users">[],
     scheduledStart: toDatetimeLocalValue(start.getTime()),
     scheduledEnd: toDatetimeLocalValue(end.getTime()),
     priority: "MEDIUM" as Priority,
@@ -412,13 +446,14 @@ export function AdminSchedulePage() {
   const filteredJobs = useMemo(
     () =>
       (jobs ?? []).filter((job) => {
-        if (assigneeFilter === "UNASSIGNED" && job.assigneeId) {
+        const jobAssigneeIds = job.assigneeIds ?? (job.assigneeId ? [job.assigneeId] : []);
+        if (assigneeFilter === "UNASSIGNED" && jobAssigneeIds.length > 0) {
           return false;
         }
         if (
           assigneeFilter !== "ALL" &&
           assigneeFilter !== "UNASSIGNED" &&
-          job.assigneeId !== assigneeFilter
+          !jobAssigneeIds.includes(assigneeFilter)
         ) {
           return false;
         }
@@ -450,7 +485,10 @@ export function AdminSchedulePage() {
     () => filteredJobs.slice().sort((left, right) => left.scheduledStart - right.scheduledStart),
     [filteredJobs]
   );
-  const unassignedJobs = useMemo(() => listJobs.filter((job) => !job.assigneeId), [listJobs]);
+  const unassignedJobs = useMemo(
+    () => listJobs.filter((job) => getJobAssigneeNames(job).length === 0),
+    [listJobs]
+  );
   const monthWeeks = useMemo(() => {
     if (viewMode !== "month") {
       return [];
@@ -464,7 +502,7 @@ export function AdminSchedulePage() {
   const summary = useMemo(
     () => ({
       total: filteredJobs.length,
-      unassigned: filteredJobs.filter((job) => !job.assigneeId).length,
+      unassigned: filteredJobs.filter((job) => getJobAssigneeNames(job).length === 0).length,
       inProgress: filteredJobs.filter((job) => job.status === "IN_PROGRESS").length,
       blocked: filteredJobs.filter((job) => job.status === "BLOCKED").length,
     }),
@@ -507,13 +545,14 @@ export function AdminSchedulePage() {
   }, [createForm.propertyId.length, sortedProperties]);
 
   useEffect(() => {
-    if (
-      createForm.assigneeId.length > 0 &&
-      !eligibleCreateAssignees.some((user) => user._id === createForm.assigneeId)
-    ) {
-      setCreateForm((current) => ({ ...current, assigneeId: "" }));
+    const eligibleIds = new Set(eligibleCreateAssignees.map((user) => user._id));
+    if (createForm.assigneeIds.some((assigneeId) => !eligibleIds.has(assigneeId))) {
+      setCreateForm((current) => ({
+        ...current,
+        assigneeIds: current.assigneeIds.filter((assigneeId) => eligibleIds.has(assigneeId)),
+      }));
     }
-  }, [createForm.assigneeId, eligibleCreateAssignees]);
+  }, [createForm.assigneeIds, eligibleCreateAssignees]);
 
   useEffect(() => {
     if (filteredJobs.length === 0) {
@@ -646,7 +685,7 @@ export function AdminSchedulePage() {
         jobType: createForm.jobType,
         scheduledStart,
         scheduledEnd,
-        assigneeId: createForm.assigneeId.length > 0 ? createForm.assigneeId : undefined,
+        assigneeIds: createForm.assigneeIds.length > 0 ? createForm.assigneeIds : undefined,
         priority: createForm.priority,
         intakeSource: createForm.intakeSource,
         isBackToBack: createForm.isBackToBack || undefined,
@@ -662,6 +701,9 @@ export function AdminSchedulePage() {
         ...nextDefaults,
         propertyId: current.propertyId,
         jobType: current.jobType,
+        assigneeIds: current.assigneeIds.filter((assigneeId) =>
+          eligibleCreateAssignees.some((user) => user._id === assigneeId)
+        ),
       }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create job");
@@ -801,7 +843,7 @@ export function AdminSchedulePage() {
       toast.error("This job type does not support checklist execution");
       return;
     }
-    if (!selectedJob.assigneeId) {
+    if ((selectedJob.assigneeIds ?? (selectedJob.assigneeId ? [selectedJob.assigneeId] : [])).length === 0) {
       toast.error("Assign the job before starting a checklist");
       return;
     }
@@ -1001,7 +1043,7 @@ export function AdminSchedulePage() {
                     return {
                       ...current,
                       jobType: nextJobType,
-                      assigneeId: "",
+                      assigneeIds: [],
                       isBackToBack: canStayBackToBack,
                       arrivalDeadline: canStayBackToBack
                         ? buildBackToBackArrivalLocalValue(current.scheduledStart)
@@ -1016,26 +1058,43 @@ export function AdminSchedulePage() {
                 <option value="MAINTENANCE">MAINTENANCE</option>
               </select>
             </label>
-            <label className="text-sm font-medium text-slate-700">
-              Assignee
-              <select
-                className="input mt-1"
-                value={createForm.assigneeId}
-                onChange={(event) =>
-                  updateCreateForm((current) => ({
-                    ...current,
-                    assigneeId: event.target.value as Id<"users"> | "",
-                  }))
-                }
-              >
-                <option value="">Leave unassigned</option>
-                {eligibleCreateAssignees.map((user) => (
-                  <option key={user._id} value={user._id}>
-                    {user.name} ({user.role})
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="text-sm font-medium text-slate-700">
+              <p>Workers</p>
+              <div className="mt-1 max-h-40 overflow-auto rounded-xl border border-border bg-white p-2">
+                {eligibleCreateAssignees.length === 0 ? (
+                  <p className="px-2 py-1 text-sm text-slate-500">No eligible workers</p>
+                ) : (
+                  eligibleCreateAssignees.map((user) => {
+                    const checked = createForm.assigneeIds.includes(user._id);
+                    return (
+                      <label
+                        key={user._id}
+                        className="flex min-h-9 items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <input
+                          checked={checked}
+                          className="h-4 w-4 rounded border-slate-300 text-brand-700"
+                          onChange={(event) =>
+                            updateCreateForm((current) => ({
+                              ...current,
+                              assigneeIds: event.target.checked
+                                ? [...current.assigneeIds, user._id]
+                                : current.assigneeIds.filter((assigneeId) => assigneeId !== user._id),
+                            }))
+                          }
+                          type="checkbox"
+                        />
+                        <span className="min-w-0 flex-1 truncate">{user.name}</span>
+                        <span className="text-xs text-slate-500">{user.role}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Select multiple cleaners for evenly split combo and unit-bonus payroll.
+              </p>
+            </div>
             <label className="text-sm font-medium text-slate-700">
               Start
               <input
@@ -1404,7 +1463,7 @@ export function AdminSchedulePage() {
 
                             if (dayJobs.length === 0) return null;
 
-                            const unassignedCount = dayJobs.filter((j) => !j.assigneeName).length;
+                            const unassignedCount = dayJobs.filter((j) => getJobAssigneeNames(j).length === 0).length;
                             return (
                               <div
                                 key={day.toISOString()}
@@ -1436,7 +1495,7 @@ export function AdminSchedulePage() {
                                 </div>
                                 <div className="space-y-1 p-2">
                                   {dayJobs.map((job) => {
-                                    const isUnassigned = !job.assigneeName;
+                                    const isUnassigned = getJobAssigneeNames(job).length === 0;
                                     return (
                                       <button
                                         key={job._id}
@@ -1454,7 +1513,7 @@ export function AdminSchedulePage() {
                                       >
                                         <p className="text-sm font-semibold truncate text-slate-900">{job.propertyName}</p>
                                         <p className={`shrink-0 text-xs ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
-                                          {job.assigneeName ?? "Unassigned"}
+                                          {formatJobAssigneeLabel(job)}
                                         </p>
                                       </button>
                                     );
@@ -1482,7 +1541,7 @@ export function AdminSchedulePage() {
                         const dayJobs = jobsByDay[dayIndex] ?? [];
                         const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
                         const isToday = sameLocalDate(Date.now(), day);
-                        const unassignedCount = dayJobs.filter((j) => !j.assigneeName).length;
+                        const unassignedCount = dayJobs.filter((j) => getJobAssigneeNames(j).length === 0).length;
 
                         return (
                           <div
@@ -1523,7 +1582,7 @@ export function AdminSchedulePage() {
                               ) : (
                                 <>
                                   {dayJobs.slice(0, 4).map((job) => {
-                                    const isUnassigned = !job.assigneeName;
+                                    const isUnassigned = getJobAssigneeNames(job).length === 0;
                                     return (
                                       <button
                                         key={job._id}
@@ -1543,7 +1602,7 @@ export function AdminSchedulePage() {
                                           {job.propertyName}
                                         </p>
                                         <p className={`truncate text-[10px] ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
-                                          {job.assigneeName ?? "Unassigned"}
+                                          {formatJobAssigneeLabel(job)}
                                         </p>
                                       </button>
                                     );
@@ -1570,9 +1629,9 @@ export function AdminSchedulePage() {
                   {visibleDays.map((day, index) => {
                     const isToday = sameLocalDate(Date.now(), day);
                     const dayJobs = jobsByDay[index];
-                    const unassignedCount = dayJobs.filter((j) => !j.assigneeName).length;
+                    const unassignedCount = dayJobs.filter((j) => getJobAssigneeNames(j).length === 0).length;
                     const workerNames = [
-                      ...new Set(dayJobs.map((j) => j.assigneeName).filter(Boolean)),
+                      ...new Set(dayJobs.flatMap((j) => getJobAssigneeNames(j))),
                     ] as string[];
 
                     if (dayJobs.length === 0 && !isToday) return (
@@ -1626,7 +1685,7 @@ export function AdminSchedulePage() {
                             <p className="py-2 text-center text-xs text-slate-400">No jobs</p>
                           ) : (
                             dayJobs.map((job) => {
-                              const isUnassigned = !job.assigneeName;
+                              const isUnassigned = getJobAssigneeNames(job).length === 0;
                               return (
                                 <button
                                   key={job._id}
@@ -1646,7 +1705,7 @@ export function AdminSchedulePage() {
                                     {job.propertyName}
                                   </p>
                                   <p className={`shrink-0 text-xs ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
-                                    {job.assigneeName ?? "Unassigned"}
+                                    {formatJobAssigneeLabel(job)}
                                   </p>
                                 </button>
                               );
@@ -1675,9 +1734,9 @@ export function AdminSchedulePage() {
                     {visibleDays.map((day, index) => {
                       const isToday = sameLocalDate(Date.now(), day);
                       const dayJobs = jobsByDay[index];
-                      const unassignedCount = dayJobs.filter((j) => !j.assigneeName).length;
+                      const unassignedCount = dayJobs.filter((j) => getJobAssigneeNames(j).length === 0).length;
                       const workerNames = [
-                        ...new Set(dayJobs.map((j) => j.assigneeName).filter(Boolean)),
+                        ...new Set(dayJobs.flatMap((j) => getJobAssigneeNames(j))),
                       ] as string[];
 
                       return (
@@ -1718,7 +1777,7 @@ export function AdminSchedulePage() {
                               <p className="py-4 text-center text-xs text-slate-400">No jobs</p>
                             ) : (
                               dayJobs.map((job) => {
-                                const isUnassigned = !job.assigneeName;
+                                const isUnassigned = getJobAssigneeNames(job).length === 0;
                                 return (
                                   <button
                                     key={job._id}
@@ -1738,7 +1797,7 @@ export function AdminSchedulePage() {
                                       {job.propertyName}
                                     </p>
                                     <p className={`text-xs truncate ${isUnassigned ? "font-semibold text-amber-600" : "text-slate-500"}`}>
-                                      {job.assigneeName ?? "Unassigned"}
+                                      {formatJobAssigneeLabel(job)}
                                     </p>
                                   </button>
                                 );
@@ -1815,7 +1874,7 @@ export function AdminSchedulePage() {
                 </p>
                 <p className="text-xs text-slate-500">
                   Priority: {selectedJob.priority ?? "MEDIUM"}
-                  {selectedJob.assignee ? ` | ${selectedJob.assignee.name}` : " | Unassigned"}
+                  {` | ${formatJobAssigneeLabel(selectedJob)}`}
                 </p>
 
                 {/* Compact info rows — only show non-empty fields */}
@@ -1861,7 +1920,7 @@ export function AdminSchedulePage() {
                 disabled={
                   savingAction === "checklist" ||
                   selectedJob.checklistType === null ||
-                  !selectedJob.assigneeId ||
+                  (selectedJob.assigneeIds ?? (selectedJob.assigneeId ? [selectedJob.assigneeId] : [])).length === 0 ||
                   (!selectedJob.linkedInspectionId && !selectedJob.canStartChecklist) ||
                   selectedJob.status === "COMPLETED" ||
                   selectedJob.status === "CANCELLED"
@@ -1885,7 +1944,7 @@ export function AdminSchedulePage() {
                 <h3 className="text-sm font-bold text-slate-600">Dispatch Controls</h3>
 
                 <label className="block text-sm font-medium text-slate-700">
-                  Assignee
+                  Primary Assignee
                   <select
                     className="input mt-1"
                     disabled={controlsLocked}
@@ -1949,6 +2008,11 @@ export function AdminSchedulePage() {
                       </option>
                     ))}
                   </select>
+                  {(selectedJob.assigneeNames?.length ?? 0) > 1 ? (
+                    <span className="mt-1 block text-xs text-slate-500">
+                      This split job currently includes {formatJobAssigneeLabel(selectedJob)}. Saving a primary reassignment converts it back to one worker.
+                    </span>
+                  ) : null}
                 </label>
 
                 <label className="block text-sm font-medium text-slate-700">
@@ -2156,7 +2220,7 @@ function JobRow({
             {job.isBackToBack && <span className="b2b-badge">B2B</span>}
           </div>
           <p className="mt-0.5 text-xs text-slate-500">
-            {job.assigneeName ?? "Unassigned"} &middot; {job.isBackToBack ? "B2B Turnover" : job.jobType}
+            {formatJobAssigneeLabel(job)} &middot; {job.isBackToBack ? "B2B Turnover" : job.jobType}
             {job.priority && job.priority !== "MEDIUM" ? ` &middot; ${job.priority}` : ""}
           </p>
         </div>

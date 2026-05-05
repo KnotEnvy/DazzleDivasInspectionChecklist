@@ -129,6 +129,7 @@ const schema = defineSchema({
     scheduledStart: v.number(),
     scheduledEnd: v.number(),
     assigneeId: v.optional(v.id("users")),
+    additionalAssigneeIds: v.optional(v.array(v.id("users"))),
     status: v.union(
       v.literal("SCHEDULED"),
       v.literal("IN_PROGRESS"),
@@ -332,6 +333,23 @@ const schema = defineSchema({
   })
     .index("by_job_financial", ["jobFinancialId"])
     .index("by_job", ["jobId"]),
+
+  deletedHistoryAudits: defineTable({
+    inspectionId: v.id("inspections"),
+    jobId: v.optional(v.id("jobs")),
+    propertyId: v.id("properties"),
+    propertyName: v.string(),
+    checklistType: v.union(v.literal("CLEANING"), v.literal("INSPECTION")),
+    assigneeId: v.id("users"),
+    assigneeName: v.string(),
+    completedAt: v.optional(v.number()),
+    deletedById: v.id("users"),
+    deletedByName: v.string(),
+    reason: v.string(),
+    deletedAt: v.number(),
+  })
+    .index("by_deleted_at", ["deletedAt"])
+    .index("by_property", ["propertyId"]),
 });
 
 export default schema;

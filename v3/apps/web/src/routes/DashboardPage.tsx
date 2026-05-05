@@ -64,7 +64,9 @@ type AdminDispatchJob = {
   jobType: string;
   linkedInspectionId?: string;
   assigneeId?: string;
+  assigneeIds?: string[];
   assigneeName?: string | null;
+  assigneeNames?: string[];
   priority?: string;
   isBackToBack?: boolean;
   arrivalDeadline?: number;
@@ -153,6 +155,22 @@ function buildAdminJobDestination(job: Pick<AdminDispatchJob, "_id" | "status" |
   return `/schedule?jobId=${job._id}#dispatch-drawer`;
 }
 
+function getJobAssigneeIds(job: Pick<AdminDispatchJob, "assigneeId" | "assigneeIds">) {
+  return job.assigneeIds && job.assigneeIds.length > 0
+    ? job.assigneeIds
+    : job.assigneeId
+      ? [job.assigneeId]
+      : [];
+}
+
+function formatJobAssigneeLabel(job: Pick<AdminDispatchJob, "assigneeName" | "assigneeNames">) {
+  if (job.assigneeNames && job.assigneeNames.length > 0) {
+    return job.assigneeNames.join(" + ");
+  }
+
+  return job.assigneeName ?? "";
+}
+
 export function DashboardPage() {
   const { user, isAdmin, isCleaner, isInspector } = useCurrentUser();
   const isOnline = useNetworkStatus();
@@ -195,18 +213,18 @@ export function DashboardPage() {
     const adminTodayJobs = (adminDispatch ?? [])
       .filter((job) => job.scheduledStart >= startOfToday() && job.scheduledStart <= endOfToday())
       .sort((left, right) => left.scheduledStart - right.scheduledStart);
-    const unassignedToday = adminTodayJobs.filter((job) => !job.assigneeId);
+    const unassignedToday = adminTodayJobs.filter((job) => getJobAssigneeIds(job).length === 0);
     const blockedToday = adminTodayJobs.filter((job) => job.status === "BLOCKED");
     const inProgressToday = adminTodayJobs.filter((job) => job.status === "IN_PROGRESS");
     const needsAttention = [
       ...unassignedToday,
-      ...blockedToday.filter((job) => job.assigneeId),
+      ...blockedToday.filter((job) => getJobAssigneeIds(job).length > 0),
     ];
 
     const activeStaff = (allStaff ?? []).filter((member) => member.isActive);
     const staffWithCounts = activeStaff
       .map((member) => {
-        const memberJobs = adminTodayJobs.filter((job) => job.assigneeId === member._id);
+        const memberJobs = adminTodayJobs.filter((job) => getJobAssigneeIds(job).includes(member._id));
         return {
           ...member,
           todayJobCount: memberJobs.length,
@@ -312,12 +330,12 @@ export function DashboardPage() {
                     </div>
                     <span
                       className={`flex-shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                        !job.assigneeId
+                        getJobAssigneeIds(job).length === 0
                           ? "border-amber-300 bg-amber-50 text-amber-700"
                           : statusTone(job.status)
                       }`}
                     >
-                      {!job.assigneeId ? "UNASSIGNED" : job.status}
+                      {getJobAssigneeIds(job).length === 0 ? "UNASSIGNED" : job.status}
                     </span>
                   </div>
                   <Link
@@ -382,12 +400,12 @@ export function DashboardPage() {
                       </p>
                       <p className="truncate text-xs text-slate-500">
                         {job.isBackToBack ? "B2B Turnover" : job.jobType}
-                        {job.assigneeName
-                          ? ` Â· ${job.assigneeName}`
+                        {formatJobAssigneeLabel(job)
+                          ? ` | ${formatJobAssigneeLabel(job)}`
                           : ""}
                       </p>
                     </div>
-                    {!job.assigneeId ? (
+                    {getJobAssigneeIds(job).length === 0 ? (
                       <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                         OPEN
                       </span>
@@ -506,7 +524,7 @@ export function DashboardPage() {
                   date.getMonth() === new Date().getMonth() &&
                   date.getDate() === new Date().getDate();
                 const barHeight = Math.max(6, (dayJobs.length / maxJobsInDay) * 64);
-                const hasUnassigned = dayJobs.some((job) => !job.assigneeId);
+                const hasUnassigned = dayJobs.some((job) => getJobAssigneeIds(job).length === 0);
                 return (
                   <div key={date.toISOString()} className="text-center">
                     <p

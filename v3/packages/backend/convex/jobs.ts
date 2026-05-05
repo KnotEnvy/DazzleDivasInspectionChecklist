@@ -51,6 +51,17 @@ function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
 
+function getAssignedWorkerIds(job: Pick<Doc<"jobs">, "assigneeId" | "additionalAssigneeIds">) {
+  return [...new Set([job.assigneeId, ...(job.additionalAssigneeIds ?? [])].filter(isDefined))];
+}
+
+function isUserAssignedToJob(
+  job: Pick<Doc<"jobs">, "assigneeId" | "additionalAssigneeIds">,
+  userId: Id<"users">
+) {
+  return getAssignedWorkerIds(job).some((assignedId) => assignedId === userId);
+}
+
 function buildChecklistStartState(params: {
   job: Pick<
     Doc<"jobs">,
@@ -126,9 +137,13 @@ function buildChecklistStartState(params: {
   };
 }
 
-async function hydrateJobListItems(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
+async function hydrateJobListItems(
+  ctx: QueryCtx,
+  jobs: Array<Doc<"jobs">>,
+  viewerId?: Id<"users">
+) {
   const propertyIds = [...new Set(jobs.map((job) => job.propertyId))];
-  const assigneeIds = [...new Set(jobs.map((job) => job.assigneeId).filter(isDefined))];
+  const assigneeIds = [...new Set(jobs.flatMap(getAssignedWorkerIds))];
 
   const [properties, assignees, activeInspectionCounts] = await Promise.all([
     Promise.all(propertyIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
@@ -153,19 +168,33 @@ async function hydrateJobListItems(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
 
   return jobs.map((job) => {
     const property = propertyById.get(job.propertyId) ?? null;
+    const assignedWorkerIds = getAssignedWorkerIds(job);
     const assignee = job.assigneeId ? (assigneeById.get(job.assigneeId) ?? null) : null;
+    const assignees = assignedWorkerIds
+      .map((assigneeId) => assigneeById.get(assigneeId))
+      .filter(isDefined);
+    const startAssigneeId =
+      viewerId && assignedWorkerIds.some((assigneeId) => assigneeId === viewerId)
+        ? viewerId
+        : job.assigneeId;
+    const startAssignee = startAssigneeId
+      ? (assigneeById.get(startAssigneeId) ?? null)
+      : null;
     const checklistType = checklistTypeForJobType(job.jobType);
     const assigneeRole =
-      assignee?.role === "CLEANER" || assignee?.role === "INSPECTOR"
-        ? assignee.role
+      startAssignee?.role === "CLEANER" || startAssignee?.role === "INSPECTOR"
+        ? startAssignee.role
         : undefined;
     const startState = buildChecklistStartState({
-      job,
+      job: {
+        ...job,
+        assigneeId: startAssigneeId,
+      },
       checklistType,
       propertyTimeZone: property?.timezone,
       assigneeRole,
-      activeInspectionCount: job.assigneeId
-        ? activeInspectionCountByAssigneeId.get(job.assigneeId)
+      activeInspectionCount: startAssigneeId
+        ? activeInspectionCountByAssigneeId.get(startAssigneeId)
         : undefined,
     });
 
@@ -176,6 +205,8 @@ async function hydrateJobListItems(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
       scheduledStart: job.scheduledStart,
       scheduledEnd: job.scheduledEnd,
       assigneeId: job.assigneeId,
+      additionalAssigneeIds: job.additionalAssigneeIds,
+      assigneeIds: assignedWorkerIds,
       linkedInspectionId: job.linkedInspectionId,
       propertyName: property?.name ?? "Unknown property",
       propertyAddress: property?.address ?? "",
@@ -187,6 +218,8 @@ async function hydrateJobListItems(ctx: QueryCtx, jobs: Array<Doc<"jobs">>) {
       arrivalDeadline: job.arrivalDeadline,
       isBackToBack: job.isBackToBack === true,
       assigneeName: assignee?.name ?? null,
+      assigneeNames: assignees.map((worker) => worker.name),
+      assignmentCount: assignedWorkerIds.length,
       checklistType,
       canStartChecklist: startState.canStartChecklist,
       checklistStartBlockReason: startState.checklistStartBlockReason,
@@ -268,7 +301,7 @@ async function getJobForAssigneeUpdate(
     throw new Error("Job not found");
   }
 
-  if (!job.assigneeId || job.assigneeId !== actor._id) {
+  if (!isUserAssignedToJob(job, actor._id)) {
     throw new Error("Only the assigned worker can update this job");
   }
 
@@ -408,12 +441,28 @@ export const listMyUpcoming = query({
         )
         .collect();
     } else {
-      jobs = await ctx.db
+      const primaryJobs = await ctx.db
         .query("jobs")
         .withIndex("by_assignee_start", (q) =>
           q.eq("assigneeId", user._id).gte("scheduledStart", from).lte("scheduledStart", to)
         )
         .collect();
+      const splitJobs = await ctx.db
+        .query("jobs")
+        .withIndex("by_scheduled_start", (q) =>
+          q.gte("scheduledStart", from).lte("scheduledStart", to)
+        )
+        .collect();
+      const jobsById = new Map<string, Doc<"jobs">>();
+      for (const job of primaryJobs) {
+        jobsById.set(String(job._id), job);
+      }
+      for (const job of splitJobs) {
+        if ((job.additionalAssigneeIds ?? []).some((assigneeId) => assigneeId === user._id)) {
+          jobsById.set(String(job._id), job);
+        }
+      }
+      jobs = Array.from(jobsById.values());
     }
 
     const filtered = jobs
@@ -421,7 +470,7 @@ export const listMyUpcoming = query({
       .filter((job) => job.status !== "CANCELLED")
       .sort((a, b) => a.scheduledStart - b.scheduledStart);
 
-    return await hydrateJobListItems(ctx, filtered);
+    return await hydrateJobListItems(ctx, filtered, user.role === "ADMIN" ? undefined : user._id);
   },
 });
 
@@ -484,24 +533,34 @@ export const getById = query({
       return null;
     }
 
-    if (user.role !== "ADMIN" && job.assigneeId !== user._id) {
+    if (user.role !== "ADMIN" && !isUserAssignedToJob(job, user._id)) {
       throw new Error("You do not have access to this job");
     }
 
-    const [property, servicePlan, assignee, linkedInspection, activeInspections] = await Promise.all([
+    const assignedWorkerIds = getAssignedWorkerIds(job);
+    const startAssigneeId =
+      user.role !== "ADMIN" && isUserAssignedToJob(job, user._id) ? user._id : job.assigneeId;
+
+    const [property, servicePlan, assignees, linkedInspection, activeInspections] = await Promise.all([
       ctx.db.get(job.propertyId),
       job.servicePlanId ? ctx.db.get(job.servicePlanId) : Promise.resolve(null),
-      job.assigneeId ? ctx.db.get(job.assigneeId) : Promise.resolve(null),
+      Promise.all(assignedWorkerIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
       job.linkedInspectionId ? ctx.db.get(job.linkedInspectionId) : Promise.resolve(null),
-      job.assigneeId
+      startAssigneeId
         ? ctx.db
             .query("inspections")
             .withIndex("by_assignee_status", (q) =>
-              q.eq("assigneeId", job.assigneeId as Id<"users">).eq("status", "IN_PROGRESS")
+              q.eq("assigneeId", startAssigneeId).eq("status", "IN_PROGRESS")
             )
             .collect()
         : Promise.resolve([]),
     ]);
+    const assigneeById = new Map(assignees);
+    const assignee = job.assigneeId ? (assigneeById.get(job.assigneeId) ?? null) : null;
+    const startAssignee = startAssigneeId ? (assigneeById.get(startAssigneeId) ?? null) : null;
+    const activeAssignees = assignedWorkerIds
+      .map((assigneeId) => assigneeById.get(assigneeId))
+      .filter(isDefined);
 
     const events = await ctx.db
       .query("jobEvents")
@@ -510,11 +569,14 @@ export const getById = query({
 
     const checklistType = checklistTypeForJobType(job.jobType);
     const assigneeRole =
-      assignee?.role === "CLEANER" || assignee?.role === "INSPECTOR"
-        ? assignee.role
+      startAssignee?.role === "CLEANER" || startAssignee?.role === "INSPECTOR"
+        ? startAssignee.role
         : undefined;
     const startState = buildChecklistStartState({
-      job,
+      job: {
+        ...job,
+        assigneeId: startAssigneeId,
+      },
       checklistType,
       propertyTimeZone: property?.timezone,
       assigneeRole,
@@ -527,6 +589,10 @@ export const getById = query({
       property,
       servicePlan,
       assignee,
+      assignees: activeAssignees,
+      assigneeIds: assignedWorkerIds,
+      assigneeNames: activeAssignees.map((worker) => worker.name),
+      assignmentCount: assignedWorkerIds.length,
       linkedInspection,
       checklistType,
       canStartChecklist: startState.canStartChecklist,
@@ -568,6 +634,7 @@ export const reassign = mutation({
 
     await ctx.db.patch(job._id, {
       assigneeId: assignee?._id,
+      additionalAssigneeIds: undefined,
     });
 
     await recordJobEvent(ctx, {
@@ -577,6 +644,8 @@ export const reassign = mutation({
       metadata: {
         previousAssigneeId: job.assigneeId ?? null,
         nextAssigneeId: assignee?._id ?? null,
+        previousAssigneeIds: getAssignedWorkerIds(job),
+        nextAssigneeIds: assignee ? [assignee._id] : [],
         propertyId: property._id,
       },
     });
@@ -592,6 +661,7 @@ export const createManual = mutation({
     scheduledStart: v.number(),
     scheduledEnd: v.number(),
     assigneeId: v.optional(v.id("users")),
+    assigneeIds: v.optional(v.array(v.id("users"))),
     priority: v.optional(jobPriorityValidator),
     intakeSource: jobIntakeSourceValidator,
     clientLabel: v.optional(v.string()),
@@ -611,14 +681,25 @@ export const createManual = mutation({
       throw new Error("Scheduled end must be after scheduled start");
     }
 
-    let assigneeId = args.assigneeId;
+    const requestedAssigneeIds =
+      args.assigneeIds !== undefined
+        ? [...new Set(args.assigneeIds)]
+        : args.assigneeId
+          ? [args.assigneeId]
+          : [];
+    const assigneeId = requestedAssigneeIds[0];
+    const additionalAssigneeIds = requestedAssigneeIds.slice(1);
     const notes = args.notes?.trim() || undefined;
     const clientLabel = args.clientLabel?.trim() || undefined;
     const isBackToBack = args.isBackToBack === true;
     const arrivalDeadline = isBackToBack
       ? buildBackToBackArrivalDeadline(args.scheduledStart)
       : args.arrivalDeadline;
-    if (assigneeId) {
+    if (requestedAssigneeIds.length > 8) {
+      throw new Error("Split jobs can include up to 8 assigned workers");
+    }
+
+    if (requestedAssigneeIds.length > 0) {
       const requiredRole = requiredAssignmentRoleForJob(
         {
           jobType: args.jobType,
@@ -626,17 +707,19 @@ export const createManual = mutation({
         null
       );
 
-      const assignee = await ensureAssigneeEligible(ctx, {
-        assigneeId,
-        requiredRole,
-      });
-
-      if (requiredRole !== "CLEANER") {
-        await assertNoAssigneeConflict(ctx, {
-          assigneeId: assignee._id,
-          scheduledStart: args.scheduledStart,
-          scheduledEnd: args.scheduledEnd,
+      for (const assignedWorkerId of requestedAssigneeIds) {
+        const assignee = await ensureAssigneeEligible(ctx, {
+          assigneeId: assignedWorkerId,
+          requiredRole,
         });
+
+        if (requiredRole !== "CLEANER") {
+          await assertNoAssigneeConflict(ctx, {
+            assigneeId: assignee._id,
+            scheduledStart: args.scheduledStart,
+            scheduledEnd: args.scheduledEnd,
+          });
+        }
       }
     }
 
@@ -650,6 +733,7 @@ export const createManual = mutation({
       intakeSource: args.intakeSource,
       createdById: actor._id,
       ...(assigneeId ? { assigneeId } : {}),
+      ...(additionalAssigneeIds.length > 0 ? { additionalAssigneeIds } : {}),
       ...(clientLabel ? { clientLabel } : {}),
       ...(isBackToBack ? { isBackToBack: true } : {}),
       ...(arrivalDeadline !== undefined ? { arrivalDeadline } : {}),
@@ -664,6 +748,7 @@ export const createManual = mutation({
         source: "manual_dispatch",
         propertyId: args.propertyId,
         assigneeId: assigneeId ?? null,
+        assigneeIds: requestedAssigneeIds,
         intakeSource: args.intakeSource,
         clientLabel: clientLabel ?? null,
         isBackToBack,

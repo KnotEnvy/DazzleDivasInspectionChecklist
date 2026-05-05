@@ -5,7 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import toast from "react-hot-toast";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { CompletedInspectionReview } from "@/components/CompletedInspectionReview";
 import { InspectionFinancePanel, type InspectionFinanceReview } from "@/components/InspectionFinancePanel";
 import { InspectionRoomPanel } from "@/components/InspectionRoomPanel";
@@ -194,6 +194,7 @@ export function InspectionPage() {
   const [removingPhotoId, setRemovingPhotoId] = useState<Id<"photos"> | null>(null);
   const [completingRoomId, setCompletingRoomId] = useState<Id<"roomInspections"> | null>(null);
   const [completingInspection, setCompletingInspection] = useState(false);
+  const [showCompletionCelebration, setShowCompletionCelebration] = useState(false);
   const [savingFinance, setSavingFinance] = useState(false);
   const [approvingFinance, setApprovingFinance] = useState(false);
   const [unlockingFinance, setUnlockingFinance] = useState(false);
@@ -820,7 +821,8 @@ export function InspectionPage() {
         notes: inspectionNotes.trim() || undefined,
       });
       toast.success("Checklist marked as completed");
-      navigate("/history");
+      setShowCompletionCelebration(true);
+      window.setTimeout(() => navigate("/history"), 1700);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to complete checklist");
     } finally {
@@ -915,6 +917,41 @@ export function InspectionPage() {
 
   return (
     <div className="animate-fade-in space-y-5">
+      {showCompletionCelebration ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-5 backdrop-blur-sm">
+          <div className="animate-slide-up w-full max-w-md overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-2xl">
+            <div className="bg-emerald-600 px-5 py-4 text-white">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                <p className="text-sm font-bold uppercase tracking-[0.18em]">Finished</p>
+              </div>
+            </div>
+            <div className="p-6 text-center">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                <CheckCircle2 className="h-12 w-12" />
+              </div>
+              <h2 className="mt-4 text-2xl font-bold text-slate-900">Checklist Complete</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                {inspectionView.propertyName} is finished and saved for admin review.
+              </p>
+              <div className="mt-5 grid grid-cols-3 gap-2 text-sm">
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Rooms</p>
+                  <p className="font-bold text-slate-900">{totals.rooms}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Tasks</p>
+                  <p className="font-bold text-slate-900">{totals.totalTasks}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">Photos</p>
+                  <p className="font-bold text-slate-900">{totals.photos}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
