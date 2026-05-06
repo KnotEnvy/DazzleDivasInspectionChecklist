@@ -131,6 +131,10 @@ function formatOptionalDateTime(timestamp?: number) {
   return timestamp ? new Date(timestamp).toLocaleString() : null;
 }
 
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
 function getJobAssigneeNames(job: {
   assigneeName?: string | null;
   assigneeNames?: string[];
@@ -150,7 +154,7 @@ function formatJobAssigneeLabel(job: {
   if (names.length === 0) {
     return "Unassigned";
   }
-  return names.join(" + ");
+  return names.map(firstName).join(" + ");
 }
 
 function formatPropertyRoomCounts(params: { bedrooms?: number; bathrooms?: number }) {

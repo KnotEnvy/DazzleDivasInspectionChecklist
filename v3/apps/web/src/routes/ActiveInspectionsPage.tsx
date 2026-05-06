@@ -12,6 +12,10 @@ type ActiveInspection = {
   assigneeName?: string;
 };
 
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
 export function ActiveInspectionsPage() {
   const { user, isCleaner, isInspector } = useCurrentUser();
   const items = useQuery(api.inspections.listActive) as ActiveInspection[] | undefined;
@@ -89,7 +93,7 @@ export function ActiveInspectionsPage() {
                   </p>
                   {inspection.assigneeName ? (
                     <p className="mt-1 text-xs text-slate-500">
-                      Assigned to {inspection.assigneeName}
+                      Assigned to {firstName(inspection.assigneeName)}
                     </p>
                   ) : null}
                 </div>

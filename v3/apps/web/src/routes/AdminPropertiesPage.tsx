@@ -12,6 +12,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 type ChecklistType = "CLEANING" | "INSPECTION";
 type RoomGenerationMode = "SINGLE" | "PER_BEDROOM" | "PER_BATHROOM";
 
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
 type AssignmentSummary = {
   cleaners: number;
   inspectors: number;
@@ -1701,7 +1705,7 @@ export function AdminPropertiesPage() {
                         {job.jobType} | {new Date(job.scheduledStart).toLocaleString()}
                       </p>
                       <p className="text-xs text-slate-600">
-                        {job.status} {job.assigneeName ? `| ${job.assigneeName}` : "| Unassigned"}
+                        {job.status} {job.assigneeName ? `| ${firstName(job.assigneeName)}` : "| Unassigned"}
                       </p>
                     </div>
                   ))}

@@ -134,6 +134,116 @@ async function loadFinancialApprovalByInspectionId(
   return new Map(entries);
 }
 
+function isDefined<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
+function getAssignedWorkerIds(job: Pick<Doc<"jobs">, "assigneeId" | "additionalAssigneeIds">) {
+  return [...new Set([job.assigneeId, ...(job.additionalAssigneeIds ?? [])].filter(isDefined))];
+}
+
+async function loadLinkedJobsByInspectionId(
+  ctx: QueryCtx,
+  inspections: Array<Pick<Doc<"inspections">, "_id">>
+) {
+  const entries = await Promise.all(
+    inspections.map(async (inspection) => {
+      const linkedJobs = await ctx.db
+        .query("jobs")
+        .withIndex("by_linked_inspection", (q) => q.eq("linkedInspectionId", inspection._id))
+        .collect();
+
+      return [inspection._id, linkedJobs] as const;
+    })
+  );
+
+  return new Map(entries);
+}
+
+async function loadAssigneeNamesByUserId(ctx: QueryCtx, userIds: Array<Id<"users">>) {
+  const uniqueUserIds = [...new Set(userIds)];
+  const users = await Promise.all(
+    uniqueUserIds.map(async (userId) => [userId, await ctx.db.get(userId)] as const)
+  );
+
+  return new Map(
+    users
+      .filter((entry): entry is [Id<"users">, Doc<"users">] => entry[1] !== null)
+      .map(([userId, user]) => [userId, user.name] as const)
+  );
+}
+
+async function buildCompletedHistoryItems(
+  ctx: QueryCtx,
+  inspections: Array<Doc<"inspections">>
+) {
+  const [financialApprovalByInspectionId, linkedJobsByInspectionId] = await Promise.all([
+    loadFinancialApprovalByInspectionId(ctx, inspections),
+    loadLinkedJobsByInspectionId(ctx, inspections),
+  ]);
+  const assigneeNamesByUserId = await loadAssigneeNamesByUserId(
+    ctx,
+    Array.from(linkedJobsByInspectionId.values()).flatMap((linkedJobs) =>
+      linkedJobs.flatMap(getAssignedWorkerIds)
+    )
+  );
+
+  return await Promise.all(
+    inspections.map(async (inspection) => {
+      const linkedJobs = linkedJobsByInspectionId.get(inspection._id) ?? [];
+      const linkedAssigneeNames = linkedJobs
+        .flatMap(getAssignedWorkerIds)
+        .map((assigneeId) => assigneeNamesByUserId.get(assigneeId))
+        .filter(isDefined);
+      const assigneeNames = linkedAssigneeNames.length > 0
+        ? [...new Set(linkedAssigneeNames)]
+        : [inspection.assigneeName];
+
+      return {
+        ...buildCompletedInspectionHistoryItem(
+          inspection,
+          typeof inspection.issueCount === "number"
+            ? inspection.issueCount
+            : await loadInspectionIssueCount(ctx, inspection._id),
+          {
+            financialApproved: financialApprovalByInspectionId.get(inspection._id) === true,
+          }
+        ),
+        assigneeNames,
+      };
+    })
+  );
+}
+
+async function loadCompletedInspectionsForHistory(ctx: QueryCtx, user: Doc<"users">) {
+  const inspections =
+    user.role === "ADMIN"
+      ? await ctx.db
+          .query("inspections")
+          .withIndex("by_status", (q) => q.eq("status", "COMPLETED"))
+          .order("desc")
+          .collect()
+      : await ctx.db
+          .query("inspections")
+          .withIndex("by_status", (q) => q.eq("status", "COMPLETED"))
+          .order("desc")
+          .collect();
+
+  if (user.role === "ADMIN") {
+    return inspections;
+  }
+
+  const linkedJobsByInspectionId = await loadLinkedJobsByInspectionId(ctx, inspections);
+  return inspections.filter((inspection) => {
+    if (inspection.assigneeId === user._id) {
+      return true;
+    }
+
+    const linkedJobs = linkedJobsByInspectionId.get(inspection._id) ?? [];
+    return linkedJobs.some((job) => getAssignedWorkerIds(job).some((assigneeId) => assigneeId === user._id));
+  });
+}
+
 export const listActive = query({
   args: {},
   handler: async (ctx) => {
@@ -160,38 +270,9 @@ export const listCompleted = query({
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
 
-    const inspections =
-      user.role === "ADMIN"
-        ? await ctx.db
-            .query("inspections")
-            .withIndex("by_status", (q) => q.eq("status", "COMPLETED"))
-            .order("desc")
-            .collect()
-        : await ctx.db
-            .query("inspections")
-            .withIndex("by_assignee_status", (q) =>
-              q.eq("assigneeId", user._id).eq("status", "COMPLETED")
-            )
-            .order("desc")
-            .collect();
-
-    const financialApprovalByInspectionId = await loadFinancialApprovalByInspectionId(
+    return await buildCompletedHistoryItems(
       ctx,
-      inspections
-    );
-
-    return await Promise.all(
-      inspections.map(async (inspection) => {
-        return buildCompletedInspectionHistoryItem(
-          inspection,
-          typeof inspection.issueCount === "number"
-            ? inspection.issueCount
-            : await loadInspectionIssueCount(ctx, inspection._id),
-          {
-            financialApproved: financialApprovalByInspectionId.get(inspection._id) === true,
-          }
-        );
-      })
+      await loadCompletedInspectionsForHistory(ctx, user)
     );
   },
 });
@@ -203,41 +284,34 @@ export const listCompletedPaginated = query({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
 
-    const results =
-      user.role === "ADMIN"
-        ? await ctx.db
-            .query("inspections")
-            .withIndex("by_status", (q) => q.eq("status", "COMPLETED"))
-            .order("desc")
-            .paginate(args.paginationOpts)
-        : await ctx.db
-            .query("inspections")
-            .withIndex("by_assignee_status", (q) =>
-              q.eq("assigneeId", user._id).eq("status", "COMPLETED")
-            )
-            .order("desc")
-            .paginate(args.paginationOpts);
+    if (user.role !== "ADMIN") {
+      if (args.paginationOpts.cursor !== null) {
+        return {
+          page: [],
+          isDone: true,
+          continueCursor: "",
+        };
+      }
 
-    const financialApprovalByInspectionId = await loadFinancialApprovalByInspectionId(
-      ctx,
-      results.page
-    );
+      return {
+        page: await buildCompletedHistoryItems(
+          ctx,
+          await loadCompletedInspectionsForHistory(ctx, user)
+        ),
+        isDone: true,
+        continueCursor: "",
+      };
+    }
+
+    const results = await ctx.db
+      .query("inspections")
+      .withIndex("by_status", (q) => q.eq("status", "COMPLETED"))
+      .order("desc")
+      .paginate(args.paginationOpts);
 
     return {
       ...results,
-      page: await Promise.all(
-        results.page.map(async (inspection) => {
-          return buildCompletedInspectionHistoryItem(
-            inspection,
-            typeof inspection.issueCount === "number"
-              ? inspection.issueCount
-              : await loadInspectionIssueCount(ctx, inspection._id),
-            {
-              financialApproved: financialApprovalByInspectionId.get(inspection._id) === true,
-            }
-          );
-        })
-      ),
+      page: await buildCompletedHistoryItems(ctx, results.page),
     };
   },
 });

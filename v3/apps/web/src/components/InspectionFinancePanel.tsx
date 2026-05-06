@@ -51,6 +51,10 @@ function formatCurrency(value?: number) {
   }).format(value);
 }
 
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
 export function InspectionFinancePanel(props: {
   review: InspectionFinanceReview | null;
   saving: boolean;
@@ -99,8 +103,8 @@ export function InspectionFinancePanel(props: {
   const locked = review.financeStatus === "APPROVED";
   const workerLabel =
     review.assigneeNames && review.assigneeNames.length > 0
-      ? review.assigneeNames.join(" + ")
-      : review.assigneeName;
+      ? review.assigneeNames.map(firstName).join(" + ")
+      : firstName(review.assigneeName);
 
   return (
     <section className="rounded-2xl border border-border bg-white p-4">

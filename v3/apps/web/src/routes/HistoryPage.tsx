@@ -15,6 +15,7 @@ type CompletedInspection = {
   propertyName: string;
   type: string;
   assigneeName?: string;
+  assigneeNames?: string[];
   issueCount?: number;
   financialApproved?: boolean;
 };
@@ -40,6 +41,18 @@ function formatCompletionTime(timestamp: number, referenceDate: Date) {
   }
 
   return completedAt.toLocaleString();
+}
+
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+function formatCleanerLabel(item: CompletedInspection) {
+  if (item.assigneeNames && item.assigneeNames.length > 0) {
+    return item.assigneeNames.map(firstName).join(" + ");
+  }
+
+  return item.assigneeName ? firstName(item.assigneeName) : "Unassigned";
 }
 
 function HistorySection({
@@ -98,7 +111,7 @@ function HistorySection({
                       {item.type} | Finished {formatCompletionTime(completedAt, referenceDate)}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Cleaner: {item.assigneeName?.trim() || "Unassigned"}
+                      Cleaner: {formatCleanerLabel(item)}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -275,7 +288,7 @@ export function HistoryPage() {
             <div className="mt-4 rounded-xl border border-border bg-slate-50 p-3 text-sm">
               <p className="font-semibold text-slate-900">{deleteTarget.propertyName}</p>
               <p className="text-slate-600">
-                {deleteTarget.type} | Cleaner: {deleteTarget.assigneeName?.trim() || "Unassigned"}
+                {deleteTarget.type} | Cleaner: {formatCleanerLabel(deleteTarget)}
               </p>
             </div>
 

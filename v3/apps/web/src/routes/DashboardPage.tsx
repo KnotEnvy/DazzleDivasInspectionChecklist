@@ -163,12 +163,16 @@ function getJobAssigneeIds(job: Pick<AdminDispatchJob, "assigneeId" | "assigneeI
       : [];
 }
 
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
 function formatJobAssigneeLabel(job: Pick<AdminDispatchJob, "assigneeName" | "assigneeNames">) {
   if (job.assigneeNames && job.assigneeNames.length > 0) {
-    return job.assigneeNames.join(" + ");
+    return job.assigneeNames.map(firstName).join(" + ");
   }
 
-  return job.assigneeName ?? "";
+  return job.assigneeName ? firstName(job.assigneeName) : "";
 }
 
 export function DashboardPage() {

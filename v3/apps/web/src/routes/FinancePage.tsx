@@ -153,10 +153,14 @@ function statusTone(status: FinanceJob["financeStatus"]) {
   }
 }
 
+function firstName(name: string) {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
 function formatWorkerLabel(job: Pick<FinanceJob, "assigneeName" | "assigneeNames">) {
   return job.assigneeNames && job.assigneeNames.length > 0
-    ? job.assigneeNames.join(" + ")
-    : job.assigneeName;
+    ? job.assigneeNames.map(firstName).join(" + ")
+    : firstName(job.assigneeName);
 }
 
 export function FinancePage() {
@@ -355,7 +359,7 @@ export function FinancePage() {
                 <div key={worker.assigneeId} className="rounded-2xl border border-border bg-slate-50 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold">{worker.assigneeName}</p>
+                      <p className="font-semibold">{firstName(worker.assigneeName)}</p>
                       <p className="text-sm text-slate-600">
                         Payroll {formatCurrency(worker.totalPayroll)} | Revenue {formatCurrency(worker.totalRevenue)} | Gross {formatCurrency(worker.grossMargin)}
                       </p>
