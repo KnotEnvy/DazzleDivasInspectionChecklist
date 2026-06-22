@@ -49,6 +49,61 @@ describe("validateChecklistStartFromJob", () => {
     expect(result.isAssignedWorkerForLinkedJob).toBe(true);
   });
 
+  it("reuses an existing linked inspection for additional assigned workers", () => {
+    const result = validateChecklistStartFromJob({
+      jobIdProvided: true,
+      job: {
+        propertyId: "property-1",
+        status: "IN_PROGRESS",
+        jobType: "CLEANING",
+        scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
+        linkedInspectionId: "inspection-1",
+        assigneeId: "worker-1",
+        additionalAssigneeIds: ["worker-2", "worker-3"],
+      },
+      propertyId: "property-1",
+      checklistType: "CLEANING",
+      actor: {
+        _id: "worker-2",
+        role: "CLEANER",
+      },
+      existingInspectionExists: true,
+      currentTime: Date.UTC(2026, 3, 6, 15, 0, 0),
+      propertyTimeZone: "UTC",
+    });
+
+    expect(result.existingInspectionId).toBe("inspection-1");
+    expect(result.skipPropertyAssignmentCheck).toBe(true);
+    expect(result.isAssignedWorkerForLinkedJob).toBe(true);
+    expect(result.nextAssigneeId).toBe("worker-2");
+  });
+
+  it("blocks unassigned workers from reusing an existing linked inspection", () => {
+    expect(() =>
+      validateChecklistStartFromJob({
+        jobIdProvided: true,
+        job: {
+          propertyId: "property-1",
+          status: "IN_PROGRESS",
+          jobType: "CLEANING",
+          scheduledStart: Date.UTC(2026, 3, 6, 15, 0, 0),
+          linkedInspectionId: "inspection-1",
+          assigneeId: "worker-1",
+          additionalAssigneeIds: ["worker-2"],
+        },
+        propertyId: "property-1",
+        checklistType: "CLEANING",
+        actor: {
+          _id: "worker-4",
+          role: "CLEANER",
+        },
+        existingInspectionExists: true,
+        currentTime: Date.UTC(2026, 3, 6, 15, 0, 0),
+        propertyTimeZone: "UTC",
+      })
+    ).toThrow("You are not assigned to this job");
+  });
+
   it("blocks checklist starts for mismatched jobs and wrong assignees", () => {
     expect(() =>
       validateChecklistStartFromJob({

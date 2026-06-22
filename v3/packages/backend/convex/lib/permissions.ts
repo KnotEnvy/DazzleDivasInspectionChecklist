@@ -75,6 +75,31 @@ export async function getInspectionOrThrow(
   return inspection;
 }
 
+function isAssignedToLinkedJob(user: Doc<"users">, job: Doc<"jobs">) {
+  return (
+    job.assigneeId === user._id ||
+    (job.additionalAssigneeIds ?? []).some((assigneeId) => assigneeId === user._id)
+  );
+}
+
+async function hasLinkedJobInspectionAccess(
+  ctx: Ctx,
+  user: Doc<"users">,
+  inspection: Doc<"inspections">
+) {
+  const requiredRole = assignmentRoleForChecklistType(inspection.type);
+  if (user.role !== requiredRole) {
+    return false;
+  }
+
+  const linkedJobs = await ctx.db
+    .query("jobs")
+    .withIndex("by_linked_inspection", (q) => q.eq("linkedInspectionId", inspection._id))
+    .collect();
+
+  return linkedJobs.some((job) => isAssignedToLinkedJob(user, job));
+}
+
 export async function requireInspectionAccess(
   ctx: Ctx,
   inspectionId: Id<"inspections">
@@ -83,6 +108,10 @@ export async function requireInspectionAccess(
   const inspection = await getInspectionOrThrow(ctx, inspectionId);
 
   if (user.role === "ADMIN" || inspection.assigneeId === user._id) {
+    return { user, inspection };
+  }
+
+  if (await hasLinkedJobInspectionAccess(ctx, user, inspection)) {
     return { user, inspection };
   }
 

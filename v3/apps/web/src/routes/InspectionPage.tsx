@@ -202,6 +202,7 @@ export function InspectionPage() {
   const lastHydratedRoomId = useRef<string | null>(null);
   const lastHydratedInspectionNotes = useRef("");
   const lastHydratedInspectionId = useRef<string | null>(null);
+  const completionRewardRef = useRef<HTMLDivElement | null>(null);
   const [pendingDirectPhotoCountByRoom, setPendingDirectPhotoCountByRoom] = useState<
     Record<string, number>
   >({});
@@ -281,6 +282,15 @@ export function InspectionPage() {
   useEffect(() => {
     setConfirmAction(null);
   }, [selectedRoomId]);
+
+  useEffect(() => {
+    if (!showCompletionCelebration) {
+      return;
+    }
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    requestAnimationFrame(() => completionRewardRef.current?.focus());
+  }, [showCompletionCelebration]);
 
   useEffect(() => {
     if (!selectedRoomView) {
@@ -918,7 +928,11 @@ export function InspectionPage() {
   return (
     <div className="animate-fade-in space-y-5">
       {showCompletionCelebration ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-5 backdrop-blur-sm">
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-5 backdrop-blur-sm"
+          role="dialog"
+        >
           <div className="animate-slide-up w-full max-w-md overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-2xl">
             <div className="bg-emerald-600 px-5 py-4 text-white">
               <div className="flex items-center gap-2">
@@ -926,7 +940,7 @@ export function InspectionPage() {
                 <p className="text-sm font-bold uppercase tracking-[0.18em]">Finished</p>
               </div>
             </div>
-            <div className="p-6 text-center">
+            <div className="p-6 text-center" ref={completionRewardRef} tabIndex={-1}>
               <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
                 <CheckCircle2 className="h-12 w-12" />
               </div>

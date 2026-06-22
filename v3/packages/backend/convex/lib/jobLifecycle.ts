@@ -268,6 +268,10 @@ export function validateChecklistStartFromJob<
       (job.assigneeId === params.actor._id ||
         (job.additionalAssigneeIds ?? []).includes(params.actor._id));
 
+    if (params.actor.role !== "ADMIN" && !isAssignedWorker) {
+      throw new Error("You are not assigned to this job");
+    }
+
     return {
       existingInspectionId: job.linkedInspectionId,
       skipPropertyAssignmentCheck: true,

@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, KeyboardEvent, useEffect, useId, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Id } from "convex/_generated/dataModel";
 import { Camera, ChevronDown, ChevronUp, Download } from "lucide-react";
@@ -57,6 +57,23 @@ type InspectionRoomPanelProps = {
   onRemovePhoto: (photo: { _id: string; isPendingUpload?: boolean }) => Promise<void>;
   onCompleteRoom: () => Promise<void>;
 };
+
+function isAndroidDevice() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  const navWithUserAgentData = navigator as Navigator & {
+    userAgentData?: {
+      platform?: string;
+    };
+  };
+
+  return (
+    /Android/i.test(navigator.userAgent) ||
+    /Android/i.test(navWithUserAgentData.userAgentData?.platform ?? "")
+  );
+}
 
 function supportsNativeFileShare() {
   return (
@@ -165,8 +182,9 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
   } = props;
   const [savingBackupId, setSavingBackupId] = useState<string | null>(null);
   const [notesExpanded, setNotesExpanded] = useState(false);
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const photoInputId = useId();
+  const cameraInputId = `${photoInputId}-camera`;
+  const galleryInputId = `${photoInputId}-gallery`;
 
   useEffect(() => {
     setNotesExpanded(false);
@@ -196,23 +214,17 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
   const effectivePhotoCount = room.photos.length + pendingDirectPhotoCount;
   const roomHasEnoughPhotos = effectivePhotoCount >= room.requiredPhotoMin;
   const hasAnyPhotoCards = room.photos.length > 0 || pendingDirectPhotoCount > 0;
-  const prefersAndroidCameraCapture =
-    typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+  const prefersAndroidCameraCapture = isAndroidDevice();
 
-  function openCameraInput() {
-    if (inspectionStatus === "COMPLETED") {
+  function handleFileLabelKeyDown(event: KeyboardEvent<HTMLLabelElement>) {
+    if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
 
-    cameraInputRef.current?.click();
-  }
-
-  function openGalleryInput() {
-    if (inspectionStatus === "COMPLETED") {
-      return;
+    event.preventDefault();
+    if (inspectionStatus !== "COMPLETED") {
+      document.getElementById(event.currentTarget.htmlFor)?.click();
     }
-
-    galleryInputRef.current?.click();
   }
 
   async function handleSaveBackup(photo: RoomDetail["photos"][number]) {
@@ -369,24 +381,32 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
           <div className="space-y-2 text-sm font-medium text-slate-700">
             <span className="block">Add Photos</span>
             <div className="flex flex-wrap gap-2">
-              <button
-                className="field-button primary inline-flex items-center px-4"
-                disabled={inspectionStatus === "COMPLETED"}
-                onClick={openCameraInput}
-                type="button"
+              <label
+                aria-disabled={inspectionStatus === "COMPLETED"}
+                className={`field-button primary inline-flex cursor-pointer items-center px-4 ${
+                  inspectionStatus === "COMPLETED" ? "pointer-events-none opacity-60" : ""
+                }`}
+                htmlFor={cameraInputId}
+                onKeyDown={handleFileLabelKeyDown}
+                role="button"
+                tabIndex={inspectionStatus === "COMPLETED" ? -1 : 0}
               >
                 <Camera className="mr-2 h-4 w-4" />
                 Add Photo
-              </button>
+              </label>
               {prefersAndroidCameraCapture ? (
-                <button
-                  className="field-button secondary inline-flex items-center px-4"
-                  disabled={inspectionStatus === "COMPLETED"}
-                  onClick={openGalleryInput}
-                  type="button"
+                <label
+                  aria-disabled={inspectionStatus === "COMPLETED"}
+                  className={`field-button secondary inline-flex cursor-pointer items-center px-4 ${
+                    inspectionStatus === "COMPLETED" ? "pointer-events-none opacity-60" : ""
+                  }`}
+                  htmlFor={galleryInputId}
+                  onKeyDown={handleFileLabelKeyDown}
+                  role="button"
+                  tabIndex={inspectionStatus === "COMPLETED" ? -1 : 0}
                 >
                   Gallery
-                </button>
+                </label>
               ) : null}
               <input
                 accept="image/*"
@@ -394,9 +414,9 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
                 capture={prefersAndroidCameraCapture ? "environment" : undefined}
                 className="sr-only"
                 disabled={inspectionStatus === "COMPLETED"}
+                id={cameraInputId}
                 multiple={!prefersAndroidCameraCapture}
                 onChange={(event) => void onPhotoUpload(event)}
-                ref={cameraInputRef}
                 type="file"
               />
               {prefersAndroidCameraCapture ? (
@@ -405,9 +425,9 @@ export function InspectionRoomPanel(props: InspectionRoomPanelProps) {
                   aria-label="Choose photo from gallery"
                   className="sr-only"
                   disabled={inspectionStatus === "COMPLETED"}
+                  id={galleryInputId}
                   multiple
                   onChange={(event) => void onPhotoUpload(event)}
-                  ref={galleryInputRef}
                   type="file"
                 />
               ) : null}
