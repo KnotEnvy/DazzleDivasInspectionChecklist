@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Next Team Handoff
 
-Updated: April 8, 2026
+Updated: July 4, 2026
 
 ## Purpose
 This is the fastest path for the next engineering team to understand the current production app, find the important code, and make safe improvements.
@@ -11,6 +11,7 @@ The app is already used in production by admins, cleaners, and inspectors, and f
 - Cleaners and inspectors complete room-by-room checklists in the field.
 - Field workers capture proof photos and notes during checklist execution.
 - Admins review completed work and save/export photos.
+- Backend retention keeps proof photos for 90 days and purges older storage monthly.
 - Admins now review payroll/revenue data and approve job financials inside the app.
 - Offline queue/replay exists so field work can continue with weak or missing connectivity.
 
@@ -45,6 +46,7 @@ v3/
 - Prefer narrow, additive fixes over rewrites.
 - Do not assume a Cloudflare deploy means the matching Convex schema/functions are live.
 - Treat Convex plan-limit and bandwidth warnings as operational issues.
+- Do not bypass photo retention or leave `PHOTO_RETENTION_PURGE_TOKEN` enabled after manual cleanup.
 - Assume any change to jobs, inspections, photos, history, or finance can affect real business operations immediately.
 
 ## Key Frontend Files
@@ -105,6 +107,13 @@ v3/
 - `packages/backend/convex/roomInspections.ts`
 - `packages/backend/convex/taskResults.ts`
 - `packages/backend/convex/photos.ts`
+
+### Photo retention / storage capacity
+- `packages/backend/convex/crons.ts`
+- `packages/backend/convex/photoRetention.ts`
+- `packages/backend/convex/photoRetentionBatches.ts`
+- `packages/backend/convex/photoRetentionAdmin.ts`
+- `packages/backend/convex/lib/photoRetention.ts`
 
 ### Scheduling / jobs / properties / templates
 - `packages/backend/convex/jobs.ts`
@@ -189,7 +198,33 @@ Current production behavior:
 - room completion waits for in-flight photo work and queued room photos before calling backend completion
 - pending local photos can still be backed up manually from the UI
 
-### 4. Admin completed review / photo saving / finance approval
+### 4. Backend photo retention / storage cleanup
+Retention files:
+- `crons.ts`
+- `photoRetention.ts`
+- `photoRetentionBatches.ts`
+- `photoRetentionAdmin.ts`
+- `lib/photoRetention.ts`
+
+Current production behavior:
+- proof photos are retained for 90 days
+- monthly Convex cron runs on the 1st at `06:00 UTC`
+- purge deletes Convex storage objects and matching `photos` rows
+- room photo counts are recomputed after deletion
+- completed room/checklist status is not reopened just because retained proof photos aged out
+- manual purge uses `photoRetentionAdmin:purgeExpiredPhotosNow` and requires `PHOTO_RETENTION_PURGE_TOKEN`
+- only set `PHOTO_RETENTION_PURGE_TOKEN` temporarily, run the cleanup, then remove it immediately
+
+Last production catch-up:
+- date: July 4, 2026
+- cutoff: `2026-04-05T13:57:17.777Z`
+- deleted: 564 photos / 444,408,306 bytes
+- affected room inspections: 223
+- failures: 0
+- incomplete: false
+- temporary production purge token was removed after the run
+
+### 5. Admin completed review / photo saving / finance approval
 Completed review and photo save:
 - `CompletedInspectionReview.tsx`
 - `iphonePhotoExport.ts`
@@ -208,7 +243,7 @@ Current behavior:
 - approved job financials become locked snapshots for realized reporting
 - unlocking requires a reason and returns the job to editable/pending state
 
-### 5. Admin properties / dispatch
+### 6. Admin properties / dispatch
 Property management:
 - `AdminPropertiesPage.tsx`
 - `properties.ts`
@@ -234,7 +269,7 @@ Current behavior:
 - checklist execution still enforces active-checklist limits by role
 - turnover creation uses a two-step confirmation to reduce accidental incomplete jobs
 
-### 6. Finance reporting and setup
+### 7. Finance reporting and setup
 Core finance screens:
 - `FinancePage.tsx`
 - `AppShell.tsx`
@@ -277,6 +312,13 @@ Current finance behavior:
 - The current repo hardens the frontend photo sync path so retryable photo failures stay retryable, conflicts remain visible in the room UI, and old conflicts do not force all new captures into queue mode.
 - Android capture flow was updated so workers can take pictures directly from the app instead of being pushed into gallery selection.
 
+### Photo retention and Convex capacity
+- Production storage pressure led to a 90-day photo retention policy.
+- Monthly retention is implemented as a Convex cron and backend action/mutation pair, not a frontend cleanup.
+- User-initiated photo deletes still use `photos.remove`; retention uses separate code so historical completed rooms are not reopened when old proof photos age out.
+- July 4, 2026 catch-up purge removed 564 photos and 444,408,306 bytes with no failures.
+- The manual purge action is token-gated for CLI use; do not leave `PHOTO_RETENTION_PURGE_TOKEN` set in production.
+
 ### Dispatch and turnover operations
 - The Client / Account field was moved from quick-turnover job creation onto properties as `clientLabel`.
 - Production property create/edit later failed when Client / Account was present because the frontend feature reached production before the matching Convex backend/schema deploy.
@@ -297,6 +339,8 @@ Current finance behavior:
 - A frontend change reaching production does not guarantee production Convex functions are on the same revision.
 - If a feature depends on schema, mutation args, query hydration, or backend calculations, verify that Convex production has also been deployed.
 - Finance changes especially need this check because settings forms, approval flows, and reporting all depend on backend shape and calculations.
+- Retention, cron, and Convex storage changes require an explicit Convex production deploy; a Cloudflare deploy alone does nothing for them.
+- Manual production photo purge flow: set `PHOTO_RETENTION_PURGE_TOKEN` temporarily, run `photoRetentionAdmin:purgeExpiredPhotosNow`, verify the result, then remove the env var immediately.
 - If a fix is frontend-only, do not waste time waiting on Convex deploys.
 - Backend deploy script lives in `packages/backend/package.json`:
   - `bun run deploy`
@@ -305,6 +349,8 @@ Current finance behavior:
 - Convex production has warned that the project is above or near Free plan limits.
 - The next team should inspect Convex dashboard usage before taking on bandwidth-heavy, reporting-heavy, or photo-heavy work.
 - Assume photos, exports, history views, and finance queries may now have real cost and service implications.
+- Photo storage is now reduced by 90-day retention, but dashboard storage/bandwidth should still be checked after each heavy photo batch.
+- If storage pressure returns, first confirm monthly retention is running before changing capture quality or deleting additional business data.
 - Capacity work is production-risk reduction, not optional cleanup.
 
 ## Dev Environment Notes
@@ -379,6 +425,7 @@ Before shipping meaningful changes, validate:
 - Payroll Thursday-through-Wednesday grouping and performed dates
 - History `Finished Today` cleaner attribution
 - Offline queue/replay for at least one worker scenario
+- Convex cron/manual retention path after retention-related backend changes
 
 ## Known Areas That Still Deserve Attention
 - Real-device mobile QA is still essential for photo capture, network flapping, and native chooser behavior.
@@ -389,6 +436,7 @@ Before shipping meaningful changes, validate:
 - Auth/custom-domain correctness must always be rechecked before onboarding changes ship.
 - Frontend-vs-backend deployment drift is a real operational risk because Cloudflare and Convex do not auto-roll together.
 - Convex bandwidth, storage, and plan headroom need active monitoring.
+- Monthly photo retention reduces storage growth but does not replace Convex plan monitoring.
 - The app has real production data now, so any schema, auth, env, history, or finance change should be treated as a rollout change.
 
 ## Next UX Batch The Team Should Be Ready For
@@ -404,7 +452,7 @@ These are the highest-signal areas surfaced by real production use, not speculat
 2. Trace the exact frontend route/component and backend mutation/query/action involved.
 3. Ship the smallest safe fix.
 4. Verify whether the change needs frontend deploy, Convex deploy, or both.
-5. Check Convex usage and plan impact before large photo, history, or finance-query changes.
+5. Check Convex usage, retention status, and plan impact before large photo, history, or finance-query changes.
 6. Only then move on to broader enhancements or polish.
 
 ## Bottom Line

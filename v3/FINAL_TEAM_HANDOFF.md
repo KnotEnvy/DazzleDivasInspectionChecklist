@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: April 8, 2026
+Updated: July 4, 2026
 
 ## Purpose
 This is the active high-level handoff for the next working team.
@@ -14,6 +14,7 @@ Treat this repository like operating infrastructure, not a rebuild sandbox.
 - Cleaners and inspectors complete field checklists room by room.
 - Completed-work review is live for admins.
 - Photo review and iPhone-friendly save/export flows are live.
+- Backend photo retention is live: photos older than 90 days are purged monthly.
 - Offline queue/replay is live and remains business-critical for field use.
 - The finance module is now live for admin operations.
 
@@ -39,6 +40,7 @@ Current finance behavior:
 - Any schema/auth/env change must be treated as a rollout change.
 - Cloudflare Pages and Convex deploy separately. Do not assume a frontend deploy updated backend behavior.
 - Convex production is warning that the project is above or near Free plan limits. Bandwidth, storage, and usage headroom are active operational concerns.
+- Photo storage is now controlled by a 90-day retention policy. Do not bypass it or leave manual purge credentials enabled.
 
 ## What Changed Since The Previous Handoff
 ### Checklist execution and field workflow
@@ -59,6 +61,14 @@ Current finance behavior:
 - Property finance settings and cleaner pay profiles are editable in the admin UI.
 - Job financial review/approval is embedded in completed checklist review.
 - Thursday-to-Wednesday weekly payroll reporting is the current business rule.
+
+### Photo retention and capacity
+- Convex now runs `purge photos older than 90 days` monthly on the 1st at `06:00 UTC`.
+- Retention implementation lives in `packages/backend/convex/crons.ts`, `photoRetention.ts`, `photoRetentionBatches.ts`, `photoRetentionAdmin.ts`, and `lib/photoRetention.ts`.
+- The retention purge deletes Convex storage objects and `photos` rows, then recomputes room photo counts without reopening completed checklists.
+- The manual purge entrypoint is `photoRetentionAdmin:purgeExpiredPhotosNow`; it requires the temporary server env var `PHOTO_RETENTION_PURGE_TOKEN`.
+- July 4, 2026 production catch-up purge completed with 564 photos deleted, 444,408,306 bytes removed, 223 room inspections touched, `0` failures, and `incomplete: false`.
+- The temporary production purge token was removed after the catch-up run.
 
 ## Priority Workstreams For The Next Team
 ### 1. Cleaner/admin workflow polish from real usage
@@ -101,6 +111,7 @@ Primary goal: keep the app online and responsive under real usage growth.
 Focus:
 - inspect Convex bandwidth, storage, and function usage in the dashboard
 - understand the cost of photos, finance queries, and history/reporting volume
+- confirm monthly photo retention is running before storage pressure returns
 - decide whether to reduce usage or move plans before growth forces the decision
 
 ## Validation Standard
@@ -123,10 +134,11 @@ Before shipping meaningful changes, validate:
 - Payroll totals and Thursday-through-Wednesday grouping
 - Property create/edit including finance config
 - History `Finished Today` cleaner attribution
+- Convex production deploy after any retention, photo storage, or cron change
 
 ## Recommended Next Moves
 1. Build the next enhancement batch from real cleaner/admin feedback, not speculation.
 2. Keep finance changes narrow until admins trust the current numbers and approval flow day to day.
 3. Re-run real-device photo QA on both iPhone and Android before changing capture flows again.
-4. Audit Convex production usage before the next reporting-heavy or photo-heavy batch.
+4. Audit Convex production usage after the July 4 photo purge and before the next reporting-heavy or photo-heavy batch.
 5. Keep fixes additive and always verify whether the rollout needs frontend deploy, Convex deploy, or both.

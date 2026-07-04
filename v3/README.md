@@ -1,6 +1,6 @@
 # Dazzle Divas v3
 
-Updated: April 8, 2026
+Updated: July 4, 2026
 
 ## Status
 `v3` is the active production app for Dazzle Divas field operations and back-office management.
@@ -13,6 +13,7 @@ Currently live and actively used:
 - cleaner and inspector checklist execution
 - proof photo capture and room-level notes
 - admin completed-checklist review and photo saving/export
+- 90-day backend photo retention with monthly storage cleanup
 - offline queueing and replay for field work
 - invite-based staff onboarding
 - admin finance tracking for payroll, revenue, and job-level finance review
@@ -25,6 +26,7 @@ Recent production improvements that matter:
 - room completion now advances to the next room in list order without auto-expanding it
 - history cards show the cleaner name for finished work
 - finance now includes property-level revenue settings, cleaner pay profiles, job financial review/approval, revenue views, payroll views, and Thursday-through-Wednesday weekly payroll grouping
+- photo retention now removes photos older than 90 days; the July 4, 2026 production catch-up purge removed 564 photos and about 444 MB with no failures
 
 Current emphasis:
 - keep production stable while improving workflows from real cleaner/admin feedback
@@ -32,13 +34,21 @@ Current emphasis:
 - improve field confidence on mobile capture, progress, and completion flows
 - keep finance accurate, understandable, and easy for admins to operate
 - maintain rollout discipline across separate Cloudflare and Convex deploys
-- reduce Convex bandwidth and plan pressure before it affects operations
+- keep Convex photo storage, bandwidth, and plan pressure under active review
 
 ## Stack
 - Web: React 19 + Vite 6 + Tailwind 4 + React Router 7
 - Backend: Convex functions + Convex Auth + Convex storage
 - Runtime/package manager: Bun workspaces
 - Shared package: `@dazzle/shared`
+
+## Photo Retention And Capacity
+- Proof photos are retained for 90 days.
+- Convex runs the monthly purge on the 1st at `06:00 UTC` from `packages/backend/convex/crons.ts`.
+- Retention code lives in `packages/backend/convex/photoRetention.ts`, `packages/backend/convex/photoRetentionBatches.ts`, `packages/backend/convex/photoRetentionAdmin.ts`, and `packages/backend/convex/lib/photoRetention.ts`.
+- The purge deletes Convex storage objects and matching `photos` rows, then recomputes room photo counts without reopening completed rooms.
+- The manual purge action is guarded by `PHOTO_RETENTION_PURGE_TOKEN`; only set that env var temporarily for an intentional production cleanup and remove it immediately after the run.
+- Last manual production cleanup: July 4, 2026, cutoff `2026-04-05T13:57:17.777Z`, deleted 564 photos / 444,408,306 bytes, `0` failures.
 
 ## Repo Layout
 ```text
@@ -66,6 +76,7 @@ Older rollout, setup, and checkpoint docs live in `archive/` for reference only.
 - Do not casually change auth, env wiring, or redirect behavior.
 - Do not assume a frontend deploy also updated Convex production.
 - Treat Convex plan-limit and bandwidth warnings as operational issues.
+- Do not leave `PHOTO_RETENTION_PURGE_TOKEN` set after a manual purge.
 - Prefer narrow, additive changes over rewrites.
 
 ## Local Setup
