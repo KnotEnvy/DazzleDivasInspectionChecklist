@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
 import type * as devTools from "../devTools.js";
 import type * as finance from "../finance.js";
 import type * as http from "../http.js";
@@ -23,8 +24,12 @@ import type * as lib_jobDeletion from "../lib/jobDeletion.js";
 import type * as lib_jobLifecycle from "../lib/jobLifecycle.js";
 import type * as lib_onboardingEmail from "../lib/onboardingEmail.js";
 import type * as lib_permissions from "../lib/permissions.js";
+import type * as lib_photoRetention from "../lib/photoRetention.js";
 import type * as lib_propertySummaries from "../lib/propertySummaries.js";
 import type * as lib_validators from "../lib/validators.js";
+import type * as photoRetention from "../photoRetention.js";
+import type * as photoRetentionAdmin from "../photoRetentionAdmin.js";
+import type * as photoRetentionBatches from "../photoRetentionBatches.js";
 import type * as photos from "../photos.js";
 import type * as properties from "../properties.js";
 import type * as propertyAssignments from "../propertyAssignments.js";
@@ -44,6 +49,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
+  crons: typeof crons;
   devTools: typeof devTools;
   finance: typeof finance;
   http: typeof http;
@@ -57,8 +63,12 @@ declare const fullApi: ApiFromModules<{
   "lib/jobLifecycle": typeof lib_jobLifecycle;
   "lib/onboardingEmail": typeof lib_onboardingEmail;
   "lib/permissions": typeof lib_permissions;
+  "lib/photoRetention": typeof lib_photoRetention;
   "lib/propertySummaries": typeof lib_propertySummaries;
   "lib/validators": typeof lib_validators;
+  photoRetention: typeof photoRetention;
+  photoRetentionAdmin: typeof photoRetentionAdmin;
+  photoRetentionBatches: typeof photoRetentionBatches;
   photos: typeof photos;
   properties: typeof properties;
   propertyAssignments: typeof propertyAssignments;
