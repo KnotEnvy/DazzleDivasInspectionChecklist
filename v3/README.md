@@ -18,7 +18,7 @@ Currently live and actively used:
 - invite-based staff onboarding
 - admin finance tracking for payroll, revenue, and job-level finance review
 
-July 16 feedback batch (implemented and validated locally; pending Cloudflare + Convex production rollout):
+July 16 feedback batch (deployed to Convex production and Cloudflare Pages):
 - untouched started checklists can be stopped safely and restarted later; stopping is blocked after any task, note, issue, room, or photo is marked
 - dispatch controls support a primary assignee plus additional team members that admins can add or remove
 - admin notifications now surface job starts and completions from a header notification center
@@ -85,7 +85,7 @@ Older rollout, setup, and checkpoint docs live in `archive/` for reference only.
 - Do not break offline queue/replay behavior.
 - Do not casually change auth, env wiring, or redirect behavior.
 - Do not assume a frontend deploy also updated Convex production.
-- The July 16 feedback batch adds Convex schema/functions for notifications, checklist stopping, team assignment, payroll ranges, and user deletion; deploy Convex before the matching frontend.
+- The July 16 feedback batch required a coordinated Convex and Cloudflare rollout; both sides were deployed on July 16, 2026.
 - Treat Convex plan-limit and bandwidth warnings as operational issues.
 - Do not leave `PHOTO_RETENTION_PURGE_TOKEN` set after a manual purge.
 - Prefer narrow, additive changes over rewrites.

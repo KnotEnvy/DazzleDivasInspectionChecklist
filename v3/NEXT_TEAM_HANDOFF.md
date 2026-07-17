@@ -15,8 +15,8 @@ The app is already used in production by admins, cleaners, and inspectors, and f
 - Admins now review payroll/revenue data and approve job financials inside the app.
 - Offline queue/replay exists so field work can continue with weak or missing connectivity.
 
-## Pending Rollout
-The July 16 user-feedback batch is implemented and locally validated but was not deployed by this work. It adds Convex schema/functions as well as frontend behavior, so deploy Convex production and Cloudflare Pages together, then run the added validation flows before describing the batch as live.
+## Latest Production Rollout
+The July 16 user-feedback batch is live. Convex production was deployed first, followed by Cloudflare Pages from commit `e30aa21`; the Cloudflare deployment check completed successfully.
 
 ## Tech Stack
 - Frontend: React 19 + Vite 6 + Tailwind 4 + React Router 7
@@ -184,8 +184,8 @@ Current production behavior:
 - inspectors can have up to 5 active checklists
 - room completion moves to the next room in list order without expanding it automatically
 - Step 3A `Room Notes` is intentionally collapsed down to the heading by default
-- pending July 16 rollout: untouched started checklists expose `Stop Checklist`; stopping deletes only the empty scaffold, unlinks the job, and returns it to `SCHEDULED`
-- pending July 16 rollout: stopping is rejected after any task, note, issue, room, photo, queued change, or active upload is present
+- untouched started checklists expose `Stop Checklist`; stopping deletes only the empty scaffold, unlinks the job, and returns it to `SCHEDULED`
+- stopping is rejected after any task, note, issue, room, photo, queued change, or active upload is present
 
 ### 3. Field photo capture / upload / replay
 Frontend flow:
@@ -281,7 +281,7 @@ Current behavior:
 - B2B jobs are visually labeled in admin and worker schedule surfaces
 - cleaner-role jobs may overlap in dispatch assignment
 - checklist execution still enforces active-checklist limits by role
-- pending July 16 rollout: dispatch editing preserves one primary assignee and supports adding/removing additional same-role team members, up to 8 total workers
+- dispatch editing preserves one primary assignee and supports adding/removing additional same-role team members, up to 8 total workers
 - turnover creation uses a two-step confirmation to reduce accidental incomplete jobs
 
 ### 7. Finance reporting and setup
@@ -310,8 +310,8 @@ Current finance behavior:
 - unapproved work uses live-derived finance values from current property settings and pay profiles
 - approved work uses locked job financial snapshots so realized reporting does not drift
 - there is not yet a formal export/report download workflow; admins still need to operate from the screen data
-- pending July 16 rollout: payroll payee job lists can collapse
-- pending July 16 rollout: admins can navigate historical Thursday-to-Wednesday payroll weeks or switch to calendar-month payroll
+- payroll payee job lists can collapse
+- admins can navigate historical Thursday-to-Wednesday payroll weeks or switch to calendar-month payroll
 
 ### 8. Admin notifications / staff deletion / dashboard polish
 Notification source:
@@ -319,7 +319,7 @@ Notification source:
 - `lib/adminNotifications.ts`
 - `AdminNotificationBell.tsx`
 
-Pending July 16 rollout behavior:
+Current behavior:
 - active admins receive in-app notifications when a job transitions to started or completed
 - notifications link to the job in the dispatch drawer and support individual/all read actions
 - inactive unused users can be deleted from `AdminPage.tsx`; backend deletion is blocked when business or audit history would be orphaned
@@ -371,7 +371,7 @@ Pending July 16 rollout behavior:
 - A frontend change reaching production does not guarantee production Convex functions are on the same revision.
 - If a feature depends on schema, mutation args, query hydration, or backend calculations, verify that Convex production has also been deployed.
 - Finance changes especially need this check because settings forms, approval flows, and reporting all depend on backend shape and calculations.
-- The July 16 feedback batch requires a Convex production deploy before the frontend because it adds `adminNotifications` schema/functions and changes checklist, job, finance, and user mutations.
+- The July 16 feedback batch was deployed to Convex production before the matching Cloudflare frontend; preserve that backend-first order for future coordinated releases.
 - Retention, cron, and Convex storage changes require an explicit Convex production deploy; a Cloudflare deploy alone does nothing for them.
 - Manual production photo purge flow: set `PHOTO_RETENTION_PURGE_TOKEN` temporarily, run `photoRetentionAdmin:purgeExpiredPhotosNow`, verify the result, then remove the env var immediately.
 - If a fix is frontend-only, do not waste time waiting on Convex deploys.

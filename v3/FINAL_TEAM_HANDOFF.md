@@ -43,8 +43,8 @@ Current finance behavior:
 - Photo storage is now controlled by a 90-day retention policy. Do not bypass it or leave manual purge credentials enabled.
 
 ## What Changed Since The Previous Handoff
-### July 16 production-feedback enhancement batch (pending production rollout)
-This batch is implemented and validated in the repository but was not deployed by this work. Because it includes schema and backend function changes, deploy Convex production before or with the matching Cloudflare frontend and smoke-check both sides.
+### July 16 production-feedback enhancement batch (deployed)
+This batch was deployed on July 16, 2026. Convex production received the schema and backend functions first, followed by the matching Cloudflare Pages frontend from commit `e30aa21`. Future changes that span both surfaces still require coordinated deployment and verification.
 
 - A started checklist can be stopped only while it is untouched. The backend rejects stopping after any task, note, issue, room, or photo is marked; a successful stop deletes the empty checklist scaffold, unlinks the job, and returns it to `SCHEDULED` so it can restart later.
 - Dispatch Controls now keep a primary assignee while allowing admins to add or remove up to 7 additional team members (8 workers total).
