@@ -81,7 +81,8 @@ This batch was deployed on July 16, 2026. Convex production received the schema 
 - The retention purge deletes Convex storage objects and `photos` rows, then recomputes room photo counts without reopening completed checklists.
 - The manual purge entrypoint is `photoRetentionAdmin:purgeExpiredPhotosNow`; it requires the temporary server env var `PHOTO_RETENTION_PURGE_TOKEN`.
 - July 4, 2026 production catch-up purge completed with 564 photos deleted, 444,408,306 bytes removed, 223 room inspections touched, `0` failures, and `incomplete: false`.
-- The temporary production purge token was removed after the catch-up run.
+- July 16, 2026 pre-May cleanup used cutoff `2026-05-01T04:00:00.000Z` and completed with 1,840 photos deleted, 542,414,995 bytes removed, 751 room inspections touched, `0` failures, and `incomplete: false`.
+- The temporary production purge token was removed after each manual run; the standard 90-day retention action was restored and redeployed after the July 16 cleanup.
 
 ## Priority Workstreams For The Next Team
 ### 1. Cleaner/admin workflow polish from real usage

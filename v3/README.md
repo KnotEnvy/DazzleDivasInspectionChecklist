@@ -36,7 +36,7 @@ Earlier production improvements that matter:
 - room completion now advances to the next room in list order without auto-expanding it
 - history cards show the cleaner name for finished work
 - finance now includes property-level revenue settings, cleaner pay profiles, job financial review/approval, revenue views, payroll views, and Thursday-through-Wednesday weekly payroll grouping
-- photo retention now removes photos older than 90 days; the July 4, 2026 production catch-up purge removed 564 photos and about 444 MB with no failures
+- photo retention now removes photos older than 90 days; a July 16, 2026 cleanup removed all remaining pre-May photos (1,840 photos / about 542 MB) with no failures
 
 Current emphasis:
 - keep production stable while improving workflows from real cleaner/admin feedback
@@ -58,7 +58,7 @@ Current emphasis:
 - Retention code lives in `packages/backend/convex/photoRetention.ts`, `packages/backend/convex/photoRetentionBatches.ts`, `packages/backend/convex/photoRetentionAdmin.ts`, and `packages/backend/convex/lib/photoRetention.ts`.
 - The purge deletes Convex storage objects and matching `photos` rows, then recomputes room photo counts without reopening completed rooms.
 - The manual purge action is guarded by `PHOTO_RETENTION_PURGE_TOKEN`; only set that env var temporarily for an intentional production cleanup and remove it immediately after the run.
-- Last manual production cleanup: July 4, 2026, cutoff `2026-04-05T13:57:17.777Z`, deleted 564 photos / 444,408,306 bytes, `0` failures.
+- Last manual production cleanup: July 16, 2026, cutoff `2026-05-01T04:00:00.000Z` (midnight Eastern), deleted 1,840 photos / 542,414,995 bytes across 751 room inspections, `0` failures, `incomplete: false`.
 
 ## Repo Layout
 ```text

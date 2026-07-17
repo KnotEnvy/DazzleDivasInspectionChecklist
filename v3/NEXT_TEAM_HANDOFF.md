@@ -229,14 +229,15 @@ Current production behavior:
 - manual purge uses `photoRetentionAdmin:purgeExpiredPhotosNow` and requires `PHOTO_RETENTION_PURGE_TOKEN`
 - only set `PHOTO_RETENTION_PURGE_TOKEN` temporarily, run the cleanup, then remove it immediately
 
-Last production catch-up:
-- date: July 4, 2026
-- cutoff: `2026-04-05T13:57:17.777Z`
-- deleted: 564 photos / 444,408,306 bytes
-- affected room inspections: 223
+Last manual production cleanup:
+- date: July 16, 2026
+- cutoff: `2026-05-01T04:00:00.000Z` (May 1 at midnight Eastern)
+- deleted: 1,840 photos / 542,414,995 bytes
+- affected room inspections: 751
 - failures: 0
 - incomplete: false
 - temporary production purge token was removed after the run
+- temporary custom-cutoff support was removed and the standard 90-day retention action was redeployed
 
 ### 5. Admin completed review / photo saving / finance approval
 Completed review and photo save:
