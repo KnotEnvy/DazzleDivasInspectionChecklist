@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: July 16, 2026
+Updated: July 17, 2026
 
 ## Purpose
 This is the active high-level handoff for the next working team.
@@ -50,7 +50,7 @@ This batch was deployed on July 16, 2026. Convex production received the schema 
 - Dispatch Controls now keep a primary assignee while allowing admins to add or remove up to 7 additional team members (8 workers total).
 - Job urgency does not become `Overdue` until after 4:00 PM on the scheduled day.
 - Active admins receive in-app notifications when a job starts or completes. Notifications link back to the dispatch drawer and can be marked read individually or together.
-- Inactive users now have a permanent delete action. Deletion removes unused auth/account support records but is blocked when the user owns job, checklist, finance, audit, or admin history.
+- Inactive users have a permanent delete action. The July 17 fix replaced production-wide history reads with indexed reference checks, so unused accounts can be deleted at production scale while job, checklist, finance, audit, and admin history remains protected.
 - Payroll payee job lists can be collapsed, and admins can move backward through Thursday-to-Wednesday weekly payroll or calendar-month payroll.
 - The worker seven-day schedule no longer stretches every day card to the height of the busiest day.
 - Clicking a day in the admin Week Ahead chart now loads that date into the operations panel.

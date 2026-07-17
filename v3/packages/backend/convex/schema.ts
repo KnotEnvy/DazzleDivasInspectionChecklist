@@ -29,7 +29,8 @@ const schema = defineSchema({
     inviteDeliveryError: v.optional(v.string()),
   })
     .index("by_email", ["email"])
-    .index("by_role", ["role"]),
+    .index("by_role", ["role"])
+    .index("by_created_by", ["createdById"]),
 
   userAdminEvents: defineTable({
     actorId: v.id("users"),
@@ -39,6 +40,7 @@ const schema = defineSchema({
     createdAt: v.number(),
   })
     .index("by_target_user", ["targetUserId", "createdAt"])
+    .index("by_actor", ["actorId", "createdAt"])
     .index("by_created_at", ["createdAt"]),
 
   properties: defineTable({
@@ -115,6 +117,7 @@ const schema = defineSchema({
   })
     .index("by_property", ["propertyId"])
     .index("by_active", ["isActive"])
+    .index("by_default_assignee", ["defaultAssigneeId"])
     .index("by_property_active", ["propertyId", "isActive"]),
 
   jobs: defineTable({
@@ -163,6 +166,7 @@ const schema = defineSchema({
     .index("by_assignee", ["assigneeId"])
     .index("by_assignee_start", ["assigneeId", "scheduledStart"])
     .index("by_assignee_status_start", ["assigneeId", "status", "scheduledStart"])
+    .index("by_created_by", ["createdById"])
     .index("by_status_start", ["status", "scheduledStart"])
     .index("by_scheduled_start", ["scheduledStart"])
     .index("by_linked_inspection", ["linkedInspectionId"]),
@@ -175,6 +179,7 @@ const schema = defineSchema({
     createdAt: v.number(),
   })
     .index("by_job", ["jobId"])
+    .index("by_actor", ["actorId", "createdAt"])
     .index("by_created_at", ["createdAt"]),
 
   adminNotifications: defineTable({
@@ -189,6 +194,7 @@ const schema = defineSchema({
   })
     .index("by_recipient_created", ["recipientUserId", "createdAt"])
     .index("by_recipient_read", ["recipientUserId", "readAt"])
+    .index("by_actor", ["actorId", "createdAt"])
     .index("by_job", ["jobId"]),
 
   rooms: defineTable({
@@ -229,6 +235,7 @@ const schema = defineSchema({
     sourceInspectionId: v.optional(v.id("inspections")),
   })
     .index("by_assignee_status", ["assigneeId", "status"])
+    .index("by_created_by", ["createdById"])
     .index("by_property", ["propertyId"])
     .index("by_status", ["status"])
     .index("by_type_status", ["type", "status"]),
@@ -289,7 +296,9 @@ const schema = defineSchema({
     notes: v.optional(v.string()),
     updatedAt: v.number(),
     updatedById: v.id("users"),
-  }).index("by_property", ["propertyId"]),
+  })
+    .index("by_property", ["propertyId"])
+    .index("by_updated_by", ["updatedById"]),
 
   workerPayProfiles: defineTable({
     userId: v.id("users"),
@@ -303,6 +312,7 @@ const schema = defineSchema({
     updatedById: v.id("users"),
   })
     .index("by_user", ["userId"])
+    .index("by_updated_by", ["updatedById"])
     .index("by_user_role_active", ["userId", "role", "isActive"]),
 
   jobFinancials: defineTable({
@@ -335,7 +345,9 @@ const schema = defineSchema({
     .index("by_inspection", ["inspectionId"])
     .index("by_status", ["status"])
     .index("by_property", ["propertyId"])
-    .index("by_assignee", ["assigneeId"]),
+    .index("by_assignee", ["assigneeId"])
+    .index("by_approved_by", ["approvedById"])
+    .index("by_unlocked_by", ["unlockedById"]),
 
   financeEvents: defineTable({
     jobFinancialId: v.id("jobFinancials"),
@@ -346,6 +358,7 @@ const schema = defineSchema({
     createdAt: v.number(),
   })
     .index("by_job_financial", ["jobFinancialId"])
+    .index("by_actor", ["actorId", "createdAt"])
     .index("by_job", ["jobId"]),
 
   deletedHistoryAudits: defineTable({
@@ -363,8 +376,9 @@ const schema = defineSchema({
     deletedAt: v.number(),
   })
     .index("by_deleted_at", ["deletedAt"])
+    .index("by_assignee", ["assigneeId"])
+    .index("by_deleted_by", ["deletedById"])
     .index("by_property", ["propertyId"]),
 });
 
 export default schema;
-

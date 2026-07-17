@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Next Team Handoff
 
-Updated: July 16, 2026
+Updated: July 17, 2026
 
 ## Purpose
 This is the fastest path for the next engineering team to understand the current production app, find the important code, and make safe improvements.
@@ -323,13 +323,18 @@ Notification source:
 Current behavior:
 - active admins receive in-app notifications when a job transitions to started or completed
 - notifications link to the job in the dispatch drawer and support individual/all read actions
-- inactive unused users can be deleted from `AdminPage.tsx`; backend deletion is blocked when business or audit history would be orphaned
+- inactive unused users can be deleted from `AdminPage.tsx`; `users.deleteInactive` uses indexed reference checks and blocks deletion when business or audit history would be orphaned
 - job urgency becomes overdue only after 4:00 PM on the scheduled day
 - Week Ahead day buttons filter the dashboard operations panel
 - worker seven-day schedule cards align to their own content height
 - Daily Spark appears on both admin and field-staff dashboards and contains a new 100-message rotation
 
 ## Recent Fixes And Incidents That Matter
+### Inactive-user deletion production read limit
+- `users.deleteInactive` originally collected entire job, checklist, event, finance, audit, and admin-event tables before deciding whether deletion was safe.
+- As production history grew, that mutation could exceed Convex read limits and return a generic server error instead of deleting an unused account or returning the protected-history message.
+- The July 17 fix added targeted reference indexes and changed the mutation to indexed existence checks while preserving auth-session, assignment, pay-profile, admin-event, and notification cleanup.
+
 ### Finance rollout and follow-up fixes
 - Finance was added as the first admin accounting/payroll workflow in the app.
 - Property finance settings initially behaved like one shared form state and appeared to erase when switching tabs/properties; this was fixed in the property screen by correctly rehydrating from the selected property.

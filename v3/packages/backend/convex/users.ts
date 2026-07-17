@@ -428,60 +428,114 @@ export const deleteInactive = mutation({
     }
 
     const [
-      allUsers,
-      jobs,
-      inspections,
-      servicePlans,
-      jobEvents,
-      financeConfigs,
-      payProfiles,
-      jobFinancials,
-      financeEvents,
-      deletedHistoryAudits,
-      userAdminEvents,
+      createdUser,
+      createdJob,
+      primaryAssigneeJob,
+      jobsWithAdditionalAssignees,
+      assignedInspection,
+      createdInspection,
+      defaultAssigneePlan,
+      actorJobEvent,
+      updatedFinanceConfig,
+      updatedPayProfiles,
+      assigneeFinancial,
+      approvedFinancial,
+      unlockedFinancial,
+      actorFinanceEvent,
+      assigneeHistoryAudit,
+      deletedHistoryAudit,
+      actorAdminEvents,
     ] = await Promise.all([
-      ctx.db.query("users").collect(),
-      ctx.db.query("jobs").collect(),
-      ctx.db.query("inspections").collect(),
-      ctx.db.query("servicePlans").collect(),
-      ctx.db.query("jobEvents").collect(),
-      ctx.db.query("financePropertyConfigs").collect(),
-      ctx.db.query("workerPayProfiles").collect(),
-      ctx.db.query("jobFinancials").collect(),
-      ctx.db.query("financeEvents").collect(),
-      ctx.db.query("deletedHistoryAudits").collect(),
-      ctx.db.query("userAdminEvents").collect(),
+      ctx.db
+        .query("users")
+        .withIndex("by_created_by", (q) => q.eq("createdById", user._id))
+        .first(),
+      ctx.db
+        .query("jobs")
+        .withIndex("by_created_by", (q) => q.eq("createdById", user._id))
+        .first(),
+      ctx.db
+        .query("jobs")
+        .withIndex("by_assignee", (q) => q.eq("assigneeId", user._id))
+        .first(),
+      ctx.db
+        .query("jobs")
+        .filter((q) => q.neq(q.field("additionalAssigneeIds"), undefined))
+        .collect(),
+      ctx.db
+        .query("inspections")
+        .withIndex("by_assignee_status", (q) => q.eq("assigneeId", user._id))
+        .first(),
+      ctx.db
+        .query("inspections")
+        .withIndex("by_created_by", (q) => q.eq("createdById", user._id))
+        .first(),
+      ctx.db
+        .query("servicePlans")
+        .withIndex("by_default_assignee", (q) => q.eq("defaultAssigneeId", user._id))
+        .first(),
+      ctx.db
+        .query("jobEvents")
+        .withIndex("by_actor", (q) => q.eq("actorId", user._id))
+        .first(),
+      ctx.db
+        .query("financePropertyConfigs")
+        .withIndex("by_updated_by", (q) => q.eq("updatedById", user._id))
+        .first(),
+      ctx.db
+        .query("workerPayProfiles")
+        .withIndex("by_updated_by", (q) => q.eq("updatedById", user._id))
+        .collect(),
+      ctx.db
+        .query("jobFinancials")
+        .withIndex("by_assignee", (q) => q.eq("assigneeId", user._id))
+        .first(),
+      ctx.db
+        .query("jobFinancials")
+        .withIndex("by_approved_by", (q) => q.eq("approvedById", user._id))
+        .first(),
+      ctx.db
+        .query("jobFinancials")
+        .withIndex("by_unlocked_by", (q) => q.eq("unlockedById", user._id))
+        .first(),
+      ctx.db
+        .query("financeEvents")
+        .withIndex("by_actor", (q) => q.eq("actorId", user._id))
+        .first(),
+      ctx.db
+        .query("deletedHistoryAudits")
+        .withIndex("by_assignee", (q) => q.eq("assigneeId", user._id))
+        .first(),
+      ctx.db
+        .query("deletedHistoryAudits")
+        .withIndex("by_deleted_by", (q) => q.eq("deletedById", user._id))
+        .first(),
+      ctx.db
+        .query("userAdminEvents")
+        .withIndex("by_actor", (q) => q.eq("actorId", user._id))
+        .collect(),
     ]);
 
     const hasOperationalHistory =
-      allUsers.some((candidate) => candidate.createdById === user._id) ||
-      jobs.some(
-        (job) =>
-          job.createdById === user._id ||
-          job.assigneeId === user._id ||
-          job.additionalAssigneeIds?.includes(user._id)
-      ) ||
-      inspections.some(
-        (inspection) =>
-          inspection.assigneeId === user._id || inspection.createdById === user._id
-      ) ||
-      servicePlans.some((plan) => plan.defaultAssigneeId === user._id) ||
-      jobEvents.some((event) => event.actorId === user._id) ||
-      financeConfigs.some((config) => config.updatedById === user._id) ||
-      payProfiles.some(
+      createdUser !== null ||
+      createdJob !== null ||
+      primaryAssigneeJob !== null ||
+      jobsWithAdditionalAssignees.some((job) => job.additionalAssigneeIds?.includes(user._id)) ||
+      assignedInspection !== null ||
+      createdInspection !== null ||
+      defaultAssigneePlan !== null ||
+      actorJobEvent !== null ||
+      updatedFinanceConfig !== null ||
+      updatedPayProfiles.some(
         (profile) => profile.updatedById === user._id && profile.userId !== user._id
       ) ||
-      jobFinancials.some(
-        (financial) =>
-          financial.assigneeId === user._id ||
-          financial.approvedById === user._id ||
-          financial.unlockedById === user._id
-      ) ||
-      financeEvents.some((event) => event.actorId === user._id) ||
-      deletedHistoryAudits.some(
-        (audit) => audit.assigneeId === user._id || audit.deletedById === user._id
-      ) ||
-      userAdminEvents.some(
+      assigneeFinancial !== null ||
+      approvedFinancial !== null ||
+      unlockedFinancial !== null ||
+      actorFinanceEvent !== null ||
+      assigneeHistoryAudit !== null ||
+      deletedHistoryAudit !== null ||
+      actorAdminEvents.some(
         (event) => event.actorId === user._id && event.targetUserId !== user._id
       );
 
@@ -491,18 +545,43 @@ export const deleteInactive = mutation({
       );
     }
 
-    const assignments = await ctx.db
-      .query("propertyAssignments")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-    const ownPayProfiles = payProfiles.filter((profile) => profile.userId === user._id);
-    const targetAdminEvents = userAdminEvents.filter(
-      (event) => event.targetUserId === user._id || event.actorId === user._id
+    const [assignments, ownPayProfiles, targetAdminEvents, recipientNotifications, actorNotifications] =
+      await Promise.all([
+        ctx.db
+          .query("propertyAssignments")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .collect(),
+        ctx.db
+          .query("workerPayProfiles")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .collect(),
+        ctx.db
+          .query("userAdminEvents")
+          .withIndex("by_target_user", (q) => q.eq("targetUserId", user._id))
+          .collect(),
+        ctx.db
+          .query("adminNotifications")
+          .withIndex("by_recipient_created", (q) => q.eq("recipientUserId", user._id))
+          .collect(),
+        ctx.db
+          .query("adminNotifications")
+          .withIndex("by_actor", (q) => q.eq("actorId", user._id))
+          .collect(),
+      ]);
+    const targetAdminEventIds = new Set(targetAdminEvents.map((event) => event._id));
+    const removableAdminEvents = [
+      ...targetAdminEvents,
+      ...actorAdminEvents.filter((event) => !targetAdminEventIds.has(event._id)),
+    ];
+    const recipientNotificationIds = new Set(
+      recipientNotifications.map((notification) => notification._id)
     );
-    const notifications = (await ctx.db.query("adminNotifications").collect()).filter(
-      (notification) =>
-        notification.recipientUserId === user._id || notification.actorId === user._id
-    );
+    const notifications = [
+      ...recipientNotifications,
+      ...actorNotifications.filter(
+        (notification) => !recipientNotificationIds.has(notification._id)
+      ),
+    ];
 
     const accounts = await ctx.db
       .query("authAccounts")
@@ -545,7 +624,7 @@ export const deleteInactive = mutation({
       ...sessions,
       ...assignments,
       ...ownPayProfiles,
-      ...targetAdminEvents,
+      ...removableAdminEvents,
       ...notifications,
     ]) {
       await ctx.db.delete(document._id);
