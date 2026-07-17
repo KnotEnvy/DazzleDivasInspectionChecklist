@@ -26,7 +26,7 @@ July 16 feedback batch (deployed to Convex production and Cloudflare Pages):
 - jobs do not become overdue until after 4:00 PM on their scheduled day
 - payroll payee details can collapse and payroll can be reviewed across previous Thursday-to-Wednesday weeks or calendar months
 - the admin Week Ahead chart filters the operations panel by day, and the worker seven-day schedule no longer stretches short days to match busier days
-- Daily Spark now uses a completely new 100-message rotation
+- Daily Spark is visible to admins and field staff and uses a completely new 100-message rotation
 
 Earlier production improvements that matter:
 - quick-add turnover supports B2B jobs, default 10:00 AM starts, automatic 4-hour windows, cleaner multi-assignment, and a two-step create confirmation

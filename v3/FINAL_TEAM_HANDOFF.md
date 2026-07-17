@@ -54,7 +54,7 @@ This batch was deployed on July 16, 2026. Convex production received the schema 
 - Payroll payee job lists can be collapsed, and admins can move backward through Thursday-to-Wednesday weekly payroll or calendar-month payroll.
 - The worker seven-day schedule no longer stretches every day card to the height of the busiest day.
 - Clicking a day in the admin Week Ahead chart now loads that date into the operations panel.
-- Daily Spark was fully refreshed with 100 new messages across the existing five categories.
+- Daily Spark is visible on both admin and field-staff dashboards and uses 100 refreshed messages across the existing five categories.
 
 ### Checklist execution and field workflow
 - A job-linked checklist can only be started on the day it is due or later.

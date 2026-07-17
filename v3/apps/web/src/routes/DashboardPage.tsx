@@ -295,6 +295,8 @@ export function DashboardPage() {
           </p>
         </div>
 
+        <MotivationBanner userName={user?.name} />
+
         {/* â”€â”€ KPI pills â”€â”€ */}
         <section className="flex flex-wrap gap-2 text-xs font-semibold">
           <span className="rounded-full bg-brand-50 px-3 py-1.5 text-brand-700">

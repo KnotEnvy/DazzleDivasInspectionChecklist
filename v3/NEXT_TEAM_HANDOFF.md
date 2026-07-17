@@ -327,7 +327,7 @@ Current behavior:
 - job urgency becomes overdue only after 4:00 PM on the scheduled day
 - Week Ahead day buttons filter the dashboard operations panel
 - worker seven-day schedule cards align to their own content height
-- Daily Spark contains a new 100-message rotation
+- Daily Spark appears on both admin and field-staff dashboards and contains a new 100-message rotation
 
 ## Recent Fixes And Incidents That Matter
 ### Finance rollout and follow-up fixes
