@@ -968,11 +968,15 @@ export const listRevenue = query({
 export const listPayroll = query({
   args: {
     weekStart: v.number(),
+    periodEnd: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
 
-    const weekEnd = args.weekStart + 7 * DAY_MS;
+    const periodEnd = args.periodEnd ?? args.weekStart + 7 * DAY_MS;
+    if (periodEnd <= args.weekStart || periodEnd - args.weekStart > 370 * DAY_MS) {
+      throw new Error("Payroll period must be between 1 and 370 days");
+    }
     const financials = (await withFinanceReadFallback(
       () =>
         ctx.db
@@ -990,7 +994,7 @@ export const listPayroll = query({
           !!pair.job &&
           isCleaningJob(pair.job) &&
           (pair.job.completedAt ?? 0) >= args.weekStart &&
-          (pair.job.completedAt ?? 0) < weekEnd
+          (pair.job.completedAt ?? 0) < periodEnd
       );
 
     const assigneeIds = [...new Set(relevantPairs.flatMap((pair) => getAssignedWorkerIds(pair.job)))];

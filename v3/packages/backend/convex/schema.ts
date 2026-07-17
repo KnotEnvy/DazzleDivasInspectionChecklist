@@ -177,6 +177,20 @@ const schema = defineSchema({
     .index("by_job", ["jobId"])
     .index("by_created_at", ["createdAt"]),
 
+  adminNotifications: defineTable({
+    recipientUserId: v.id("users"),
+    jobId: v.id("jobs"),
+    eventType: v.union(v.literal("JOB_STARTED"), v.literal("JOB_COMPLETED")),
+    title: v.string(),
+    message: v.string(),
+    actorId: v.id("users"),
+    createdAt: v.number(),
+    readAt: v.optional(v.number()),
+  })
+    .index("by_recipient_created", ["recipientUserId", "createdAt"])
+    .index("by_recipient_read", ["recipientUserId", "readAt"])
+    .index("by_job", ["jobId"]),
+
   rooms: defineTable({
     name: v.string(),
     description: v.optional(v.string()),
@@ -353,5 +367,4 @@ const schema = defineSchema({
 });
 
 export default schema;
-
 

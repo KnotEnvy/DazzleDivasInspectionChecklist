@@ -457,7 +457,7 @@ export function MySchedulePage() {
       {/* ── Weekly grid — primary nav on mobile ── */}
       <section className="rounded-2xl border border-border bg-white p-3 shadow-sm">
         <h2 className="mb-2 text-sm font-bold text-slate-600">Next 7 Days</h2>
-        <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-7 md:gap-3 md:overflow-visible md:pb-0">
+        <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-7 md:items-start md:gap-3 md:overflow-visible md:pb-0">
           {weekDays.map((day, index) => {
             const isToday = sameLocalDate(Date.now(), day);
             return (
@@ -481,7 +481,7 @@ export function MySchedulePage() {
                       <button
                         key={job._id}
                         aria-label={`Select ${job.propertyName} job`}
-                        className={`w-full rounded-lg border px-1.5 py-1 text-left text-[11px] transition ${
+                        className={`w-full min-w-0 overflow-hidden rounded-lg border px-1.5 py-1 text-left text-[11px] transition ${
                           selectedJobId === job._id
                             ? "border-brand-500 bg-brand-100"
                             : "border-border bg-white hover:border-brand-300"
@@ -503,7 +503,7 @@ export function MySchedulePage() {
                             urgencyLabelText(job.scheduledStart) === "Overdue" ? "bg-rose-500" : "bg-amber-400"
                           }`} />
                         )}
-                        <span className="ml-1 text-slate-600">{job.propertyName}</span>
+                        <span className="mt-0.5 block truncate text-slate-600">{job.propertyName}</span>
                       </button>
                     ))
                   )}

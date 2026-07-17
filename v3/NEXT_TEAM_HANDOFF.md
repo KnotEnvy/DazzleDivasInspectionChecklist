@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Next Team Handoff
 
-Updated: July 4, 2026
+Updated: July 16, 2026
 
 ## Purpose
 This is the fastest path for the next engineering team to understand the current production app, find the important code, and make safe improvements.
@@ -14,6 +14,9 @@ The app is already used in production by admins, cleaners, and inspectors, and f
 - Backend retention keeps proof photos for 90 days and purges older storage monthly.
 - Admins now review payroll/revenue data and approve job financials inside the app.
 - Offline queue/replay exists so field work can continue with weak or missing connectivity.
+
+## Pending Rollout
+The July 16 user-feedback batch is implemented and locally validated but was not deployed by this work. It adds Convex schema/functions as well as frontend behavior, so deploy Convex production and Cloudflare Pages together, then run the added validation flows before describing the batch as live.
 
 ## Tech Stack
 - Frontend: React 19 + Vite 6 + Tailwind 4 + React Router 7
@@ -76,6 +79,11 @@ v3/
 - `apps/web/src/routes/FinancePage.tsx`
 - `apps/web/src/components/InspectionFinancePanel.tsx`
 
+### Admin notifications and Daily Spark
+- `apps/web/src/components/AdminNotificationBell.tsx`
+- `apps/web/src/components/MotivationBanner.tsx`
+- `apps/web/src/lib/motivation.ts`
+
 ### Field checklist execution
 - `apps/web/src/routes/InspectionPage.tsx`
 - `apps/web/src/components/InspectionRoomPanel.tsx`
@@ -127,6 +135,10 @@ v3/
 - `packages/backend/convex/finance.ts`
 - `packages/backend/convex/lib/finance.ts`
 
+### Notifications / lifecycle helpers
+- `packages/backend/convex/notifications.ts`
+- `packages/backend/convex/lib/adminNotifications.ts`
+
 ### Schema and helpers
 - `packages/backend/convex/schema.ts`
 - `packages/backend/convex/lib/inspectionMetrics.ts`
@@ -172,6 +184,8 @@ Current production behavior:
 - inspectors can have up to 5 active checklists
 - room completion moves to the next room in list order without expanding it automatically
 - Step 3A `Room Notes` is intentionally collapsed down to the heading by default
+- pending July 16 rollout: untouched started checklists expose `Stop Checklist`; stopping deletes only the empty scaffold, unlinks the job, and returns it to `SCHEDULED`
+- pending July 16 rollout: stopping is rejected after any task, note, issue, room, photo, queued change, or active upload is present
 
 ### 3. Field photo capture / upload / replay
 Frontend flow:
@@ -267,6 +281,7 @@ Current behavior:
 - B2B jobs are visually labeled in admin and worker schedule surfaces
 - cleaner-role jobs may overlap in dispatch assignment
 - checklist execution still enforces active-checklist limits by role
+- pending July 16 rollout: dispatch editing preserves one primary assignee and supports adding/removing additional same-role team members, up to 8 total workers
 - turnover creation uses a two-step confirmation to reduce accidental incomplete jobs
 
 ### 7. Finance reporting and setup
@@ -295,6 +310,23 @@ Current finance behavior:
 - unapproved work uses live-derived finance values from current property settings and pay profiles
 - approved work uses locked job financial snapshots so realized reporting does not drift
 - there is not yet a formal export/report download workflow; admins still need to operate from the screen data
+- pending July 16 rollout: payroll payee job lists can collapse
+- pending July 16 rollout: admins can navigate historical Thursday-to-Wednesday payroll weeks or switch to calendar-month payroll
+
+### 8. Admin notifications / staff deletion / dashboard polish
+Notification source:
+- `notifications.ts`
+- `lib/adminNotifications.ts`
+- `AdminNotificationBell.tsx`
+
+Pending July 16 rollout behavior:
+- active admins receive in-app notifications when a job transitions to started or completed
+- notifications link to the job in the dispatch drawer and support individual/all read actions
+- inactive unused users can be deleted from `AdminPage.tsx`; backend deletion is blocked when business or audit history would be orphaned
+- job urgency becomes overdue only after 4:00 PM on the scheduled day
+- Week Ahead day buttons filter the dashboard operations panel
+- worker seven-day schedule cards align to their own content height
+- Daily Spark contains a new 100-message rotation
 
 ## Recent Fixes And Incidents That Matter
 ### Finance rollout and follow-up fixes
@@ -339,6 +371,7 @@ Current finance behavior:
 - A frontend change reaching production does not guarantee production Convex functions are on the same revision.
 - If a feature depends on schema, mutation args, query hydration, or backend calculations, verify that Convex production has also been deployed.
 - Finance changes especially need this check because settings forms, approval flows, and reporting all depend on backend shape and calculations.
+- The July 16 feedback batch requires a Convex production deploy before the frontend because it adds `adminNotifications` schema/functions and changes checklist, job, finance, and user mutations.
 - Retention, cron, and Convex storage changes require an explicit Convex production deploy; a Cloudflare deploy alone does nothing for them.
 - Manual production photo purge flow: set `PHOTO_RETENTION_PURGE_TOKEN` temporarily, run `photoRetentionAdmin:purgeExpiredPhotosNow`, verify the result, then remove the env var immediately.
 - If a fix is frontend-only, do not waste time waiting on Convex deploys.
@@ -426,6 +459,13 @@ Before shipping meaningful changes, validate:
 - History `Finished Today` cleaner attribution
 - Offline queue/replay for at least one worker scenario
 - Convex cron/manual retention path after retention-related backend changes
+- Stop an untouched checklist, restart it, and confirm stop is rejected after marking work
+- Add/remove additional dispatch teammates while retaining the primary assignee
+- Receive start/completion admin notifications and verify mark-read behavior
+- Delete an unused inactive user and verify a history-linked inactive user is protected
+- Navigate past weekly and monthly payroll and collapse/expand payees
+- Verify overdue status around the 4:00 PM threshold
+- Click each Week Ahead day and confirm the operations list follows the selected date
 
 ## Known Areas That Still Deserve Attention
 - Real-device mobile QA is still essential for photo capture, network flapping, and native chooser behavior.

@@ -4,8 +4,11 @@ const MS_PER_HOUR = 1000 * 60 * 60;
 const MS_PER_MINUTE = 1000 * 60;
 
 export function getUrgencyLevel(scheduledStart: number): UrgencyLevel | null {
-  const hoursUntil = (scheduledStart - Date.now()) / MS_PER_HOUR;
-  if (hoursUntil < 0) return "OVERDUE";
+  const overdueAt = new Date(scheduledStart);
+  overdueAt.setHours(16, 0, 0, 0);
+  const overdueThreshold = Math.max(scheduledStart, overdueAt.getTime());
+  const hoursUntil = (overdueThreshold - Date.now()) / MS_PER_HOUR;
+  if (Date.now() > overdueThreshold) return "OVERDUE";
   if (hoursUntil <= 6) return "DUE_SOON";
   if (hoursUntil <= 24) return "WITHIN_24H";
   if (hoursUntil <= 48) return "WITHIN_48H";
@@ -14,8 +17,11 @@ export function getUrgencyLevel(scheduledStart: number): UrgencyLevel | null {
 
 /** Tailwind border-l-4 classes matching the original AdminSchedulePage thresholds. */
 export function urgencyBorderClass(scheduledStart: number): string {
-  const hoursUntil = (scheduledStart - Date.now()) / MS_PER_HOUR;
-  if (hoursUntil < 0) return "border-l-4 border-l-rose-500";
+  const overdueAt = new Date(scheduledStart);
+  overdueAt.setHours(16, 0, 0, 0);
+  const overdueThreshold = Math.max(scheduledStart, overdueAt.getTime());
+  const hoursUntil = (overdueThreshold - Date.now()) / MS_PER_HOUR;
+  if (Date.now() > overdueThreshold) return "border-l-4 border-l-rose-500";
   if (hoursUntil <= 24) return "border-l-4 border-l-amber-400";
   if (hoursUntil <= 48) return "border-l-4 border-l-sky-300";
   return "";

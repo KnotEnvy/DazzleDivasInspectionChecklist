@@ -53,6 +53,7 @@ type InspectionDetail = {
   type: "CLEANING" | "INSPECTION";
   status: "IN_PROGRESS" | "COMPLETED";
   notes?: string;
+  canStop: boolean;
   roomInspections: RoomSummary[];
 };
 
@@ -172,6 +173,7 @@ export function InspectionPage() {
   ) as InspectionFinanceReview | null | undefined;
 
   const completeInspection = useMutation(api.inspections.complete);
+  const stopUnstartedInspection = useMutation(api.inspections.stopUnstarted);
   const setTaskCompleted = useMutation(api.taskResults.setCompleted);
   const setTaskIssue = useMutation(api.taskResults.setIssue);
   const updateRoomNotes = useMutation(api.roomInspections.updateNotes);
@@ -194,6 +196,7 @@ export function InspectionPage() {
   const [removingPhotoId, setRemovingPhotoId] = useState<Id<"photos"> | null>(null);
   const [completingRoomId, setCompletingRoomId] = useState<Id<"roomInspections"> | null>(null);
   const [completingInspection, setCompletingInspection] = useState(false);
+  const [stoppingInspection, setStoppingInspection] = useState(false);
   const [showCompletionCelebration, setShowCompletionCelebration] = useState(false);
   const [savingFinance, setSavingFinance] = useState(false);
   const [approvingFinance, setApprovingFinance] = useState(false);
@@ -840,6 +843,36 @@ export function InspectionPage() {
     }
   }
 
+  async function handleStopInspection() {
+    if (!inspectionId || !isOnline) {
+      toast.error("Connect to the internet before stopping this checklist");
+      return;
+    }
+
+    if (inspectionQueueItems.some(isOutboxActionable) || directPhotoUploadsRef.current.size > 0) {
+      toast.error("Wait for pending checklist changes to finish syncing first");
+      return;
+    }
+
+    setStoppingInspection(true);
+    try {
+      const result = await stopUnstartedInspection({ inspectionId });
+      toast.success("Checklist stopped. It can be restarted later.");
+      navigate(
+        isAdmin && result.jobId
+          ? `/schedule?jobId=${result.jobId}#dispatch-drawer`
+          : isAdmin
+            ? "/schedule"
+            : "/my-schedule"
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to stop checklist");
+    } finally {
+      setStoppingInspection(false);
+      setConfirmAction(null);
+    }
+  }
+
   if (inspectionView === undefined) {
     return (
       <div className="space-y-4">
@@ -980,6 +1013,56 @@ export function InspectionPage() {
             : "Offline detected. Field edits are being queued on this device."}
         </div>
       </div>
+
+      {inspectionView.canStop ? (
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          {confirmAction === "stopInspection" ? (
+            <div className="animate-slide-up flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-700">
+                Stop this untouched checklist and return the job to scheduled status?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  className="field-button danger px-4"
+                  disabled={stoppingInspection}
+                  onClick={() => void handleStopInspection()}
+                  type="button"
+                >
+                  {stoppingInspection ? "Stopping..." : "Yes, Stop Checklist"}
+                </button>
+                <button
+                  className="field-button ghost px-4"
+                  disabled={stoppingInspection}
+                  onClick={() => setConfirmAction(null)}
+                  type="button"
+                >
+                  Keep Open
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-600">
+                Started by mistake? You can stop it until any task, note, issue, room, or photo is marked.
+              </p>
+              <button
+                className="field-button secondary px-4"
+                disabled={
+                  !isOnline ||
+                  roomNotes.trim().length > 0 ||
+                  inspectionNotes.trim().length > 0 ||
+                  inspectionQueueItems.some(isOutboxActionable) ||
+                  directPhotoUploadsRef.current.size > 0
+                }
+                onClick={() => setConfirmAction("stopInspection")}
+                type="button"
+              >
+                Stop Checklist
+              </button>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       <section className="grid gap-3 md:grid-cols-5">
         <SummaryCard label="Rooms" value={`${totals.completedRooms}/${totals.rooms}`} />

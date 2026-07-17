@@ -1,6 +1,6 @@
 # Dazzle Divas v3
 
-Updated: July 4, 2026
+Updated: July 16, 2026
 
 ## Status
 `v3` is the active production app for Dazzle Divas field operations and back-office management.
@@ -18,7 +18,17 @@ Currently live and actively used:
 - invite-based staff onboarding
 - admin finance tracking for payroll, revenue, and job-level finance review
 
-Recent production improvements that matter:
+July 16 feedback batch (implemented and validated locally; pending Cloudflare + Convex production rollout):
+- untouched started checklists can be stopped safely and restarted later; stopping is blocked after any task, note, issue, room, or photo is marked
+- dispatch controls support a primary assignee plus additional team members that admins can add or remove
+- admin notifications now surface job starts and completions from a header notification center
+- inactive, unused staff accounts can be permanently deleted; accounts with operational/history references remain protected
+- jobs do not become overdue until after 4:00 PM on their scheduled day
+- payroll payee details can collapse and payroll can be reviewed across previous Thursday-to-Wednesday weeks or calendar months
+- the admin Week Ahead chart filters the operations panel by day, and the worker seven-day schedule no longer stretches short days to match busier days
+- Daily Spark now uses a completely new 100-message rotation
+
+Earlier production improvements that matter:
 - quick-add turnover supports B2B jobs, default 10:00 AM starts, automatic 4-hour windows, cleaner multi-assignment, and a two-step create confirmation
 - checklist start rules now block future jobs until the due date and only allow starts beginning at 7:00 AM local property time
 - cleaners can have up to 3 active checklists and inspectors up to 5
@@ -75,6 +85,7 @@ Older rollout, setup, and checkpoint docs live in `archive/` for reference only.
 - Do not break offline queue/replay behavior.
 - Do not casually change auth, env wiring, or redirect behavior.
 - Do not assume a frontend deploy also updated Convex production.
+- The July 16 feedback batch adds Convex schema/functions for notifications, checklist stopping, team assignment, payroll ranges, and user deletion; deploy Convex before the matching frontend.
 - Treat Convex plan-limit and bandwidth warnings as operational issues.
 - Do not leave `PHOTO_RETENTION_PURGE_TOKEN` set after a manual purge.
 - Prefer narrow, additive changes over rewrites.

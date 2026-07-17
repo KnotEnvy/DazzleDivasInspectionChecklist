@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: July 4, 2026
+Updated: July 16, 2026
 
 ## Purpose
 This is the active high-level handoff for the next working team.
@@ -43,6 +43,19 @@ Current finance behavior:
 - Photo storage is now controlled by a 90-day retention policy. Do not bypass it or leave manual purge credentials enabled.
 
 ## What Changed Since The Previous Handoff
+### July 16 production-feedback enhancement batch (pending production rollout)
+This batch is implemented and validated in the repository but was not deployed by this work. Because it includes schema and backend function changes, deploy Convex production before or with the matching Cloudflare frontend and smoke-check both sides.
+
+- A started checklist can be stopped only while it is untouched. The backend rejects stopping after any task, note, issue, room, or photo is marked; a successful stop deletes the empty checklist scaffold, unlinks the job, and returns it to `SCHEDULED` so it can restart later.
+- Dispatch Controls now keep a primary assignee while allowing admins to add or remove up to 7 additional team members (8 workers total).
+- Job urgency does not become `Overdue` until after 4:00 PM on the scheduled day.
+- Active admins receive in-app notifications when a job starts or completes. Notifications link back to the dispatch drawer and can be marked read individually or together.
+- Inactive users now have a permanent delete action. Deletion removes unused auth/account support records but is blocked when the user owns job, checklist, finance, audit, or admin history.
+- Payroll payee job lists can be collapsed, and admins can move backward through Thursday-to-Wednesday weekly payroll or calendar-month payroll.
+- The worker seven-day schedule no longer stretches every day card to the height of the busiest day.
+- Clicking a day in the admin Week Ahead chart now loads that date into the operations panel.
+- Daily Spark was fully refreshed with 100 new messages across the existing five categories.
+
 ### Checklist execution and field workflow
 - A job-linked checklist can only be started on the day it is due or later.
 - Start is blocked before 7:00 AM in the property's local timezone.
@@ -135,6 +148,12 @@ Before shipping meaningful changes, validate:
 - Property create/edit including finance config
 - History `Finished Today` cleaner attribution
 - Convex production deploy after any retention, photo storage, or cron change
+- Untouched checklist stop/restart, including rejection after one marked task, note, issue, room, or photo
+- Add and remove dispatch teammates without changing the intended primary assignee
+- Admin notification creation, unread count, mark-read behavior, and dispatch link
+- Inactive unused-user deletion plus protected rejection for a user with history
+- Previous weekly and monthly payroll navigation and payee collapse state
+- Overdue labels immediately before and after 4:00 PM
 
 ## Recommended Next Moves
 1. Build the next enhancement batch from real cleaner/admin feedback, not speculation.

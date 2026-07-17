@@ -1,7 +1,5 @@
-// ─── Daily Motivation Engine ───────────────────────────────────────────
-// Deterministic daily message picker — everyone on the team sees the same
-// message each day, creating a shared moment. The pool is large enough
-// (~100 messages) that it takes over three months to cycle.
+// Daily Motivation Engine
+// Everyone sees the same message each day, creating a shared team moment.
 
 export type MessageCategory =
   | "hype"
@@ -15,125 +13,138 @@ export interface MotivationMessage {
   category: MessageCategory;
 }
 
-// ── Message Pool ──────────────────────────────────────────────────────
+function messages(category: MessageCategory, texts: string[]): MotivationMessage[] {
+  return texts.map((text) => ({ text, category }));
+}
 
+// This second-edition pool is entirely new. At 100 messages, it takes more
+// than three months before the daily sequence can repeat.
 const MESSAGES: MotivationMessage[] = [
-  // ── Hype / Energy ──
-  { text: "Today is your day to shine. Let's get after it.", category: "hype" },
-  { text: "You didn't come this far to only come this far.", category: "hype" },
-  { text: "Bring that energy today — the kind that's contagious.", category: "hype" },
-  { text: "Nobody does it like you. That's not a pep talk, that's a fact.", category: "hype" },
-  { text: "New day, new rooms, new wins. Let's go.", category: "hype" },
-  { text: "You're built for days like this.", category: "hype" },
-  { text: "Show today who's boss.", category: "hype" },
-  { text: "The world needs people who take pride in their work. That's you.", category: "hype" },
-  { text: "Champions don't wait for motivation — they create it. You're up.", category: "hype" },
-  { text: "Small steps, big impact. Every room matters.", category: "hype" },
-  { text: "You've got the skills, the drive, and the team behind you.", category: "hype" },
-  { text: "Make it happen. You always do.", category: "hype" },
-  { text: "Your hustle speaks louder than words ever could.", category: "hype" },
-  { text: "Every great day starts with the decision to show up. You're here.", category: "hype" },
-  { text: "Turn today into something you're proud of.", category: "hype" },
-  { text: "Go-mode: activated.", category: "hype" },
-  { text: "Today's forecast: 100% chance of you crushing it.", category: "hype" },
-  { text: "Consistency is your superpower. Keep stacking those wins.", category: "hype" },
-  { text: "Every room you walk into is about to look better. That's a promise.", category: "hype" },
-  { text: "You've handled tough days before. Today doesn't stand a chance.", category: "hype" },
-
-  // ── Appreciation ──
-  { text: "What you do matters more than you know. Thank you.", category: "appreciation" },
-  { text: "This team wouldn't be the same without you.", category: "appreciation" },
-  { text: "Your hard work doesn't go unnoticed. We see you.", category: "appreciation" },
-  { text: "Thank you for bringing your best — it makes all the difference.", category: "appreciation" },
-  { text: "The details you catch? That's what sets you apart.", category: "appreciation" },
-  { text: "You're the reason clients keep coming back.", category: "appreciation" },
-  { text: "Every home you touch becomes someone's happy place. That's powerful.", category: "appreciation" },
-  { text: "Your standards are what make this team great.", category: "appreciation" },
-  { text: "Not everyone can do what you do. Seriously.", category: "appreciation" },
-  { text: "You make the hard stuff look easy. That takes real talent.", category: "appreciation" },
-  { text: "The effort you put in today builds the reputation we all share.", category: "appreciation" },
-  { text: "Your consistency is something special. Don't ever underestimate that.", category: "appreciation" },
-  { text: "Behind every five-star review is someone like you doing the real work.", category: "appreciation" },
-  { text: "You're more valuable to this team than any checklist could show.", category: "appreciation" },
-  { text: "We're lucky to have you. Full stop.", category: "appreciation" },
-  { text: "Your work ethic inspires the people around you.", category: "appreciation" },
-  { text: "You bring something to this team that no one else can.", category: "appreciation" },
-  { text: "Thank you for caring about the little things. They add up.", category: "appreciation" },
-  { text: "You don't just clean — you transform spaces. That's a gift.", category: "appreciation" },
-  { text: "This team is better because you're on it.", category: "appreciation" },
-
-  // ── Teamwork ──
-  { text: "Together we make every property shine. Let's do this.", category: "teamwork" },
-  { text: "Your team has your back today. Let's win together.", category: "teamwork" },
-  { text: "Great things happen when great people work together.", category: "teamwork" },
-  { text: "We're all pulling in the same direction. That's powerful.", category: "teamwork" },
-  { text: "The Dazzle Divas crew doesn't just show up — we show out.", category: "teamwork" },
-  { text: "When one of us wins, we all win.", category: "teamwork" },
-  { text: "Teamwork makes the dream work — and this team dreams big.", category: "teamwork" },
-  { text: "Lean on the team when you need to. That's what we're here for.", category: "teamwork" },
-  { text: "We rise by lifting each other. Today is no different.", category: "teamwork" },
-  { text: "You're never alone on a tough day. This crew rolls together.", category: "teamwork" },
-  { text: "Every clean today is a team effort. Let's make it count.", category: "teamwork" },
-  { text: "The strongest teams are built on trust. We trust you.", category: "teamwork" },
-  { text: "Side by side or property by property — we're in this together.", category: "teamwork" },
-  { text: "Your teammates are counting on you, and you never let them down.", category: "teamwork" },
-  { text: "One team. One standard. Let's raise the bar again.", category: "teamwork" },
-
-  // ── Purpose ──
-  { text: "Every room you clean is someone's fresh start.", category: "purpose" },
-  { text: "You make homes feel like home. That's no small thing.", category: "purpose" },
-  { text: "Someone is going to walk in today and smile because of your work.", category: "purpose" },
-  { text: "Clean spaces change how people feel. You're changing lives.", category: "purpose" },
-  { text: "There's dignity in every detail. Your work has meaning.", category: "purpose" },
-  { text: "A clean home is a peaceful home. You bring that peace.", category: "purpose" },
-  { text: "Guests will never know your name, but they'll feel your care.", category: "purpose" },
-  { text: "You're building something bigger than today's checklist.", category: "purpose" },
-  { text: "The pride you take in your work creates trust that lasts.", category: "purpose" },
-  { text: "What seems routine to you is extraordinary to the people you serve.", category: "purpose" },
-  { text: "You create first impressions that make guests feel welcome.", category: "purpose" },
-  { text: "Every sparkling surface tells a story of someone who cared.", category: "purpose" },
-  { text: "When you care about your craft, people feel it. They always feel it.", category: "purpose" },
-  { text: "You set the stage for someone's best day. That matters.", category: "purpose" },
-  { text: "Your work is the handshake before anyone says a word.", category: "purpose" },
-
-  // ── Lighthearted ──
-  { text: "Sparkle on, superstar. Those rooms aren't going to dazzle themselves.", category: "lighthearted" },
-  { text: "Coffee: check. Attitude: unstoppable. Let's roll.", category: "lighthearted" },
-  { text: "Plot twist: you're the main character today.", category: "lighthearted" },
-  { text: "Dust bunnies, your time is up.", category: "lighthearted" },
-  { text: "Professional sparkle specialist reporting for duty.", category: "lighthearted" },
-  { text: "Fun fact: you make this team look good. Like, really good.", category: "lighthearted" },
-  { text: "May your day be as spotless as the rooms you leave behind.", category: "lighthearted" },
-  { text: "Ready, set, dazzle.", category: "lighthearted" },
-  { text: "You're about to make some rooms very, very happy.", category: "lighthearted" },
-  { text: "Breaking news: local hero makes everything shine. Again.", category: "lighthearted" },
-  { text: "Today's power-up: activated. Side effects include awesomeness.", category: "lighthearted" },
-  { text: "On a scale of 1 to dazzling, you're off the charts.", category: "lighthearted" },
-  { text: "If clean was a competition, you'd need a trophy room by now.", category: "lighthearted" },
-  { text: "Step 1: show up. Step 2: be amazing. You're already on step 2.", category: "lighthearted" },
-  { text: "Your vibe today? Unstoppable with a side of sparkle.", category: "lighthearted" },
+  ...messages("hype", [
+    "Walk in ready. The day gets better the moment you get moving.",
+    "Fresh schedule, fresh momentum. Go make it yours.",
+    "You have everything you need to make today count.",
+    "Set the pace, trust your training, and finish proud.",
+    "Strong starts are good. Strong finishes are your specialty.",
+    "Let your work do the talking today. It always says something great.",
+    "There is a win hiding in every room. Go find all of them.",
+    "You know the standard. Now go make it look effortless.",
+    "Momentum starts with one task. Consider this your starting signal.",
+    "Bring focus to the first room and confidence to every room after it.",
+    "Today's goal: leave every space better than you found it.",
+    "You are capable, prepared, and officially in motion.",
+    "A full day is just a collection of small wins. Start collecting.",
+    "Make your future self proud of how you handled today.",
+    "Energy follows action. Take the first step and let it catch up.",
+    "The schedule may be busy, but so is your talent.",
+    "You bring the skill. Today brings the opportunity.",
+    "Take a breath, pick your first target, and own the day.",
+    "Good work is about to happen because you showed up.",
+    "Today has your name written all over it. Make it shine.",
+  ]),
+  ...messages("appreciation", [
+    "The care you put into your work reaches people you may never meet.",
+    "Your reliability gives the whole team room to breathe. Thank you.",
+    "The way you notice details is a real professional gift.",
+    "Your effort helps turn busy days into successful ones.",
+    "Thank you for being someone the team can count on.",
+    "Your work creates comfort, confidence, and a little more calm.",
+    "The quality you bring is part of what makes Dazzle Divas special.",
+    "Your patience and persistence deserve recognition today.",
+    "You make a difference long after the checklist is complete.",
+    "The care behind your work is visible in every finished space.",
+    "Thank you for carrying the standard with pride.",
+    "Your steady effort keeps the entire operation moving forward.",
+    "You turn ordinary tasks into work worth being proud of.",
+    "The team notices your follow-through, even on the busiest days.",
+    "Your professionalism makes clients feel taken care of.",
+    "There is real value in doing things well. You prove it daily.",
+    "Thank you for bringing both skill and heart to the job.",
+    "You make trust possible one completed room at a time.",
+    "What you contribute cannot be measured by task count alone.",
+    "Your best qualities show up in the details. We appreciate every one.",
+  ]),
+  ...messages("teamwork", [
+    "One crew, many talents, one beautiful result.",
+    "Clear communication and helping hands make busy days lighter.",
+    "Every person brings a piece of the sparkle. Yours matters.",
+    "A quick check-in can turn a tough moment into a team win.",
+    "We do our best work when we look out for one another.",
+    "Share the load, share the knowledge, share the win.",
+    "The strongest part of this schedule is the team working it.",
+    "Different properties, same crew, same commitment.",
+    "Great teammates make good days better and hard days possible.",
+    "Your work supports the person before you and the person after you.",
+    "Ask when you need help. Offer when you can. That is how we shine.",
+    "A team that communicates early finishes stronger together.",
+    "Every handoff is a chance to help a teammate succeed.",
+    "Our shared standard is built one thoughtful action at a time.",
+    "No one carries the whole day alone around here.",
+    "The best team rhythm starts with respect and a little kindness.",
+    "Your teammate's win is part of your win too.",
+    "When the crew stays connected, the work stays excellent.",
+    "Bring your strengths and make space for everyone else's.",
+    "Together, we turn a long list into a job well done.",
+  ]),
+  ...messages("purpose", [
+    "A cared-for space tells people they matter before they walk in.",
+    "Your work gives every guest a cleaner, calmer beginning.",
+    "You create the kind of welcome people can feel instantly.",
+    "Every finished room is a promise kept to a client.",
+    "A thoughtful clean makes an unfamiliar place feel comfortable.",
+    "The work you do today becomes someone else's peace of mind.",
+    "You help properties become places people are happy to enter.",
+    "Care is not just what you do. It is what people feel afterward.",
+    "A beautiful result begins with someone deciding the details matter.",
+    "Your craft creates order where people need it most.",
+    "The final sparkle is visible. The care behind it is unforgettable.",
+    "You give hosts confidence and guests a warm first impression.",
+    "Every checklist is really a collection of promises to the next person.",
+    "A clean, ready space can change the mood of an entire day.",
+    "You make transitions smoother for people you may never see.",
+    "The standard you protect today becomes the reputation we carry tomorrow.",
+    "A welcoming room begins with the work in your hands.",
+    "Your attention creates moments of relief for clients and guests.",
+    "You are not just preparing a property. You are preparing an experience.",
+    "When the work is done with care, people can tell immediately.",
+  ]),
+  ...messages("lighthearted", [
+    "Cape optional. Excellent work strongly encouraged.",
+    "Today's mission: locate the mess and politely show it the exit.",
+    "You bring the elbow grease. We will bring the imaginary confetti.",
+    "Clean now, happy dance later. Or happy dance while cleaning.",
+    "The dust had a good run. Time to wrap it up.",
+    "Warning: freshly cleaned rooms may cause excessive smiling.",
+    "You are one good playlist away from unstoppable.",
+    "Today's dress code: confidence with comfortable shoes.",
+    "The rooms have been notified. You are on the way.",
+    "Operation Make It Gorgeous is officially underway.",
+    "Mess level: temporary. Dazzle level: incoming.",
+    "Go forth and leave suspicious amounts of sparkle behind.",
+    "Plot update: the cleaning pro wins again.",
+    "Your checklist called. It said you make this look easy.",
+    "A little music, a little magic, and a lot of clean.",
+    "Today's vibe is tidy, talented, and totally on schedule.",
+    "If the room could talk, it would already be thanking you.",
+    "You handle the details. The sparkle handles the applause.",
+    "Mess does not stand a chance against this level of expertise.",
+    "Ready when you are, Captain Clean.",
+  ]),
 ];
-
-// ── Deterministic Daily Pick ──────────────────────────────────────────
-// Uses a simple hash of the date string so everyone sees the same message
-// on the same day, but it feels random across days.
 
 function dateSeed(date: Date = new Date()): number {
   const dateStr = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
   let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    hash = (hash << 5) - hash + dateStr.charCodeAt(i);
-    hash |= 0; // Convert to 32-bit integer
+  for (let index = 0; index < dateStr.length; index += 1) {
+    hash = (hash << 5) - hash + dateStr.charCodeAt(index);
+    hash |= 0;
   }
   return Math.abs(hash);
 }
 
 export function getDailyMessage(date?: Date): MotivationMessage {
-  const seed = dateSeed(date);
-  return MESSAGES[seed % MESSAGES.length]!;
+  return MESSAGES[dateSeed(date) % MESSAGES.length]!;
 }
-
-// ── Time-of-Day Greeting ──────────────────────────────────────────────
 
 export function getTimeGreeting(): string {
   const hour = new Date().getHours();
@@ -143,9 +154,6 @@ export function getTimeGreeting(): string {
   if (hour < 21) return "Good evening";
   return "Burning the midnight oil";
 }
-
-// ── Category Icon ─────────────────────────────────────────────────────
-// Returns a small emoji-style label for visual variety in the banner.
 
 const CATEGORY_ICONS: Record<MessageCategory, string> = {
   hype: "fire",

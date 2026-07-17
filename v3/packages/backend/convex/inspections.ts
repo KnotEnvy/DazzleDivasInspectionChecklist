@@ -33,6 +33,7 @@ import {
   assignmentRoleForChecklistType,
   checklistTypeValidator,
 } from "./lib/validators";
+import { notifyAdminsOfJobEvent } from "./lib/adminNotifications";
 
 async function ensureAssigneeIsEligible(
   ctx: MutationCtx,
@@ -340,6 +341,17 @@ export const getById = query({
     return {
       ...inspection,
       roomInspections: roomsWithProgress,
+      canStop:
+        inspection.status === "IN_PROGRESS" &&
+        !inspection.notes?.trim() &&
+        roomsWithProgress.every(
+          (room) =>
+            room.status === "PENDING" &&
+            !room.notes?.trim() &&
+            room.completedTasks === 0 &&
+            (room.issueCount ?? 0) === 0 &&
+            room.photoCount === 0
+        ),
     };
   },
 });
@@ -501,6 +513,15 @@ export const create = mutation({
         }),
         createdAt: Date.now(),
       });
+      if (job.status !== "IN_PROGRESS") {
+        await notifyAdminsOfJobEvent(ctx, {
+          jobId: job._id,
+          actorId: actor._id,
+          actorName: actor.name,
+          propertyName: property.name,
+          eventType: "JOB_STARTED",
+        });
+      }
     }
 
     return inspectionId;
@@ -555,7 +576,94 @@ export const complete = mutation({
         }),
         createdAt: completedAt,
       });
+      await notifyAdminsOfJobEvent(ctx, {
+        jobId: job._id,
+        actorId: user._id,
+        actorName: user.name,
+        propertyName: inspection.propertyName,
+        eventType: "JOB_COMPLETED",
+      });
     }
+  },
+});
+
+export const stopUnstarted = mutation({
+  args: {
+    inspectionId: v.id("inspections"),
+  },
+  handler: async (ctx, args) => {
+    const { inspection, user } = await requireInspectionAccess(ctx, args.inspectionId);
+
+    if (inspection.status !== "IN_PROGRESS") {
+      throw new Error("Only an in-progress checklist can be stopped");
+    }
+
+    const rooms = await ctx.db
+      .query("roomInspections")
+      .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
+      .collect();
+    const taskResults = (
+      await Promise.all(
+        rooms.map((room) =>
+          ctx.db
+            .query("taskResults")
+            .withIndex("by_room_inspection", (q) => q.eq("roomInspectionId", room._id))
+            .collect()
+        )
+      )
+    ).flat();
+    const photos = await ctx.db
+      .query("photos")
+      .withIndex("by_inspection", (q) => q.eq("inspectionId", args.inspectionId))
+      .collect();
+
+    const hasMarkedWork =
+      !!inspection.notes?.trim() ||
+      photos.length > 0 ||
+      rooms.some(
+        (room) =>
+          room.status !== "PENDING" ||
+          !!room.notes?.trim() ||
+          (room.completedTasks ?? 0) > 0 ||
+          (room.issueCount ?? 0) > 0 ||
+          (room.photoCount ?? 0) > 0
+      ) ||
+      taskResults.some(
+        (task) => task.completed || task.hasIssue === true || !!task.issueNotes?.trim()
+      );
+
+    if (hasMarkedWork) {
+      throw new Error("This checklist cannot be stopped after tasks, notes, issues, rooms, or photos are marked");
+    }
+
+    const linkedJobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_linked_inspection", (q) => q.eq("linkedInspectionId", args.inspectionId))
+      .collect();
+
+    for (const taskResult of taskResults) {
+      await ctx.db.delete(taskResult._id);
+    }
+    for (const room of rooms) {
+      await ctx.db.delete(room._id);
+    }
+    for (const job of linkedJobs) {
+      await ctx.db.patch(job._id, {
+        linkedInspectionId: undefined,
+        status: "SCHEDULED",
+        completedAt: undefined,
+      });
+      await ctx.db.insert("jobEvents", {
+        jobId: job._id,
+        eventType: "CHECKLIST_STOPPED",
+        actorId: user._id,
+        metadata: JSON.stringify({ inspectionId: args.inspectionId }),
+        createdAt: Date.now(),
+      });
+    }
+
+    await ctx.db.delete(args.inspectionId);
+    return { jobId: linkedJobs[0]?._id };
   },
 });
 

@@ -4,7 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import toast from "react-hot-toast";
-import { Mail, Users } from "lucide-react";
+import { Mail, Trash2, Users } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
 
 type AdminStats = {
@@ -82,6 +82,7 @@ export function AdminPage() {
   const users = useQuery(api.users.list) as AdminUser[] | undefined;
   const payProfiles = useQuery(api.finance.listWorkerPayProfiles) as WorkerPayProfile[] | undefined;
   const updateUser = useMutation(api.users.update);
+  const deleteInactiveUser = useMutation(api.users.deleteInactive);
   const upsertWorkerPayProfile = useMutation(api.finance.upsertWorkerPayProfile);
   const createStaffAccount = useAction(api.users.createStaffAccount);
   const resendStaffInvite = useAction(api.users.resendStaffInvite);
@@ -90,6 +91,8 @@ export function AdminPage() {
   const [creatingUser, setCreatingUser] = useState(false);
   const [sendingInviteUserId, setSendingInviteUserId] = useState<Id<"users"> | null>(null);
   const [savingPayProfileUserId, setSavingPayProfileUserId] = useState<Id<"users"> | null>(null);
+  const [deleteCandidateId, setDeleteCandidateId] = useState<Id<"users"> | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<Id<"users"> | null>(null);
 
   const sortedUsers = useMemo(() => {
     return (users ?? []).slice().sort((a, b) => a.email.localeCompare(b.email));
@@ -122,6 +125,19 @@ export function AdminPage() {
       toast.error(error instanceof Error ? error.message : "Failed to update user");
     } finally {
       setSavingUserId(null);
+    }
+  }
+
+  async function handleDeleteInactiveUser(user: AdminUser) {
+    setDeletingUserId(user._id);
+    try {
+      await deleteInactiveUser({ userId: user._id });
+      toast.success(`${user.name} was deleted`);
+      setDeleteCandidateId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete inactive user");
+    } finally {
+      setDeletingUserId(null);
     }
   }
 
@@ -448,6 +464,41 @@ export function AdminPage() {
                           <Mail className="h-4 w-4" />
                           {sendingInviteUserId === user._id ? "Sending..." : "Resend Invite"}
                         </button>
+                      ) : null}
+                      {!user.isActive && deleteCandidateId !== user._id ? (
+                        <button
+                          className="field-button danger col-span-2 inline-flex items-center justify-center gap-2 px-4 sm:col-span-1"
+                          disabled={deletingUserId === user._id}
+                          onClick={() => setDeleteCandidateId(user._id)}
+                          type="button"
+                        >
+                          <Trash2 className="h-4 w-4" /> Delete User
+                        </button>
+                      ) : null}
+                      {!user.isActive && deleteCandidateId === user._id ? (
+                        <div className="col-span-2 rounded-xl border border-rose-200 bg-rose-50 p-3 sm:min-w-72">
+                          <p className="text-xs text-rose-800">
+                            Permanently delete this unused account? Accounts with business history are protected.
+                          </p>
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              className="field-button danger flex-1 px-3"
+                              disabled={deletingUserId === user._id}
+                              onClick={() => void handleDeleteInactiveUser(user)}
+                              type="button"
+                            >
+                              {deletingUserId === user._id ? "Deleting..." : "Confirm Delete"}
+                            </button>
+                            <button
+                              className="field-button ghost flex-1 px-3"
+                              disabled={deletingUserId === user._id}
+                              onClick={() => setDeleteCandidateId(null)}
+                              type="button"
+                            >
+                              Keep User
+                            </button>
+                          </div>
+                        </div>
                       ) : null}
                     </div>
                   </div>

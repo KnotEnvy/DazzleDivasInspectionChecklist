@@ -382,6 +382,7 @@ export function AdminSchedulePage() {
   const [statusFilter, setStatusFilter] = useState<"ALL" | JobStatus>("ALL");
   const [jobTypeFilter, setJobTypeFilter] = useState<JobType | "ALL">("ALL");
   const [assigneeId, setAssigneeId] = useState<Id<"users"> | "">("");
+  const [additionalAssigneeIds, setAdditionalAssigneeIds] = useState<Id<"users">[]>([]);
   const [scheduledStartInput, setScheduledStartInput] = useState("");
   const [scheduledEndInput, setScheduledEndInput] = useState("");
   const [statusInput, setStatusInput] = useState<JobStatus>("SCHEDULED");
@@ -519,16 +520,15 @@ export function AdminSchedulePage() {
     }
     const requiredRole = requiredRoleForJob(selectedJob);
     const candidates = assigneeUsers.filter((user) => user.role === requiredRole);
-    if (
-      selectedJob.assignee &&
-      selectedJob.assignee.role === requiredRole &&
-      !candidates.some((user) => user._id === selectedJob.assignee!._id)
-    ) {
-      return [...candidates, selectedJob.assignee].sort((left, right) =>
-        left.name.localeCompare(right.name)
-      );
+    for (const assignedUser of selectedJob.assignees ?? []) {
+      if (
+        assignedUser.role === requiredRole &&
+        !candidates.some((user) => user._id === assignedUser._id)
+      ) {
+        candidates.push(assignedUser);
+      }
     }
-    return candidates;
+    return candidates.sort((left, right) => left.name.localeCompare(right.name));
   }, [assigneeUsers, selectedJob]);
 
   const eligibleCreateAssignees = useMemo(
@@ -608,6 +608,11 @@ export function AdminSchedulePage() {
       return;
     }
     setAssigneeId(selectedJob.assignee?._id ?? "");
+    setAdditionalAssigneeIds(
+      (selectedJob.assigneeIds ?? []).filter(
+        (assignedId) => assignedId !== selectedJob.assignee?._id
+      )
+    );
     setScheduledStartInput(toDatetimeLocalValue(selectedJob.scheduledStart));
     setScheduledEndInput(toDatetimeLocalValue(selectedJob.scheduledEnd));
     setStatusInput(selectedJob.status);
@@ -760,7 +765,14 @@ export function AdminSchedulePage() {
     }
 
     const nextAssigneeId = assigneeId.length > 0 ? assigneeId : null;
-    const hasAssignmentChange = nextAssigneeId !== (selectedJob.assignee?._id ?? null);
+    const nextAssigneeIds = nextAssigneeId
+      ? [nextAssigneeId, ...additionalAssigneeIds.filter((id) => id !== nextAssigneeId)]
+      : [];
+    const currentAssigneeIds =
+      selectedJob.assigneeIds ?? (selectedJob.assigneeId ? [selectedJob.assigneeId] : []);
+    const hasAssignmentChange =
+      currentAssigneeIds.length !== nextAssigneeIds.length ||
+      currentAssigneeIds.some((id, index) => id !== nextAssigneeIds[index]);
     const hasTimingChange =
       scheduledStartInput !== toDatetimeLocalValue(selectedJob.scheduledStart) ||
       scheduledEndInput !== toDatetimeLocalValue(selectedJob.scheduledEnd);
@@ -789,6 +801,7 @@ export function AdminSchedulePage() {
         await reassignJob({
           jobId: selectedJob._id,
           assigneeId: nextAssigneeId,
+          assigneeIds: nextAssigneeIds,
         });
       }
 
@@ -900,10 +913,19 @@ export function AdminSchedulePage() {
   }
 
   const selectedAssigneeValue = selectedJob?.assignee?._id ?? "";
+  const selectedAdditionalAssigneeIds = (selectedJob?.assigneeIds ?? []).filter(
+    (assignedId) => assignedId !== selectedJob?.assignee?._id
+  );
+  const hasAssignmentChanges =
+    assigneeId !== selectedAssigneeValue ||
+    additionalAssigneeIds.length !== selectedAdditionalAssigneeIds.length ||
+    additionalAssigneeIds.some(
+      (assignedId, index) => assignedId !== selectedAdditionalAssigneeIds[index]
+    );
   const canEditBackToBack = selectedJob?.jobType === "CLEANING";
   const hasDispatchChanges =
     !!selectedJob &&
-    (assigneeId !== selectedAssigneeValue ||
+    (hasAssignmentChanges ||
       scheduledStartInput !== toDatetimeLocalValue(selectedJob.scheduledStart) ||
       scheduledEndInput !== toDatetimeLocalValue(selectedJob.scheduledEnd) ||
       (selectedJob.isBackToBack === true) !== isBackToBackInput ||
@@ -1953,7 +1975,15 @@ export function AdminSchedulePage() {
                     className="input mt-1"
                     disabled={controlsLocked}
                     value={assigneeId}
-                    onChange={(event) => setAssigneeId(event.target.value as Id<"users"> | "")}
+                    onChange={(event) => {
+                      const nextPrimary = event.target.value as Id<"users"> | "";
+                      setAssigneeId(nextPrimary);
+                      setAdditionalAssigneeIds((current) =>
+                        nextPrimary
+                          ? current.filter((assignedId) => assignedId !== nextPrimary)
+                          : []
+                      );
+                    }}
                   >
                     <option value="">Unassigned</option>
                     {eligibleAssignees.map((user) => (
@@ -1963,6 +1993,50 @@ export function AdminSchedulePage() {
                     ))}
                   </select>
                 </label>
+
+                <fieldset
+                  className="rounded-xl border border-border bg-slate-50 p-3"
+                  disabled={controlsLocked || !assigneeId}
+                >
+                  <legend className="px-1 text-sm font-medium text-slate-700">
+                    Additional Team Members
+                  </legend>
+                  <p className="mb-2 text-xs text-slate-500">
+                    Add or remove teammates while keeping the primary assignee in charge of the checklist.
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {eligibleAssignees
+                      .filter((user) => user._id !== assigneeId)
+                      .map((user) => {
+                        const checked = additionalAssigneeIds.includes(user._id);
+                        return (
+                          <label
+                            key={user._id}
+                            className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                          >
+                            <input
+                              checked={checked}
+                              disabled={!checked && additionalAssigneeIds.length >= 7}
+                              onChange={(event) =>
+                                setAdditionalAssigneeIds((current) =>
+                                  event.target.checked
+                                    ? [...current, user._id]
+                                    : current.filter((assignedId) => assignedId !== user._id)
+                                )
+                              }
+                              type="checkbox"
+                            />
+                            <span className="truncate">{user.name}</span>
+                          </label>
+                        );
+                      })}
+                  </div>
+                  {!assigneeId ? (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Choose a primary assignee before adding teammates.
+                    </p>
+                  ) : null}
+                </fieldset>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block text-sm font-medium text-slate-700">
@@ -2012,11 +2086,6 @@ export function AdminSchedulePage() {
                       </option>
                     ))}
                   </select>
-                  {(selectedJob.assigneeNames?.length ?? 0) > 1 ? (
-                    <span className="mt-1 block text-xs text-slate-500">
-                      This split job currently includes {formatJobAssigneeLabel(selectedJob)}. Saving a primary reassignment converts it back to one worker.
-                    </span>
-                  ) : null}
                 </label>
 
                 <label className="block text-sm font-medium text-slate-700">

@@ -19,6 +19,7 @@ import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useOutboxCount } from "@/hooks/useOutboxCount";
 import { useOutboxItems } from "@/hooks/useOutboxItems";
 import { useOfflineSync } from "@/app/OfflineSyncProvider";
+import { AdminNotificationBell } from "@/components/AdminNotificationBell";
 
 const baseLink = "rounded-xl px-3 py-2 text-sm font-semibold transition";
 
@@ -61,6 +62,7 @@ export function AppShell() {
         </div>
 
         <div className="flex items-center gap-2">
+          {isAdmin ? <AdminNotificationBell /> : null}
           <span
             aria-label={`Connection: ${isOnline ? (syncing ? "syncing" : "online") : "offline"}`}
             className={`rounded-full px-3 py-1 text-xs font-semibold ${statusPillClasses(isOnline, syncing)}`}

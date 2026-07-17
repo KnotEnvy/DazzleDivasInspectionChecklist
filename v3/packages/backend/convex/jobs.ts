@@ -16,6 +16,7 @@ import {
   getJobChecklistStartTiming,
   getMaxActiveChecklistsForRole,
 } from "./lib/jobLifecycle";
+import { notifyAdminsOfJobEvent } from "./lib/adminNotifications";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BACK_TO_BACK_ARRIVAL_HOUR = 16;
@@ -606,35 +607,51 @@ export const reassign = mutation({
   args: {
     jobId: v.id("jobs"),
     assigneeId: v.union(v.id("users"), v.null()),
+    assigneeIds: v.optional(v.array(v.id("users"))),
   },
   handler: async (ctx, args) => {
     const { actor, job, property, servicePlan } = await getJobForAdminUpdate(ctx, args.jobId);
-    const nextAssigneeId = args.assigneeId ?? undefined;
-    if (job.assigneeId === nextAssigneeId) {
+    const requestedAssigneeIds = args.assigneeIds
+      ? [...new Set(args.assigneeIds)]
+      : args.assigneeId
+        ? [args.assigneeId]
+        : [];
+    const nextAssigneeId = requestedAssigneeIds[0];
+    const nextAdditionalAssigneeIds = requestedAssigneeIds.slice(1);
+    const currentAssigneeIds = getAssignedWorkerIds(job);
+    if (requestedAssigneeIds.length > 8) {
+      throw new Error("Jobs can include up to 8 assigned workers");
+    }
+    if (
+      currentAssigneeIds.length === requestedAssigneeIds.length &&
+      currentAssigneeIds.every((assignedId, index) => assignedId === requestedAssigneeIds[index])
+    ) {
       return job._id;
     }
 
-    let assignee: Doc<"users"> | undefined;
-    if (nextAssigneeId) {
+    if (requestedAssigneeIds.length > 0) {
       const requiredRole = requiredAssignmentRoleForJob(job, servicePlan);
-      assignee = await ensureAssigneeEligible(ctx, {
-        assigneeId: nextAssigneeId,
-        requiredRole,
-      });
-
-      if (isDispatchActiveStatus(job.status) && requiredRole !== "CLEANER") {
-        await assertNoAssigneeConflict(ctx, {
-          assigneeId: assignee._id,
-          scheduledStart: job.scheduledStart,
-          scheduledEnd: job.scheduledEnd,
-          excludeJobId: job._id,
+      for (const requestedAssigneeId of requestedAssigneeIds) {
+        const assignee = await ensureAssigneeEligible(ctx, {
+          assigneeId: requestedAssigneeId,
+          requiredRole,
         });
+
+        if (isDispatchActiveStatus(job.status) && requiredRole !== "CLEANER") {
+          await assertNoAssigneeConflict(ctx, {
+            assigneeId: assignee._id,
+            scheduledStart: job.scheduledStart,
+            scheduledEnd: job.scheduledEnd,
+            excludeJobId: job._id,
+          });
+        }
       }
     }
 
     await ctx.db.patch(job._id, {
-      assigneeId: assignee?._id,
-      additionalAssigneeIds: undefined,
+      assigneeId: nextAssigneeId,
+      additionalAssigneeIds:
+        nextAdditionalAssigneeIds.length > 0 ? nextAdditionalAssigneeIds : undefined,
     });
 
     await recordJobEvent(ctx, {
@@ -643,9 +660,9 @@ export const reassign = mutation({
       eventType: "JOB_REASSIGNED",
       metadata: {
         previousAssigneeId: job.assigneeId ?? null,
-        nextAssigneeId: assignee?._id ?? null,
-        previousAssigneeIds: getAssignedWorkerIds(job),
-        nextAssigneeIds: assignee ? [assignee._id] : [],
+        nextAssigneeId: nextAssigneeId ?? null,
+        previousAssigneeIds: currentAssigneeIds,
+        nextAssigneeIds: requestedAssigneeIds,
         propertyId: property._id,
       },
     });
@@ -836,7 +853,7 @@ export const updateStatus = mutation({
     status: jobStatusValidator,
   },
   handler: async (ctx, args) => {
-    const { actor, job } = await getJobForAdminUpdate(ctx, args.jobId);
+    const { actor, job, property } = await getJobForAdminUpdate(ctx, args.jobId);
 
     if (args.status === "COMPLETED") {
       throw new Error("Dispatch cannot directly complete jobs");
@@ -868,6 +885,16 @@ export const updateStatus = mutation({
         nextStatus: args.status,
       },
     });
+
+    if (args.status === "IN_PROGRESS") {
+      await notifyAdminsOfJobEvent(ctx, {
+        jobId: job._id,
+        actorId: actor._id,
+        actorName: actor.name,
+        propertyName: property.name,
+        eventType: "JOB_STARTED",
+      });
+    }
 
     return job._id;
   },
@@ -928,6 +955,14 @@ export const completeByAdmin = mutation({
         checklistType,
         source: "admin_dispatch",
       },
+    });
+
+    await notifyAdminsOfJobEvent(ctx, {
+      jobId: job._id,
+      actorId: actor._id,
+      actorName: actor.name,
+      propertyName: property.name,
+      eventType: "JOB_COMPLETED",
     });
 
     return job._id;
@@ -994,6 +1029,17 @@ export const updateMyStatus = mutation({
         source: "worker_schedule",
       },
     });
+
+    if (args.status === "IN_PROGRESS") {
+      const property = await ctx.db.get(job.propertyId);
+      await notifyAdminsOfJobEvent(ctx, {
+        jobId: job._id,
+        actorId: actor._id,
+        actorName: actor.name,
+        propertyName: property?.name ?? "a scheduled property",
+        eventType: "JOB_STARTED",
+      });
+    }
 
     return job._id;
   },

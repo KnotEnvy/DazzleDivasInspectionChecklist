@@ -1,4 +1,5 @@
 ﻿import { Link } from "react-router-dom";
+import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import {
@@ -108,6 +109,22 @@ function endOfToday() {
   return date.getTime();
 }
 
+function startOfLocalDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function sameLocalDay(left: number, right: number) {
+  const leftDate = new Date(left);
+  const rightDate = new Date(right);
+  return (
+    leftDate.getFullYear() === rightDate.getFullYear() &&
+    leftDate.getMonth() === rightDate.getMonth() &&
+    leftDate.getDate() === rightDate.getDate()
+  );
+}
+
 function formatJobWindow(job: Pick<ScheduleJob, "scheduledStart" | "scheduledEnd">) {
   const start = new Date(job.scheduledStart);
   const end = new Date(job.scheduledEnd);
@@ -179,6 +196,7 @@ export function DashboardPage() {
   const { user, isAdmin, isCleaner, isInspector } = useCurrentUser();
   const isOnline = useNetworkStatus();
   const { items } = useOutboxItems({ includeResolved: true });
+  const [operationsDay, setOperationsDay] = useState(startOfToday);
 
   const active = useQuery(api.inspections.listActive) as ActiveInspection[] | undefined;
   const mine = useQuery(api.propertyAssignments.listMine) as AssignedProperty[] | undefined;
@@ -217,6 +235,11 @@ export function DashboardPage() {
     const adminTodayJobs = (adminDispatch ?? [])
       .filter((job) => job.scheduledStart >= startOfToday() && job.scheduledStart <= endOfToday())
       .sort((left, right) => left.scheduledStart - right.scheduledStart);
+    const operationsDate = new Date(operationsDay);
+    const operationsJobs = (adminDispatch ?? [])
+      .filter((job) => sameLocalDay(job.scheduledStart, operationsDay))
+      .sort((left, right) => left.scheduledStart - right.scheduledStart);
+    const operationsIsToday = sameLocalDay(operationsDay, startOfToday());
     const unassignedToday = adminTodayJobs.filter((job) => getJobAssigneeIds(job).length === 0);
     const blockedToday = adminTodayJobs.filter((job) => job.status === "BLOCKED");
     const inProgressToday = adminTodayJobs.filter((job) => job.status === "IN_PROGRESS");
@@ -359,7 +382,15 @@ export function DashboardPage() {
           {/* Today's Timeline */}
           <div className="overflow-hidden rounded-2xl border border-border bg-white p-3 sm:p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="min-w-0 text-lg font-bold">Today&apos;s Operations</h2>
+              <h2 className="min-w-0 text-lg font-bold">
+                {operationsIsToday
+                  ? "Today's Operations"
+                  : `Operations · ${operationsDate.toLocaleDateString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}`}
+              </h2>
               <Link
                 className="shrink-0 whitespace-nowrap text-xs font-semibold text-brand-700 hover:text-brand-800"
                 to="/schedule"
@@ -373,15 +404,15 @@ export function DashboardPage() {
                 <div className="skeleton h-16 rounded-xl" />
                 <div className="skeleton h-16 rounded-xl" />
               </div>
-            ) : adminTodayJobs.length === 0 ? (
+            ) : operationsJobs.length === 0 ? (
               <EmptyState
                 icon={<CalendarDays className="h-8 w-8" />}
-                heading="No jobs scheduled today"
+                heading={operationsIsToday ? "No jobs scheduled today" : "No jobs scheduled this day"}
                 description="Create jobs in dispatch or check the week ahead view."
               />
             ) : (
               <div className="space-y-1.5">
-                {adminTodayJobs.map((job) => (
+                {operationsJobs.map((job) => (
                   <Link
                     key={job._id}
                     className={`flex items-center gap-2 rounded-xl border border-border p-2 transition hover:border-brand-300 sm:gap-3 sm:p-3 ${
@@ -530,7 +561,15 @@ export function DashboardPage() {
                 const barHeight = Math.max(6, (dayJobs.length / maxJobsInDay) * 64);
                 const hasUnassigned = dayJobs.some((job) => getJobAssigneeIds(job).length === 0);
                 return (
-                  <div key={date.toISOString()} className="text-center">
+                  <button
+                    key={date.toISOString()}
+                    aria-label={`Show operations for ${date.toLocaleDateString()}`}
+                    className={`rounded-xl p-1 text-center transition hover:bg-brand-50 ${
+                      sameLocalDay(date.getTime(), operationsDay) ? "ring-2 ring-brand-300" : ""
+                    }`}
+                    onClick={() => setOperationsDay(startOfLocalDay(date).getTime())}
+                    type="button"
+                  >
                     <p
                       className={`text-[11px] font-bold uppercase tracking-[0.1em] ${
                         isToday ? "text-brand-700" : "text-slate-400"
@@ -563,7 +602,7 @@ export function DashboardPage() {
                         day: "numeric",
                       })}
                     </p>
-                  </div>
+                  </button>
                 );
               })}
             </div>

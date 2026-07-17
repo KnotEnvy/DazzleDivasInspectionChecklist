@@ -411,6 +411,151 @@ export const update = mutation({
   },
 });
 
+export const deleteInactive = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const actor = await requireAdmin(ctx);
+    const user = await ctx.db.get(args.userId);
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+    if (user._id === actor._id) {
+      throw new Error("You cannot delete your own account");
+    }
+    if (user.isActive) {
+      throw new Error("Deactivate this user before deleting the account");
+    }
+
+    const [
+      allUsers,
+      jobs,
+      inspections,
+      servicePlans,
+      jobEvents,
+      financeConfigs,
+      payProfiles,
+      jobFinancials,
+      financeEvents,
+      deletedHistoryAudits,
+      userAdminEvents,
+    ] = await Promise.all([
+      ctx.db.query("users").collect(),
+      ctx.db.query("jobs").collect(),
+      ctx.db.query("inspections").collect(),
+      ctx.db.query("servicePlans").collect(),
+      ctx.db.query("jobEvents").collect(),
+      ctx.db.query("financePropertyConfigs").collect(),
+      ctx.db.query("workerPayProfiles").collect(),
+      ctx.db.query("jobFinancials").collect(),
+      ctx.db.query("financeEvents").collect(),
+      ctx.db.query("deletedHistoryAudits").collect(),
+      ctx.db.query("userAdminEvents").collect(),
+    ]);
+
+    const hasOperationalHistory =
+      allUsers.some((candidate) => candidate.createdById === user._id) ||
+      jobs.some(
+        (job) =>
+          job.createdById === user._id ||
+          job.assigneeId === user._id ||
+          job.additionalAssigneeIds?.includes(user._id)
+      ) ||
+      inspections.some(
+        (inspection) =>
+          inspection.assigneeId === user._id || inspection.createdById === user._id
+      ) ||
+      servicePlans.some((plan) => plan.defaultAssigneeId === user._id) ||
+      jobEvents.some((event) => event.actorId === user._id) ||
+      financeConfigs.some((config) => config.updatedById === user._id) ||
+      payProfiles.some(
+        (profile) => profile.updatedById === user._id && profile.userId !== user._id
+      ) ||
+      jobFinancials.some(
+        (financial) =>
+          financial.assigneeId === user._id ||
+          financial.approvedById === user._id ||
+          financial.unlockedById === user._id
+      ) ||
+      financeEvents.some((event) => event.actorId === user._id) ||
+      deletedHistoryAudits.some(
+        (audit) => audit.assigneeId === user._id || audit.deletedById === user._id
+      ) ||
+      userAdminEvents.some(
+        (event) => event.actorId === user._id && event.targetUserId !== user._id
+      );
+
+    if (hasOperationalHistory) {
+      throw new Error(
+        "This inactive user has job, checklist, finance, or admin history and cannot be deleted without breaking business records"
+      );
+    }
+
+    const assignments = await ctx.db
+      .query("propertyAssignments")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const ownPayProfiles = payProfiles.filter((profile) => profile.userId === user._id);
+    const targetAdminEvents = userAdminEvents.filter(
+      (event) => event.targetUserId === user._id || event.actorId === user._id
+    );
+    const notifications = (await ctx.db.query("adminNotifications").collect()).filter(
+      (notification) =>
+        notification.recipientUserId === user._id || notification.actorId === user._id
+    );
+
+    const accounts = await ctx.db
+      .query("authAccounts")
+      .withIndex("userIdAndProvider", (q) => q.eq("userId", user._id))
+      .collect();
+    const sessions = await ctx.db
+      .query("authSessions")
+      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .collect();
+    const verificationCodes = (
+      await Promise.all(
+        accounts.map((account) =>
+          ctx.db
+            .query("authVerificationCodes")
+            .withIndex("accountId", (q) => q.eq("accountId", account._id))
+            .collect()
+        )
+      )
+    ).flat();
+    const refreshTokens = (
+      await Promise.all(
+        sessions.map((session) =>
+          ctx.db
+            .query("authRefreshTokens")
+            .withIndex("sessionId", (q) => q.eq("sessionId", session._id))
+            .collect()
+        )
+      )
+    ).flat();
+    const sessionIds = new Set(sessions.map((session) => session._id));
+    const verifiers = (await ctx.db.query("authVerifiers").collect()).filter(
+      (verifier) => verifier.sessionId && sessionIds.has(verifier.sessionId)
+    );
+
+    for (const document of [
+      ...verificationCodes,
+      ...refreshTokens,
+      ...verifiers,
+      ...accounts,
+      ...sessions,
+      ...assignments,
+      ...ownPayProfiles,
+      ...targetAdminEvents,
+      ...notifications,
+    ]) {
+      await ctx.db.delete(document._id);
+    }
+    await ctx.db.delete(user._id);
+
+    return { deletedUserId: user._id };
+  },
+});
+
 export const completePasswordSetup = mutation({
   args: {},
   handler: async (ctx) => {
