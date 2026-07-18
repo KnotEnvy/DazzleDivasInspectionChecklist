@@ -1,6 +1,6 @@
 # Dazzle Divas v3
 
-Updated: July 17, 2026
+Updated: July 18, 2026
 
 ## Status
 `v3` is the active production app for Dazzle Divas field operations and back-office management.
@@ -21,7 +21,7 @@ Currently live and actively used:
 July 16 feedback batch (deployed to Convex production and Cloudflare Pages):
 - untouched started checklists can be stopped safely and restarted later; stopping is blocked after any task, note, issue, room, or photo is marked
 - dispatch controls support a primary assignee plus additional team members that admins can add or remove
-- admin notifications now surface job starts and completions from a header notification center
+- admin notifications surface job starts and completions from a mobile-responsive header panel that stays above normal application screens
 - inactive, unused staff accounts can be permanently deleted through indexed reference checks; accounts with operational/history references remain protected without scanning entire production tables
 - jobs do not become overdue until after 4:00 PM on their scheduled day
 - payroll payee details can collapse and payroll can be reviewed across previous Thursday-to-Wednesday weeks or calendar months

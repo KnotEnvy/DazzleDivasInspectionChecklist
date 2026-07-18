@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Next Team Handoff
 
-Updated: July 17, 2026
+Updated: July 18, 2026
 
 ## Purpose
 This is the fastest path for the next engineering team to understand the current production app, find the important code, and make safe improvements.
@@ -322,7 +322,7 @@ Notification source:
 
 Current behavior:
 - active admins receive in-app notifications when a job transitions to started or completed
-- notifications link to the job in the dispatch drawer and support individual/all read actions
+- notifications render above normal application screens, fit narrow mobile viewports with an internal scroll area and close control, link to the job in the dispatch drawer, and support individual/all read actions
 - inactive unused users can be deleted from `AdminPage.tsx`; `users.deleteInactive` uses indexed reference checks and blocks deletion when business or audit history would be orphaned
 - job urgency becomes overdue only after 4:00 PM on the scheduled day
 - Week Ahead day buttons filter the dashboard operations panel

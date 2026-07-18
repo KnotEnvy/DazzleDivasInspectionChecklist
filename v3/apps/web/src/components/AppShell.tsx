@@ -44,7 +44,7 @@ export function AppShell() {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 pb-24 pt-4 lg:px-8 lg:pb-8">
-      <header className="glass-panel mb-4 flex items-center justify-between gap-3 p-3 lg:p-4">
+      <header className="glass-panel relative z-[45] mb-4 flex items-center justify-between gap-3 p-3 lg:p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white/90 p-0.5 shadow-sm ring-1 ring-brand-100 lg:h-14 lg:w-14">
             <img
