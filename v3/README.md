@@ -1,6 +1,6 @@
 # Dazzle Divas v3
 
-Updated: July 18, 2026
+Updated: July 24, 2026
 
 ## Status
 `v3` is the active production app for Dazzle Divas field operations and back-office management.
@@ -28,6 +28,18 @@ July 16 feedback batch (deployed to Convex production and Cloudflare Pages):
 - the admin Week Ahead chart filters the operations panel by day, and the worker seven-day schedule no longer stretches short days to match busier days
 - Daily Spark is visible to admins and field staff and uses a completely new 100-message rotation
 
+July 24 invoicing rollout (deployed to Convex production and Cloudflare Pages):
+- admin-only `Invoices` section with invoice dashboard, client directory, outstanding/overdue/paid metrics, and status filters
+- invoice clients store bill-to details, payment terms, and explicit property mappings
+- invoices support manual line items plus one or more approved jobs for the same client
+- completed History finance review can start an invoice after a job is approved
+- invoices move through `DRAFT`, `OPEN`, `PAID`, and `VOID`; overdue is derived for open invoices past their due date
+- paid invoices can be corrected back to open with a required reason, and invoice lifecycle changes keep an audit trail
+- invoice output uses the Dazzle Divas logo, website, terms link, payment instructions, and a letter-size print view for browser `Save as PDF`
+- Finance Overview now shows outstanding invoice value and cash collected this month without double-counting job revenue
+- linked jobs cannot be placed on more than one non-void invoice, and invoiced job history cannot be deleted until the invoice is voided
+- automatic numbering begins at `1017` to follow the latest supplied reference invoice; admins can enter a different unique number manually
+
 Earlier production improvements that matter:
 - quick-add turnover supports B2B jobs, default 10:00 AM starts, automatic 4-hour windows, cleaner multi-assignment, and a two-step create confirmation
 - checklist start rules now block future jobs until the due date and only allow starts beginning at 7:00 AM local property time
@@ -43,6 +55,7 @@ Current emphasis:
 - tighten admin throughput and reduce small sources of friction
 - improve field confidence on mobile capture, progress, and completion flows
 - keep finance accurate, understandable, and easy for admins to operate
+- pilot the invoicing workflow with real clients before treating it as the replacement for the external invoice website
 - maintain rollout discipline across separate Cloudflare and Convex deploys
 - keep Convex photo storage, bandwidth, and plan pressure under active review
 
@@ -85,6 +98,9 @@ Older rollout, setup, and checkpoint docs live in `archive/` for reference only.
 - Do not break offline queue/replay behavior.
 - Do not casually change auth, env wiring, or redirect behavior.
 - Do not assume a frontend deploy also updated Convex production.
+- The invoicing build adds Convex tables, indexes, queries, and mutations. Deploy Convex production before the matching Cloudflare frontend, then smoke-test invoice creation before operational use.
+- Do not delete an invoiced job from History; non-void invoice links intentionally block that deletion.
+- Do not reuse an invoice number or attach a job to multiple non-void invoices.
 - The July 16 feedback batch required a coordinated Convex and Cloudflare rollout; both sides were deployed on July 16, 2026.
 - Treat Convex plan-limit and bandwidth warnings as operational issues.
 - Do not leave `PHOTO_RETENTION_PURGE_TOKEN` set after a manual purge.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, LockOpen } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { AlertTriangle, CheckCircle2, LockOpen, ReceiptText } from "lucide-react";
 
 export type InspectionFinanceReview = {
   jobId: string;
@@ -65,6 +66,7 @@ export function InspectionFinancePanel(props: {
   onUnlock: (reason: string) => Promise<void>;
 }) {
   const { review, saving, approving, unlocking, onSave, onApprove, onUnlock } = props;
+  const navigate = useNavigate();
   const [draft, setDraft] = useState<FinanceDraft>({
     revenueAmount: "",
     roomComboUnits: "",
@@ -238,7 +240,17 @@ export function InspectionFinancePanel(props: {
           <p className="text-sm font-semibold text-slate-800">
             Approved {review.approvedAt ? new Date(review.approvedAt).toLocaleString() : ""}
           </p>
-          <label className="mt-3 block text-sm font-medium text-slate-700">
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className="field-button primary px-4"
+              onClick={() => navigate(`/invoices/new?jobId=${review.jobId}`)}
+              type="button"
+            >
+              <ReceiptText className="mr-2 h-4 w-4" />
+              Create Invoice From Job
+            </button>
+          </div>
+          <label className="mt-4 block text-sm font-medium text-slate-700">
             Unlock Reason
             <textarea
               className="input mt-1 min-h-20"

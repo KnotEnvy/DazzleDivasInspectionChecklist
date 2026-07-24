@@ -445,6 +445,10 @@ export const deleteInactive = mutation({
       assigneeHistoryAudit,
       deletedHistoryAudit,
       actorAdminEvents,
+      updatedInvoiceClient,
+      createdInvoice,
+      updatedInvoice,
+      actorInvoiceEvent,
     ] = await Promise.all([
       ctx.db
         .query("users")
@@ -514,6 +518,22 @@ export const deleteInactive = mutation({
         .query("userAdminEvents")
         .withIndex("by_actor", (q) => q.eq("actorId", user._id))
         .collect(),
+      ctx.db
+        .query("invoiceClients")
+        .withIndex("by_updated_by", (q) => q.eq("updatedById", user._id))
+        .first(),
+      ctx.db
+        .query("invoices")
+        .withIndex("by_created_by", (q) => q.eq("createdById", user._id))
+        .first(),
+      ctx.db
+        .query("invoices")
+        .withIndex("by_updated_by", (q) => q.eq("updatedById", user._id))
+        .first(),
+      ctx.db
+        .query("invoiceEvents")
+        .withIndex("by_actor", (q) => q.eq("actorId", user._id))
+        .first(),
     ]);
 
     const hasOperationalHistory =
@@ -535,13 +555,17 @@ export const deleteInactive = mutation({
       actorFinanceEvent !== null ||
       assigneeHistoryAudit !== null ||
       deletedHistoryAudit !== null ||
+      updatedInvoiceClient !== null ||
+      createdInvoice !== null ||
+      updatedInvoice !== null ||
+      actorInvoiceEvent !== null ||
       actorAdminEvents.some(
         (event) => event.actorId === user._id && event.targetUserId !== user._id
       );
 
     if (hasOperationalHistory) {
       throw new Error(
-        "This inactive user has job, checklist, finance, or admin history and cannot be deleted without breaking business records"
+        "This inactive user has job, checklist, finance, invoice, or admin history and cannot be deleted without breaking business records"
       );
     }
 

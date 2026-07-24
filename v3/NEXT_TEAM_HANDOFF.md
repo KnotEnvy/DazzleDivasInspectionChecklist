@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Next Team Handoff
 
-Updated: July 18, 2026
+Updated: July 24, 2026
 
 ## Purpose
 This is the fastest path for the next engineering team to understand the current production app, find the important code, and make safe improvements.
@@ -16,7 +16,24 @@ The app is already used in production by admins, cleaners, and inspectors, and f
 - Offline queue/replay exists so field work can continue with weak or missing connectivity.
 
 ## Latest Production Rollout
-The July 16 user-feedback batch is live. Convex production was deployed first, followed by Cloudflare Pages from commit `e30aa21`; the Cloudflare deployment check completed successfully.
+The July 24 invoicing rollout is live. Convex production deployment `stoic-dinosaur-501` received the schema, indexes, and functions first, followed by the matching Cloudflare Pages frontend. The July 16 user-feedback batch remains the preceding production baseline.
+
+## Current Production Invoicing: v1
+The July 24 invoicing build is deployed and available to admins.
+
+Included:
+- invoice-client directory with billing details, payment defaults, and property mappings
+- manual invoices and approved-job invoices with multiple same-client jobs
+- draft/open/paid/void lifecycle, derived overdue state, payment correction, and audit events
+- History approval entry point, Finance receivables/collections metrics, and duplicate-job protection
+- Dazzle-branded letter-size print route for browser `Save as PDF`
+- automatic numbering beginning at `1017`, with unique manual-number support
+
+Initial operational acceptance:
+1. Create and map the first real invoice client.
+2. Smoke-test a manual invoice and an approved-job invoice with production data.
+3. Verify PDF output and Finance invoice metrics before sending the first client invoice.
+4. Confirm the first payment updates both invoice status and Finance collections as expected.
 
 ## Tech Stack
 - Frontend: React 19 + Vite 6 + Tailwind 4 + React Router 7
@@ -51,6 +68,9 @@ v3/
 - Treat Convex plan-limit and bandwidth warnings as operational issues.
 - Do not bypass photo retention or leave `PHOTO_RETENTION_PURGE_TOKEN` enabled after manual cleanup.
 - Assume any change to jobs, inspections, photos, history, or finance can affect real business operations immediately.
+- Treat invoice clients, invoice numbers, job links, payment state, and invoice audit events as accounting records.
+- Do not deploy the invoicing frontend before its Convex tables/functions.
+- Do not bypass duplicate-job protection or delete History linked to a non-void invoice.
 
 ## Key Frontend Files
 ### App shell and routing
@@ -78,6 +98,12 @@ v3/
 ### Finance UI
 - `apps/web/src/routes/FinancePage.tsx`
 - `apps/web/src/components/InspectionFinancePanel.tsx`
+
+### Invoicing UI
+- `apps/web/src/routes/InvoicesPage.tsx`
+- `apps/web/src/routes/InvoiceEditorPage.tsx`
+- `apps/web/src/routes/InvoicePrintPage.tsx`
+- `apps/web/src/components/InvoiceDocument.tsx`
 
 ### Admin notifications and Daily Spark
 - `apps/web/src/components/AdminNotificationBell.tsx`
@@ -134,6 +160,11 @@ v3/
 ### Finance backend
 - `packages/backend/convex/finance.ts`
 - `packages/backend/convex/lib/finance.ts`
+
+### Invoicing backend
+- `packages/backend/convex/invoices.ts`
+- `packages/backend/convex/lib/invoices.ts`
+- `packages/backend/convex/lib/invoices.test.ts`
 
 ### Notifications / lifecycle helpers
 - `packages/backend/convex/notifications.ts`
@@ -329,6 +360,30 @@ Current behavior:
 - worker seven-day schedule cards align to their own content height
 - Daily Spark appears on both admin and field-staff dashboards and contains a new 100-message rotation
 
+### 9. Invoicing / accounts receivable
+Primary screens:
+- `InvoicesPage.tsx` for dashboard, filters, and invoice-client setup
+- `InvoiceEditorPage.tsx` for manual/job-backed invoice creation and lifecycle actions
+- `InvoicePrintPage.tsx` plus `InvoiceDocument.tsx` for branded letter-size PDF output
+
+Backend source:
+- `invoices.ts`
+- `lib/invoices.ts`
+- `schema.ts`
+
+Current repository behavior:
+- only admins can read or mutate invoice data
+- invoice clients map explicitly to properties so approved jobs route to the correct bill-to party
+- line items may be fully manual or linked to approved cleaning jobs
+- one invoice may contain multiple approved jobs, but every linked job must belong to the selected client's mapped properties
+- a job cannot appear on more than one non-void invoice
+- draft and open invoices are editable; paid invoices must be corrected back to open before editing; void invoices remain immutable audit records
+- open invoices derive `OVERDUE` after their due date and feed Finance outstanding/overdue metrics
+- paid invoices feed collected-this-month metrics without increasing approved job revenue again
+- History deletion is rejected when the linked job belongs to a non-void invoice
+- automatic numbers begin at `1017`; allocation skips any number already used manually
+- `Print / Save PDF` uses the browser print destination; direct email delivery and partial-payment accounting are not part of v1
+
 ## Recent Fixes And Incidents That Matter
 ### Inactive-user deletion production read limit
 - `users.deleteInactive` originally collected entire job, checklist, event, finance, audit, and admin-event tables before deciding whether deletion was safe.
@@ -377,6 +432,7 @@ Current behavior:
 - A frontend change reaching production does not guarantee production Convex functions are on the same revision.
 - If a feature depends on schema, mutation args, query hydration, or backend calculations, verify that Convex production has also been deployed.
 - Finance changes especially need this check because settings forms, approval flows, and reporting all depend on backend shape and calculations.
+- Invoicing requires new schema tables and indexes. Deploy Convex production before Cloudflare Pages or the invoice UI will not function.
 - The July 16 feedback batch was deployed to Convex production before the matching Cloudflare frontend; preserve that backend-first order for future coordinated releases.
 - Retention, cron, and Convex storage changes require an explicit Convex production deploy; a Cloudflare deploy alone does nothing for them.
 - Manual production photo purge flow: set `PHOTO_RETENTION_PURGE_TOKEN` temporarily, run `photoRetentionAdmin:purgeExpiredPhotosNow`, verify the result, then remove the env var immediately.
@@ -461,6 +517,15 @@ Before shipping meaningful changes, validate:
 - Admin completed-review photo saving/export
 - Finance approval/unlock from completed checklist review
 - Finance overview/revenue/payroll/jobs surfaces for expected totals and statuses
+- Invoice client create/edit with property mapping
+- Manual invoice create/edit and unique numbering
+- Approved History job to invoice handoff
+- Multiple same-client jobs on one invoice
+- Duplicate non-void invoice protection for a job
+- Draft issue, open/overdue, paid, payment correction, and void flows
+- Finance outstanding, overdue, and collected-this-month invoice metrics
+- Letter-size PDF output with logo, website, terms link, and accurate totals
+- History deletion protection for invoiced jobs
 - Payroll Thursday-through-Wednesday grouping and performed dates
 - History `Finished Today` cleaner attribution
 - Offline queue/replay for at least one worker scenario
@@ -477,6 +542,7 @@ Before shipping meaningful changes, validate:
 - Real-device mobile QA is still essential for photo capture, network flapping, and native chooser behavior.
 - Mobile photo UX is better, but workers would still benefit from stronger confidence during direct background upload, especially before the server record appears.
 - Finance is useful now, but admins will likely surface follow-up needs around exports, filters, approvals, and edge cases once they stop using spreadsheets.
+- Invoicing v1 is live and still needs real-client operational acceptance. Direct email sending, partial payments, credit notes, recurring invoice schedules, and importing the supplied legacy PDFs are future decisions rather than current behavior.
 - Workflow polish from real cleaner/admin suggestions is the next expected batch, especially small improvements that remove hesitation or repeat taps.
 - Offline replay conflict handling is production-important and should stay stable.
 - Auth/custom-domain correctness must always be rechecked before onboarding changes ship.
@@ -505,3 +571,4 @@ These are the highest-signal areas surfaced by real production use, not speculat
 This product is not a prototype anymore.
 It now supports both field operations and the first real admin finance workflow.
 The safest path for the next team is to preserve the working workflow shape, fix real friction from cleaner/admin usage, keep finance trustworthy, verify the deploy path explicitly, and watch Convex capacity before growth becomes an outage.
+The current invoice candidate should be rolled out backend-first, piloted against real reference invoices, and treated as accounting infrastructure once production use begins.

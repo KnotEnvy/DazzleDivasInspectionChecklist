@@ -344,6 +344,7 @@ const schema = defineSchema({
     .index("by_job", ["jobId"])
     .index("by_inspection", ["inspectionId"])
     .index("by_status", ["status"])
+    .index("by_property_status", ["propertyId", "status"])
     .index("by_property", ["propertyId"])
     .index("by_assignee", ["assigneeId"])
     .index("by_approved_by", ["approvedById"])
@@ -360,6 +361,100 @@ const schema = defineSchema({
     .index("by_job_financial", ["jobFinancialId"])
     .index("by_actor", ["actorId", "createdAt"])
     .index("by_job", ["jobId"]),
+
+  invoiceClients: defineTable({
+    name: v.string(),
+    billingContactName: v.optional(v.string()),
+    billingEmail: v.optional(v.string()),
+    billingAddress: v.string(),
+    paymentTerms: v.string(),
+    defaultDueDays: v.number(),
+    notes: v.optional(v.string()),
+    isActive: v.boolean(),
+    updatedAt: v.number(),
+    updatedById: v.id("users"),
+  })
+    .index("by_active", ["isActive"])
+    .index("by_updated_by", ["updatedById"]),
+
+  invoiceClientProperties: defineTable({
+    clientId: v.id("invoiceClients"),
+    propertyId: v.id("properties"),
+  })
+    .index("by_client", ["clientId"])
+    .index("by_property", ["propertyId"]),
+
+  invoiceSequences: defineTable({
+    key: v.string(),
+    nextNumber: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  invoices: defineTable({
+    invoiceNumber: v.string(),
+    clientId: v.id("invoiceClients"),
+    clientName: v.string(),
+    billingContactName: v.optional(v.string()),
+    billingEmail: v.optional(v.string()),
+    billingAddress: v.string(),
+    issueDate: v.number(),
+    dueDate: v.number(),
+    paymentTerms: v.string(),
+    status: v.union(
+      v.literal("DRAFT"),
+      v.literal("OPEN"),
+      v.literal("PAID"),
+      v.literal("VOID")
+    ),
+    notes: v.optional(v.string()),
+    paymentInstructions: v.string(),
+    termsText: v.string(),
+    websiteUrl: v.string(),
+    termsUrl: v.string(),
+    taxRatePercent: v.number(),
+    subtotal: v.number(),
+    taxAmount: v.number(),
+    total: v.number(),
+    issuedAt: v.optional(v.number()),
+    paidAt: v.optional(v.number()),
+    paidAmount: v.optional(v.number()),
+    paymentMethod: v.optional(v.string()),
+    paymentReference: v.optional(v.string()),
+    voidedAt: v.optional(v.number()),
+    voidReason: v.optional(v.string()),
+    createdById: v.id("users"),
+    updatedById: v.id("users"),
+    updatedAt: v.number(),
+  })
+    .index("by_invoice_number", ["invoiceNumber"])
+    .index("by_client", ["clientId", "issueDate"])
+    .index("by_status", ["status", "issueDate"])
+    .index("by_due_date", ["dueDate"])
+    .index("by_created_by", ["createdById"])
+    .index("by_updated_by", ["updatedById"]),
+
+  invoiceLineItems: defineTable({
+    invoiceId: v.id("invoices"),
+    jobId: v.optional(v.id("jobs")),
+    description: v.string(),
+    serviceDate: v.optional(v.number()),
+    quantity: v.number(),
+    rate: v.number(),
+    amount: v.number(),
+    sortOrder: v.number(),
+  })
+    .index("by_invoice", ["invoiceId", "sortOrder"])
+    .index("by_job", ["jobId"]),
+
+  invoiceEvents: defineTable({
+    invoiceId: v.id("invoices"),
+    actorId: v.id("users"),
+    eventType: v.string(),
+    metadata: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_invoice", ["invoiceId", "createdAt"])
+    .index("by_actor", ["actorId", "createdAt"]),
 
   deletedHistoryAudits: defineTable({
     inspectionId: v.id("inspections"),

@@ -695,6 +695,22 @@ export const deleteCompletedFromHistory = mutation({
       .collect();
     const primaryJob = linkedJobs.sort((left, right) => right._creationTime - left._creationTime)[0];
 
+    for (const job of linkedJobs) {
+      const invoiceLines = await ctx.db
+        .query("invoiceLineItems")
+        .withIndex("by_job", (q) => q.eq("jobId", job._id))
+        .collect();
+
+      for (const invoiceLine of invoiceLines) {
+        const invoice = await ctx.db.get(invoiceLine.invoiceId);
+        if (invoice && invoice.status !== "VOID") {
+          throw new Error(
+            `This job is attached to invoice #${invoice.invoiceNumber}. Void that invoice before deleting history.`
+          );
+        }
+      }
+    }
+
     await ctx.db.insert("deletedHistoryAudits", {
       inspectionId: inspection._id,
       jobId: primaryJob?._id,

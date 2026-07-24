@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ChevronUp,
   DollarSign,
+  ReceiptText,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -23,6 +24,15 @@ type FinanceOverview = {
   grossMargin: number;
   pendingReviewCount: number;
   totalCleaningJobs: number;
+};
+
+type InvoiceFinanceSummary = {
+  outstandingAmount: number;
+  overdueAmount: number;
+  paidThisMonthAmount: number;
+  openCount: number;
+  overdueCount: number;
+  draftCount: number;
 };
 
 type FinanceJob = {
@@ -208,6 +218,9 @@ export function FinancePage() {
     from: fromTimestamp,
     to: toTimestamp,
   }) as FinanceOverview | undefined;
+  const invoiceSummary = useQuery(api.invoices.getFinanceSummary, {}) as
+    | InvoiceFinanceSummary
+    | undefined;
   const jobs = useQuery(api.finance.listJobs, {
     from: fromTimestamp,
     to: toTimestamp,
@@ -352,6 +365,8 @@ export function FinancePage() {
               <OverviewStat label="Pending Review Jobs" value={String(overview?.pendingReviewCount ?? 0)} />
               <OverviewStat label="Realized Gross Margin" value={formatCurrency(overview?.grossMargin)} />
               <OverviewStat label="Cleaning Jobs In Window" value={String(overview?.totalCleaningJobs ?? 0)} />
+              <OverviewStat label="Outstanding Invoices" value={formatCurrency(invoiceSummary?.outstandingAmount)} />
+              <OverviewStat label="Collected This Month" value={formatCurrency(invoiceSummary?.paidThisMonthAmount)} />
             </div>
           </div>
           <div className="rounded-2xl border border-border bg-white p-4">
@@ -360,8 +375,15 @@ export function FinancePage() {
               <QueueRow label="Pending review" value={String(pendingReviewJobs.length)} />
               <QueueRow label="Forecast jobs" value={String(forecastJobs.length)} />
               <QueueRow label="Approved jobs" value={String(approvedJobs.length)} />
+              <QueueRow label="Invoice drafts" value={String(invoiceSummary?.draftCount ?? 0)} />
+              <QueueRow label="Open invoices" value={String(invoiceSummary?.openCount ?? 0)} />
+              <QueueRow label="Overdue invoices" value={String(invoiceSummary?.overdueCount ?? 0)} />
               <Link className="field-button secondary mt-2 w-full justify-center px-4" to="/history">
                 Open History Review
+              </Link>
+              <Link className="field-button primary mt-2 w-full justify-center px-4" to="/invoices">
+                <ReceiptText className="mr-2 h-4 w-4" />
+                Open Invoices
               </Link>
             </div>
           </div>

@@ -46,6 +46,15 @@ const AdminTemplatesPage = lazy(() =>
 const FinancePage = lazy(() =>
   import("@/routes/FinancePage").then((module) => ({ default: module.FinancePage }))
 );
+const InvoicesPage = lazy(() =>
+  import("@/routes/InvoicesPage").then((module) => ({ default: module.InvoicesPage }))
+);
+const InvoiceEditorPage = lazy(() =>
+  import("@/routes/InvoiceEditorPage").then((module) => ({ default: module.InvoiceEditorPage }))
+);
+const InvoicePrintPage = lazy(() =>
+  import("@/routes/InvoicePrintPage").then((module) => ({ default: module.InvoicePrintPage }))
+);
 const MySchedulePage = lazy(() =>
   import("@/routes/MySchedulePage").then((module) => ({ default: module.MySchedulePage }))
 );
@@ -77,6 +86,14 @@ export default function App() {
     <Routes>
       <Route path="/login" element={withSuspense(<LoginPage />)} />
       <Route path="/set-password" element={withSuspense(<SetPasswordPage />)} />
+      <Route
+        path="/invoices/:invoiceId/print"
+        element={
+          <AuthGuard>
+            <RoleGuard role="ADMIN">{withSuspense(<InvoicePrintPage />)}</RoleGuard>
+          </AuthGuard>
+        }
+      />
 
       <Route
         element={
@@ -130,6 +147,30 @@ export default function App() {
           element={
             <RoleGuard role="ADMIN">
               {withSuspense(<FinancePage />)}
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="invoices"
+          element={
+            <RoleGuard role="ADMIN">
+              {withSuspense(<InvoicesPage />)}
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="invoices/new"
+          element={
+            <RoleGuard role="ADMIN">
+              {withSuspense(<InvoiceEditorPage />)}
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="invoices/:invoiceId"
+          element={
+            <RoleGuard role="ADMIN">
+              {withSuspense(<InvoiceEditorPage />)}
             </RoleGuard>
           }
         />

@@ -9,6 +9,7 @@ import {
   DollarSign,
   House,
   MoreHorizontal,
+  ReceiptText,
   Shield,
   SlidersHorizontal,
 } from "lucide-react";
@@ -123,6 +124,16 @@ export function AppShell() {
         </NavLink>
         {isAdmin && (
           <NavLink
+            to="/invoices"
+            className={({ isActive }) =>
+              `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
+            }
+          >
+            <ReceiptText className="mr-1 inline-block h-4 w-4" /> Invoices
+          </NavLink>
+        )}
+        {isAdmin && (
+          <NavLink
             to="/schedule"
             className={({ isActive }) =>
               `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
@@ -234,6 +245,14 @@ export function AppShell() {
                     role="menuitem"
                   >
                     <ClipboardPenLine className="mr-2 inline-block h-4 w-4" /> Templates
+                  </NavLink>
+                  <NavLink
+                    to="/invoices"
+                    className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-brand-50"
+                    onClick={() => setMoreOpen(false)}
+                    role="menuitem"
+                  >
+                    <ReceiptText className="mr-2 inline-block h-4 w-4" /> Invoices
                   </NavLink>
                   <NavLink
                     to="/finance"

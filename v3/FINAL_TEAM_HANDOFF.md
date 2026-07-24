@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: July 18, 2026
+Updated: July 24, 2026
 
 ## Purpose
 This is the active high-level handoff for the next working team.
@@ -33,6 +33,21 @@ Current finance behavior:
 - revenue/payroll stay live-derived for unapproved work and become locked snapshots once approved
 - finance is currently cleaning-focused and admin-facing; exports and broader accounting workflows are still future work
 
+### Invoicing v1 is live
+The July 24 invoicing rollout is deployed to production. Convex production received the schema, indexes, and backend functions first, followed by the matching Cloudflare Pages frontend.
+
+Current production behavior:
+- admin-only `Invoices` section with invoice list, status filters, receivables metrics, and invoice-client setup
+- invoice clients store billing contact/address/email, payment terms, due-day defaults, and property mappings
+- invoices can be built manually or from one or more approved cleaning jobs for the same client
+- approved jobs expose `Create Invoice From Job` in completed History review
+- invoices support `DRAFT`, `OPEN`, `PAID`, and `VOID`; overdue is derived from an open invoice's due date
+- open invoices count as receivables, while paid invoices count as cash collected; these are complementary to approved job revenue and are not added to revenue a second time
+- edits, issue, payment, payment correction, and void actions retain invoice audit events
+- non-void invoices prevent duplicate job invoicing and block destructive History deletion of linked jobs
+- the invoice print route includes the Dazzle Divas logo, business address, website, terms URL, itemized services, notes, and payment instructions; admins use the browser `Save as PDF` destination
+- automatic invoice numbering begins at `1017`, following the highest supplied reference; unique manual numbers remain supported
+
 ### Operating reality
 - There is real production data.
 - Do not wipe production data.
@@ -43,6 +58,15 @@ Current finance behavior:
 - Photo storage is now controlled by a 90-day retention policy. Do not bypass it or leave manual purge credentials enabled.
 
 ## What Changed Since The Previous Handoff
+### July 24 invoicing rollout (deployed)
+- Added Convex-backed invoice clients, property mappings, invoice records, line items, sequence allocation, and lifecycle audit events.
+- Added indexed eligible-job lookup by client property and finance status to avoid scanning all approved production history.
+- Added Invoice routes and navigation for list/client setup, invoice editing, and letter-size PDF/print output.
+- Added History finance-review entry into a prefilled invoice and Finance Overview receivables/collections visibility.
+- Added protection so an approved job cannot belong to multiple non-void invoices and invoiced History cannot be destructively removed.
+- Validation completed in the repo: frontend typecheck, backend typecheck, production web build/bundle gate, 78 tests, and rollout smoke coverage.
+- Convex production deployment `stoic-dinosaur-501` received the schema/functions first with schema validation complete and no deleted indexes, followed by the matching Cloudflare Pages frontend.
+
 ### July 16 production-feedback enhancement batch (deployed)
 This batch was deployed on July 16, 2026. Convex production received the schema and backend functions first, followed by the matching Cloudflare Pages frontend from commit `e30aa21`. Future changes that span both surfaces still require coordinated deployment and verification.
 
@@ -102,6 +126,7 @@ Focus:
 - clearer status distinctions between forecast, pending review, and approved
 - better filtering, summaries, and audit clarity
 - future export/reporting needs only after the current approval flow feels stable
+- pilot invoice totals, client/property mappings, overdue state, payment recording, and PDF output against real invoices before retiring the external invoice website
 
 ### 3. Mobile checklist and photo confidence
 Primary goal: make field workers trust what they just captured and completed.
@@ -155,10 +180,18 @@ Before shipping meaningful changes, validate:
 - Inactive unused-user deletion plus protected rejection for a user with history
 - Previous weekly and monthly payroll navigation and payee collapse state
 - Overdue labels immediately before and after 4:00 PM
+- Create and edit a manual invoice
+- Create an invoice from an approved History job
+- Attach multiple approved jobs for one invoice client
+- Confirm a job already on a non-void invoice cannot be invoiced twice
+- Issue an invoice, verify outstanding/overdue Finance metrics, mark it paid, and correct it back to open with a reason
+- Void an invoice and confirm its linked jobs become eligible for a replacement invoice
+- Save the print route as a PDF and verify logo, totals, website, terms link, and page fit
+- Confirm destructive History deletion is blocked while a job is attached to a non-void invoice
 
 ## Recommended Next Moves
-1. Build the next enhancement batch from real cleaner/admin feedback, not speculation.
-2. Keep finance changes narrow until admins trust the current numbers and approval flow day to day.
-3. Re-run real-device photo QA on both iPhone and Android before changing capture flows again.
-4. Audit Convex production usage after the July 4 photo purge and before the next reporting-heavy or photo-heavy batch.
-5. Keep fixes additive and always verify whether the rollout needs frontend deploy, Convex deploy, or both.
+1. Deploy the invoice schema/functions to Convex production before deploying the matching Cloudflare frontend.
+2. Smoke-test one manual draft and one approved-job invoice with a non-production client or controlled internal record before operational use.
+3. Compare the generated PDF against a real reference invoice and confirm the client accepts the billing detail/terms presentation.
+4. Pilot payment and overdue tracking before retiring the external invoice website; partial payments and direct email sending are not part of v1.
+5. Continue building later enhancement batches from real cleaner/admin feedback, not speculation.
