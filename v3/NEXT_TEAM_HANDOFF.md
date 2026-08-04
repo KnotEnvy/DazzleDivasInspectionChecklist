@@ -23,12 +23,14 @@ The August 4 worker Pay and admin Payroll build is deployed to production.
 
 Included:
 - cleaner- and inspector-only `Pay` navigation on desktop and mobile
+- worker navigation displays `My Pay` while preserving the `/pay` route
 - Admin Finance Payroll employee cards with the same paid-hours, recorded-hours, and hourly-rate calculations for the selected week, month, or year-to-date period
 - weekly Thursday-to-Wednesday approved-pay summaries with no worker-facing per-job breakdown
 - monthly and year-to-date pay, locked property-combo-room, one-unit-per-job, job, Hours Paid, and Actual Hours Worked totals
 - Paid-Hour Rate calculated as `approved pay / Hours Paid`, where Hours Paid are approved combo rooms plus one unit per job
 - True Hourly Wage calculated from checklist start-through-completion time, with incomplete timing coverage disclosed
 - Dazzle-branded totals-only weekly pay stubs for browser printing or `Save as PDF`
+- admin-only weekly pay-stub printing from employee cards in Finance Payroll
 - self-only, approved-only worker data access with no client revenue, gross margin, admin notes, or other-worker payroll exposure
 - inspector pay profiles and completed-inspection payroll approval without adding inspector work to cleaning revenue or invoice eligibility
 - bounded completed-job reads through the new `jobs.by_status_completed_at` index
@@ -392,6 +394,7 @@ Current behavior:
 Primary screens:
 - `PayPage.tsx` for weekly, monthly, and year-to-date worker records
 - `PayStubPrintPage.tsx` plus `PayStubDocument.tsx` for weekly print/PDF output
+- `AdminPayStubPrintPage.tsx` for admin-on-behalf weekly print/PDF output
 
 Backend source:
 - `finance.getMyPayHistory`
@@ -411,6 +414,7 @@ Current repository behavior:
 - missing or invalid checklist timing excludes both that job's pay and hours from the true-wage calculation and surfaces timed-job coverage
 - team jobs split paid hours and pay, but every assigned teammate receives the shared checklist's full elapsed time because individual arrival/departure times are not recorded
 - print output is an internal gross-pay record and does not represent taxes, deductions, or off-app adjustments
+- admins can open the same totals-only weekly stub from Finance Payroll; the admin print route is role-guarded and reuses `finance.listPayroll`
 - inspector payroll approval is separate from cleaning revenue and cannot create an invoice
 
 ### 10. Invoicing / accounts receivable

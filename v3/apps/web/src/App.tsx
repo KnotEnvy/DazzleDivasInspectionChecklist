@@ -61,6 +61,11 @@ const PayPage = lazy(() =>
 const PayStubPrintPage = lazy(() =>
   import("@/routes/PayStubPrintPage").then((module) => ({ default: module.PayStubPrintPage }))
 );
+const AdminPayStubPrintPage = lazy(() =>
+  import("@/routes/AdminPayStubPrintPage").then((module) => ({
+    default: module.AdminPayStubPrintPage,
+  }))
+);
 const MySchedulePage = lazy(() =>
   import("@/routes/MySchedulePage").then((module) => ({ default: module.MySchedulePage }))
 );
@@ -107,6 +112,14 @@ export default function App() {
             <RoleGuard role={["CLEANER", "INSPECTOR"]}>
               {withSuspense(<PayStubPrintPage />)}
             </RoleGuard>
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/finance/pay-stub/:workerId/:weekStart"
+        element={
+          <AuthGuard>
+            <RoleGuard role="ADMIN">{withSuspense(<AdminPayStubPrintPage />)}</RoleGuard>
           </AuthGuard>
         }
       />

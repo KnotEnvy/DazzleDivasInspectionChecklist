@@ -130,7 +130,7 @@ export function AppShell() {
               `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
             }
           >
-            <WalletCards className="mr-1 inline-block h-4 w-4" /> Pay
+            <WalletCards className="mr-1 inline-block h-4 w-4" /> My Pay
           </NavLink>
         )}
         {isAdmin && (
@@ -294,7 +294,7 @@ export function AppShell() {
               icon={<ClipboardList className="h-5 w-5" />}
               label="Active"
             />
-            <MobileNavItem to="/pay" icon={<WalletCards className="h-5 w-5" />} label="Pay" />
+            <MobileNavItem to="/pay" icon={<WalletCards className="h-5 w-5" />} label="My Pay" />
             <div className="relative" ref={moreRef}>
               <button
                 aria-expanded={moreOpen}

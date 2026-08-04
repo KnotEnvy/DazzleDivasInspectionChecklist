@@ -42,7 +42,9 @@ July 24 invoicing rollout (deployed to Convex production and Cloudflare Pages):
 
 August 4 worker Pay and admin Payroll rollout (deployed to Convex production and Cloudflare Pages):
 - cleaner- and inspector-only `Pay` navigation with weekly, monthly, and year-to-date approved earnings history
+- worker navigation labels this self-service section `My Pay`
 - Admin Finance Payroll shows the same per-employee combo-room, unit, Hours Paid, Paid-Hour Rate, Actual Hours Worked, and True Hourly Wage totals for the selected week, month, or year-to-date period
+- admins can open, print, or save the same totals-only weekly pay stub from an employee card while viewing Payroll by week
 - weekly Thursday-to-Wednesday summaries showing approved jobs, locked property combo rooms, one unit per job, approved pay, and Hours Paid without exposing per-job breakdowns
 - Paid-Hour Rate compares approved pay to Hours Paid, while True Hourly Wage compares approved pay to actual checklist time from start through completion
 - printable weekly summary pay stubs that can be saved through the browser `Save as PDF` destination

@@ -39,6 +39,7 @@ The August 4 worker Pay and admin Payroll build is deployed to production. Conve
 
 Current repository behavior:
 - cleaners and inspectors receive a worker-only `Pay` tab on desktop and mobile
+- the worker-facing navigation label is `My Pay`; the route remains `/pay`
 - only the signed-in worker's approved payroll records are returned; pending work, admin notes, client revenue, gross margin, and other workers' pay are excluded
 - weekly history follows the Thursday-to-Wednesday payroll rule and shows totals only; workers do not receive a per-job breakdown
 - weekly, monthly, and year-to-date views summarize approved pay, locked property combo rooms, one unit per job, job counts, and Hours Paid
@@ -47,6 +48,7 @@ Current repository behavior:
 - worker pay reuses the same locked room-combo and approved-pay snapshots shown in Admin Payroll; it does not count checklist-room rows or rerun the payroll formula
 - team jobs split combo rooms, the one job unit, unit pay, and approved pay evenly
 - each approved week has a Dazzle-branded totals-only pay-stub print route for browser printing or `Save as PDF`; it is an internal gross-pay record, not a tax document
+- admins can print that same weekly document on a worker's behalf from the employee card in Admin Finance Payroll's weekly view
 - inspectors now have pay profiles and can receive approved payroll snapshots from completed inspection jobs; inspector payroll does not feed cleaning revenue or invoice eligibility
 - the self-service query uses `jobs.by_status_completed_at` to keep each selected-year read bounded instead of collecting all payroll history
 
@@ -79,6 +81,7 @@ Current production behavior:
 - Added worker-only weekly, monthly, and year-to-date Pay history plus printable weekly pay stubs.
 - Added locked room-combo totals, one-unit-per-job totals, approved-pay totals, Hours Paid, recorded Actual Hours Worked, Paid-Hour Rate, and True Hourly Wage.
 - Added those same hourly and workload totals to every employee card in Admin Finance Payroll for the selected week, month, or year-to-date period, including partial-timing coverage warnings.
+- Renamed worker navigation to `My Pay` and added an admin-only weekly pay-stub print action to each employee Payroll card.
 - Removed worker-facing per-job breakdowns from both Pay history and printable weekly stubs.
 - Extended pay-profile setup and completed-job payroll approval to inspectors while keeping cleaning revenue and invoices cleaning-only.
 - Added the bounded `jobs.by_status_completed_at` index and self-only `finance.getMyPayHistory` query.

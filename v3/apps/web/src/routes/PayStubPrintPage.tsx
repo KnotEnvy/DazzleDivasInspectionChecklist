@@ -41,7 +41,7 @@ export function PayStubPrintPage() {
     return (
       <div className="mx-auto max-w-xl p-6 text-center">
         <p className="text-slate-600">No approved pay was found for this week.</p>
-        <Link className="field-button secondary mt-4 px-4" to="/pay">Back to Pay</Link>
+        <Link className="field-button secondary mt-4 px-4" to="/pay">Back to My Pay</Link>
       </div>
     );
   }
@@ -51,7 +51,7 @@ export function PayStubPrintPage() {
       <div className="no-print mx-auto mb-4 flex max-w-[8.5in] flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-3 shadow-sm">
         <Link className="field-button secondary px-4" to="/pay">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Pay
+          Back to My Pay
         </Link>
         <div className="text-center">
           <p className="text-sm font-bold">Weekly Pay Stub</p>

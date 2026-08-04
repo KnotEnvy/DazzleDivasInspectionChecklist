@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ChevronUp,
   DollarSign,
+  Printer,
   ReceiptText,
   TrendingUp,
   Wallet,
@@ -514,24 +515,37 @@ export function FinancePage() {
                         Payroll {formatCurrency(worker.totalPayroll)} | Revenue {formatCurrency(worker.totalRevenue)} | Gross {formatCurrency(worker.grossMargin)}
                       </p>
                     </div>
-                    <button
-                      aria-expanded={!collapsedPayees[worker.assigneeId]}
-                      className="inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700"
-                      onClick={() =>
-                        setCollapsedPayees((current) => ({
-                          ...current,
-                          [worker.assigneeId]: !current[worker.assigneeId],
-                        }))
-                      }
-                      type="button"
-                    >
-                      {worker.jobs.length} approved job{worker.jobs.length === 1 ? "" : "s"}
-                      {collapsedPayees[worker.assigneeId] ? (
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      ) : (
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      )}
-                    </button>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {payrollPeriod === "WEEK" ? (
+                        <Link
+                          className="inline-flex min-h-9 items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-700"
+                          rel="noreferrer"
+                          target="_blank"
+                          to={`/finance/pay-stub/${worker.assigneeId}/${payrollPeriodStart}`}
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          Pay Stub
+                        </Link>
+                      ) : null}
+                      <button
+                        aria-expanded={!collapsedPayees[worker.assigneeId]}
+                        className="inline-flex min-h-9 items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700"
+                        onClick={() =>
+                          setCollapsedPayees((current) => ({
+                            ...current,
+                            [worker.assigneeId]: !current[worker.assigneeId],
+                          }))
+                        }
+                        type="button"
+                      >
+                        {worker.jobs.length} approved job{worker.jobs.length === 1 ? "" : "s"}
+                        {collapsedPayees[worker.assigneeId] ? (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
                     <PayrollMetric label="Approved Pay" value={formatCurrency(worker.totalPayroll)} />
