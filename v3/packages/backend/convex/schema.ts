@@ -168,6 +168,7 @@ const schema = defineSchema({
     .index("by_assignee_status_start", ["assigneeId", "status", "scheduledStart"])
     .index("by_created_by", ["createdById"])
     .index("by_status_start", ["status", "scheduledStart"])
+    .index("by_status_completed_at", ["status", "completedAt"])
     .index("by_scheduled_start", ["scheduledStart"])
     .index("by_linked_inspection", ["linkedInspectionId"]),
 
@@ -231,6 +232,7 @@ const schema = defineSchema({
     status: v.union(v.literal("IN_PROGRESS"), v.literal("COMPLETED")),
     notes: v.optional(v.string()),
     issueCount: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     sourceInspectionId: v.optional(v.id("inspections")),
   })
@@ -326,7 +328,7 @@ const schema = defineSchema({
       v.literal("DEEP_CLEAN"),
       v.literal("MAINTENANCE")
     ),
-    financialScope: v.literal("CLEANING"),
+    financialScope: v.union(v.literal("CLEANING"), v.literal("INSPECTION")),
     revenueAmountSnapshot: v.optional(v.number()),
     roomComboUnitsSnapshot: v.optional(v.number()),
     perRoomComboRateSnapshot: v.optional(v.number()),

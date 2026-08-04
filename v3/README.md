@@ -1,6 +1,6 @@
 # Dazzle Divas v3
 
-Updated: July 24, 2026
+Updated: August 4, 2026
 
 ## Status
 `v3` is the active production app for Dazzle Divas field operations and back-office management.
@@ -40,6 +40,19 @@ July 24 invoicing rollout (deployed to Convex production and Cloudflare Pages):
 - linked jobs cannot be placed on more than one non-void invoice, and invoiced job history cannot be deleted until the invoice is voided
 - automatic numbering begins at `1017` to follow the latest supplied reference invoice; admins can enter a different unique number manually
 
+August 4 worker Pay and admin Payroll rollout (deployed to Convex production and Cloudflare Pages):
+- cleaner- and inspector-only `Pay` navigation with weekly, monthly, and year-to-date approved earnings history
+- Admin Finance Payroll shows the same per-employee combo-room, unit, Hours Paid, Paid-Hour Rate, Actual Hours Worked, and True Hourly Wage totals for the selected week, month, or year-to-date period
+- weekly Thursday-to-Wednesday summaries showing approved jobs, locked property combo rooms, one unit per job, approved pay, and Hours Paid without exposing per-job breakdowns
+- Paid-Hour Rate compares approved pay to Hours Paid, while True Hourly Wage compares approved pay to actual checklist time from start through completion
+- printable weekly summary pay stubs that can be saved through the browser `Save as PDF` destination
+- worker queries expose only the signed-in worker's approved payroll records and use a bounded completed-job index instead of scanning all payroll history
+- worker totals reuse the same locked room-combo and approved-pay snapshots shown in Admin Payroll; checklist-room rows are not counted
+- team jobs divide combo rooms, the one job unit, unit pay, and approved pay evenly; each teammate receives the shared checklist's full elapsed time because individual arrival/departure times are not recorded
+- inspector pay profiles and completed-inspection payroll approval are supported without adding inspector work to cleaning revenue or invoicing
+- validation completed with frontend/backend typechecks, the production web build and bundle gate, 86 tests, and rollout smoke coverage
+- development `dev-cleaner@dazzledivas.test` has a 56-job sanitized production-derived Pay fixture for acceptance testing; it contains approved finance/timing metrics only, uses a development property, and was populated with production reads plus development-only writes
+
 Earlier production improvements that matter:
 - quick-add turnover supports B2B jobs, default 10:00 AM starts, automatic 4-hour windows, cleaner multi-assignment, and a two-step create confirmation
 - checklist start rules now block future jobs until the due date and only allow starts beginning at 7:00 AM local property time
@@ -47,7 +60,7 @@ Earlier production improvements that matter:
 - Android workers now get a camera-targeted capture flow instead of being pushed into gallery-only behavior
 - room completion now advances to the next room in list order without auto-expanding it
 - history cards show the cleaner name for finished work
-- finance now includes property-level revenue settings, cleaner pay profiles, job financial review/approval, revenue views, payroll views, and Thursday-through-Wednesday weekly payroll grouping
+- finance now includes property-level revenue settings, cleaner and inspector pay profiles, job financial review/approval, revenue views, payroll views, and Thursday-through-Wednesday weekly payroll grouping
 - photo retention now removes photos older than 90 days; a July 16, 2026 cleanup removed all remaining pre-May photos (1,840 photos / about 542 MB) with no failures
 
 Current emphasis:
@@ -98,6 +111,11 @@ Older rollout, setup, and checkpoint docs live in `archive/` for reference only.
 - Do not break offline queue/replay behavior.
 - Do not casually change auth, env wiring, or redirect behavior.
 - Do not assume a frontend deploy also updated Convex production.
+- The worker Pay rollout changed the Convex schema and added `jobs.by_status_completed_at`; production was deployed backend-first on August 4, 2026. Future changes to this workflow still require Convex before the matching Cloudflare frontend.
+- Worker Pay must remain self-only and approved-only. Do not expose admin notes, client revenue, gross margin, or another worker's payroll.
+- Hours Paid are `approved property combo rooms + one unit per job`; Paid-Hour Rate is `approved pay / Hours Paid`. True Hourly Wage is `approved pay / recorded checklist elapsed hours`, using explicit inspection `startedAt` when present, falling back to creation time for older checklists, and using `completedAt` as finish.
+- When checklist timing is missing or invalid, exclude both that job's pay and time from True Hourly Wage and show timed-job coverage. Never divide all pay by partial hours.
+- Admin Payroll hourly totals must stay aligned with worker Pay: approved snapshots and team splits drive Hours Paid, while only timed-job pay and elapsed checklist time drive True Hourly Wage.
 - The invoicing build adds Convex tables, indexes, queries, and mutations. Deploy Convex production before the matching Cloudflare frontend, then smoke-test invoice creation before operational use.
 - Do not delete an invoiced job from History; non-void invoice links intentionally block that deletion.
 - Do not reuse an invoice number or attach a job to multiple non-void invoices.

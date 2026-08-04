@@ -8,7 +8,7 @@ export function RoleGuard({
   role,
 }: {
   children: React.ReactNode;
-  role: UserRole;
+  role: UserRole | UserRole[];
 }) {
   const { user, isLoading } = useCurrentUser();
 
@@ -16,10 +16,11 @@ export function RoleGuard({
     return <LoadingQuip />;
   }
 
-  if (!user || user.role !== role) {
+  const allowedRoles = Array.isArray(role) ? role : [role];
+
+  if (!user || !allowedRoles.includes(user.role)) {
     return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
 }
-

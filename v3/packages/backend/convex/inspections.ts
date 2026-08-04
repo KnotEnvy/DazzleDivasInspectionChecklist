@@ -429,6 +429,7 @@ export const create = mutation({
       assignmentRoleForChecklistType(args.type)
     );
 
+    const startedAt = Date.now();
     const inspectionId = await ctx.db.insert("inspections", {
       propertyId: args.propertyId,
       propertyName: property.name,
@@ -438,6 +439,7 @@ export const create = mutation({
       createdById: actor._id,
       status: "IN_PROGRESS",
       issueCount: 0,
+      startedAt,
       sourceInspectionId: args.sourceInspectionId,
     });
 

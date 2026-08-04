@@ -55,6 +55,12 @@ const InvoiceEditorPage = lazy(() =>
 const InvoicePrintPage = lazy(() =>
   import("@/routes/InvoicePrintPage").then((module) => ({ default: module.InvoicePrintPage }))
 );
+const PayPage = lazy(() =>
+  import("@/routes/PayPage").then((module) => ({ default: module.PayPage }))
+);
+const PayStubPrintPage = lazy(() =>
+  import("@/routes/PayStubPrintPage").then((module) => ({ default: module.PayStubPrintPage }))
+);
 const MySchedulePage = lazy(() =>
   import("@/routes/MySchedulePage").then((module) => ({ default: module.MySchedulePage }))
 );
@@ -94,6 +100,16 @@ export default function App() {
           </AuthGuard>
         }
       />
+      <Route
+        path="/pay/week/:weekStart"
+        element={
+          <AuthGuard>
+            <RoleGuard role={["CLEANER", "INSPECTOR"]}>
+              {withSuspense(<PayStubPrintPage />)}
+            </RoleGuard>
+          </AuthGuard>
+        }
+      />
 
       <Route
         element={
@@ -110,6 +126,14 @@ export default function App() {
         <Route path="checklists/:inspectionId" element={withSuspense(<InspectionPage />)} />
         <Route path="history" element={withSuspense(<HistoryPage />)} />
         <Route path="my-schedule" element={withSuspense(<MySchedulePage />)} />
+        <Route
+          path="pay"
+          element={
+            <RoleGuard role={["CLEANER", "INSPECTOR"]}>
+              {withSuspense(<PayPage />)}
+            </RoleGuard>
+          }
+        />
         <Route
           path="schedule"
           element={

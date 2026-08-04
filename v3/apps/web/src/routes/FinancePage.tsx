@@ -78,17 +78,28 @@ type PayrollWorker = {
   totalPayroll: number;
   totalRevenue: number;
   grossMargin: number;
+  totalComboRooms: number;
+  totalUnits: number;
+  totalPaidHours: number;
+  paidHourlyRate: number;
+  totalActualHoursWorked: number;
+  actualHourlyWage: number;
+  actualHoursJobCount: number;
+  missingActualHoursJobCount: number;
   jobs: Array<{
     jobId: Id<"jobs">;
     inspectionId?: Id<"inspections">;
+    jobType: "CLEANING" | "INSPECTION";
     propertyName: string;
     completedAt?: number;
     roomComboUnits?: number;
+    unitCount?: number;
     perRoomComboRate?: number;
     unitBonus?: number;
     payrollAmount?: number;
     revenueAmount?: number;
     assignmentCount?: number;
+    actualHoursWorked?: number;
   }>;
 };
 
@@ -122,10 +133,20 @@ function addMonths(date: Date, months: number) {
   return next;
 }
 
+function addYears(date: Date, years: number) {
+  const next = new Date(date);
+  next.setFullYear(next.getFullYear() + years);
+  return next;
+}
+
 function startOfMonth(date: Date) {
   const next = startOfDay(date);
   next.setDate(1);
   return next;
+}
+
+function startOfYear(date: Date) {
+  return new Date(date.getFullYear(), 0, 1);
 }
 
 function getThursday(date: Date) {
@@ -173,6 +194,16 @@ function formatCurrency(value?: number) {
   }).format(value);
 }
 
+function formatNumber(value: number) {
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatHours(value: number) {
+  return `${formatNumber(value)} hr`;
+}
+
 function statusTone(status: FinanceJob["financeStatus"]) {
   switch (status) {
     case "APPROVED":
@@ -199,7 +230,7 @@ export function FinancePage() {
   const [activeTab, setActiveTab] = useState<FinanceTab>("overview");
   const [rangeFrom, setRangeFrom] = useState(toDateInputValue(addDays(today, -14)));
   const [rangeTo, setRangeTo] = useState(toDateInputValue(addDays(today, 30)));
-  const [payrollPeriod, setPayrollPeriod] = useState<"WEEK" | "MONTH">("WEEK");
+  const [payrollPeriod, setPayrollPeriod] = useState<"WEEK" | "MONTH" | "YEAR">("WEEK");
   const [payrollAnchor, setPayrollAnchor] = useState(getThursday(today).getTime());
   const [collapsedPayees, setCollapsedPayees] = useState<Record<string, boolean>>({});
 
@@ -208,11 +239,15 @@ export function FinancePage() {
   const payrollPeriodStart =
     payrollPeriod === "WEEK"
       ? getThursday(new Date(payrollAnchor)).getTime()
-      : startOfMonth(new Date(payrollAnchor)).getTime();
+      : payrollPeriod === "MONTH"
+        ? startOfMonth(new Date(payrollAnchor)).getTime()
+        : startOfYear(new Date(payrollAnchor)).getTime();
   const payrollPeriodEnd =
     payrollPeriod === "WEEK"
       ? addDays(new Date(payrollPeriodStart), 7).getTime()
-      : addMonths(new Date(payrollPeriodStart), 1).getTime();
+      : payrollPeriod === "MONTH"
+        ? addMonths(new Date(payrollPeriodStart), 1).getTime()
+        : addYears(new Date(payrollPeriodStart), 1).getTime();
 
   const overview = useQuery(api.finance.getOverview, {
     from: fromTimestamp,
@@ -236,7 +271,12 @@ export function FinancePage() {
 
   function movePayrollPeriod(direction: -1 | 1) {
     const anchor = new Date(payrollPeriodStart);
-    const next = payrollPeriod === "WEEK" ? addDays(anchor, direction * 7) : addMonths(anchor, direction);
+    const next =
+      payrollPeriod === "WEEK"
+        ? addDays(anchor, direction * 7)
+        : payrollPeriod === "MONTH"
+          ? addMonths(anchor, direction)
+          : addYears(anchor, direction);
     setPayrollAnchor(next.getTime());
   }
 
@@ -301,7 +341,7 @@ export function FinancePage() {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">Finance</p>
           <h1 className="mt-1 text-2xl font-bold">Payroll, Revenue, and Job Economics</h1>
           <p className="text-sm text-slate-600">
-            Finance stays admin-only and builds directly on completed cleaning jobs and admin approval.
+            Finance stays admin-only and combines cleaning revenue with approved cleaner and inspector payroll.
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -395,15 +435,20 @@ export function FinancePage() {
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold">
-                {payrollPeriod === "WEEK" ? "Weekly Payroll" : "Monthly Payroll"}
+                {payrollPeriod === "WEEK"
+                  ? "Weekly Payroll"
+                  : payrollPeriod === "MONTH"
+                    ? "Monthly Payroll"
+                    : "Year-to-Date Payroll"}
               </h2>
               <p className="text-sm text-slate-600">
-                Approved cleaning jobs only. Weekly periods run Thursday through Wednesday.
+                Approved cleaner and inspector work with the same paid-hours and recorded-time calculations
+                employees see. Weekly periods run Thursday through Wednesday.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex rounded-xl bg-slate-100 p-1">
-                {(["WEEK", "MONTH"] as const).map((period) => (
+                {(["WEEK", "MONTH", "YEAR"] as const).map((period) => (
                   <button
                     key={period}
                     className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
@@ -414,12 +459,14 @@ export function FinancePage() {
                       setPayrollAnchor(
                         period === "WEEK"
                           ? getThursday(new Date()).getTime()
-                          : startOfMonth(new Date()).getTime()
+                          : period === "MONTH"
+                            ? startOfMonth(new Date()).getTime()
+                            : startOfYear(new Date()).getTime()
                       );
                     }}
                     type="button"
                   >
-                    {period === "WEEK" ? "By Week" : "By Month"}
+                    {period === "WEEK" ? "By Week" : period === "MONTH" ? "By Month" : "YTD"}
                   </button>
                 ))}
               </div>
@@ -434,7 +481,9 @@ export function FinancePage() {
               <span className="min-w-40 text-center text-sm font-semibold text-slate-700">
                 {payrollPeriod === "WEEK"
                   ? `${new Date(payrollPeriodStart).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${new Date(payrollPeriodEnd - 1).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
-                  : new Date(payrollPeriodStart).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+                  : payrollPeriod === "MONTH"
+                    ? new Date(payrollPeriodStart).toLocaleDateString(undefined, { month: "long", year: "numeric" })
+                    : new Date(payrollPeriodStart).getFullYear()}
               </span>
               <button
                 aria-label={`Next payroll ${payrollPeriod.toLowerCase()}`}
@@ -453,7 +502,7 @@ export function FinancePage() {
               <div className="skeleton h-20 rounded-2xl" />
             </div>
           ) : payroll.length === 0 ? (
-            <p className="text-sm text-slate-500">No approved payroll jobs landed in this week yet.</p>
+            <p className="text-sm text-slate-500">No approved payroll jobs landed in this period.</p>
           ) : (
             <div className="space-y-3">
               {payroll.map((worker) => (
@@ -484,14 +533,48 @@ export function FinancePage() {
                       )}
                     </button>
                   </div>
+                  <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+                    <PayrollMetric label="Approved Pay" value={formatCurrency(worker.totalPayroll)} />
+                    <PayrollMetric label="Approved Jobs" value={formatNumber(worker.jobs.length)} />
+                    <PayrollMetric label="Combo Rooms" value={formatNumber(worker.totalComboRooms)} />
+                    <PayrollMetric label="Units" value={formatNumber(worker.totalUnits)} />
+                    <PayrollMetric label="Hours Paid" value={formatHours(worker.totalPaidHours)} />
+                    <PayrollMetric label="Paid-Hour Rate" value={formatCurrency(worker.paidHourlyRate)} />
+                    <PayrollMetric
+                      label="Actual Hours"
+                      value={
+                        worker.actualHoursJobCount > 0
+                          ? formatHours(worker.totalActualHoursWorked)
+                          : "--"
+                      }
+                    />
+                    <PayrollMetric
+                      accent
+                      label="True Hourly Wage"
+                      value={
+                        worker.actualHoursJobCount > 0
+                          ? formatCurrency(worker.actualHourlyWage)
+                          : "--"
+                      }
+                    />
+                  </dl>
+                  {worker.missingActualHoursJobCount > 0 ? (
+                    <p className="mt-3 text-xs font-semibold text-amber-700">
+                      Actual time is available for {worker.actualHoursJobCount} of {worker.jobs.length} approved
+                      jobs; True Hourly Wage uses only the pay from those timed jobs.
+                    </p>
+                  ) : null}
                   {!collapsedPayees[worker.assigneeId] ? <div className="mt-3 space-y-2">
                     {worker.jobs.map((job) => (
                       <div key={job.jobId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-white px-3 py-2 text-sm">
                         <div>
                           <p className="font-medium">{job.propertyName}</p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+                            {job.jobType === "INSPECTION" ? "Inspection" : "Cleaning"}
+                          </p>
                           <p className="text-slate-500">{formatPerformedDate(job.completedAt)}</p>
                           <p className="text-slate-500">
-                            {job.roomComboUnits ?? "--"} combos x {formatCurrency(job.perRoomComboRate)} + {formatCurrency(job.unitBonus)}
+                            {job.roomComboUnits ?? "--"} combos + {job.unitCount ?? "--"} unit | {formatCurrency(job.perRoomComboRate)} per combo + {formatCurrency(job.unitBonus)} unit pay
                           </p>
                           {(job.assignmentCount ?? 1) > 1 ? (
                             <p className="text-xs font-semibold text-brand-700">
@@ -695,6 +778,25 @@ function RevenueCell({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border border-border bg-white px-3 py-2 text-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function PayrollMetric({
+  accent = false,
+  label,
+  value,
+}: {
+  accent?: boolean;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-white px-3 py-2 text-center">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className={`mt-1 font-bold ${accent ? "text-emerald-700" : "text-slate-900"}`}>
+        {value}
+      </dd>
     </div>
   );
 }

@@ -98,8 +98,10 @@ export function AdminPage() {
     return (users ?? []).slice().sort((a, b) => a.email.localeCompare(b.email));
   }, [users]);
 
-  const payProfileByUserId = useMemo(() => {
-    return new Map((payProfiles ?? []).map((profile) => [profile.userId, profile] as const));
+  const payProfileByUserRole = useMemo(() => {
+    return new Map(
+      (payProfiles ?? []).map((profile) => [`${profile.userId}:${profile.role}`, profile] as const)
+    );
   }, [payProfiles]);
 
   async function handleUserUpdate(
@@ -188,7 +190,7 @@ export function AdminPage() {
   async function handleSavePayProfile(event: FormEvent<HTMLFormElement>, user: AdminUser) {
     event.preventDefault();
 
-    if (user.role !== "CLEANER") {
+    if (user.role !== "CLEANER" && user.role !== "INSPECTOR") {
       return;
     }
 
@@ -210,11 +212,11 @@ export function AdminPage() {
     try {
       await upsertWorkerPayProfile({
         userId: user._id,
-        role: "CLEANER",
+        role: user.role,
         perRoomComboRate,
         unitBonus,
       });
-      toast.success("Cleaner pay profile saved");
+      toast.success(`${user.role === "CLEANER" ? "Cleaner" : "Inspector"} pay profile saved`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save pay profile");
     } finally {
@@ -227,7 +229,7 @@ export function AdminPage() {
       <div>
         <h1 className="text-2xl font-bold">Admin Console</h1>
         <p className="text-sm text-slate-600">
-          Starter controls for operations, staffing, onboarding, and cleaner pay setup.
+          Starter controls for operations, staffing, onboarding, and worker pay setup.
         </p>
       </div>
 
@@ -333,7 +335,10 @@ export function AdminPage() {
         ) : (
           <div className="space-y-2">
             {sortedUsers.map((user) => {
-              const payProfile = payProfileByUserId.get(user._id);
+              const payProfile =
+                user.role === "CLEANER" || user.role === "INSPECTOR"
+                  ? payProfileByUserRole.get(`${user._id}:${user.role}`)
+                  : undefined;
 
               return (
                 <div key={user._id} className="rounded-xl border border-border p-3">
@@ -369,13 +374,15 @@ export function AdminPage() {
                         <p className="mt-1 text-xs text-rose-600">Last invite error: {user.inviteDeliveryError}</p>
                       ) : null}
 
-                      {user.role === "CLEANER" ? (
+                      {user.role === "CLEANER" || user.role === "INSPECTOR" ? (
                         <form
                           key={`${user._id}:${payProfile?._id ?? "none"}:${payProfile?.perRoomComboRate ?? ""}:${payProfile?.unitBonus ?? ""}`}
                           className="mt-3 rounded-xl border border-border bg-slate-50 p-3"
                           onSubmit={(event) => void handleSavePayProfile(event, user)}
                         >
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cleaner Pay Profile</p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {user.role === "CLEANER" ? "Cleaner" : "Inspector"} Pay Profile
+                          </p>
                           <div className="mt-2 grid gap-2 sm:grid-cols-3">
                             <label className="text-sm font-medium text-slate-700">
                               Per-room combo rate

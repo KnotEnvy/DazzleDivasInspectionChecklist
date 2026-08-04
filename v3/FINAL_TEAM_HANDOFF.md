@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: July 24, 2026
+Updated: August 4, 2026
 
 ## Purpose
 This is the active high-level handoff for the next working team.
@@ -26,12 +26,29 @@ Current finance behavior:
 - finance includes `Overview`, `Payroll`, `Revenue`, and `Jobs` views
 - payroll weeks run Thursday through Wednesday
 - weekly payroll rows show the date the clean was performed
+- each weekly, monthly, or year-to-date payroll payee card shows approved jobs/pay, combo rooms, units, Hours Paid, Paid-Hour Rate, Actual Hours Worked, and True Hourly Wage using the same rules as worker Pay
 - properties store their own finance config, not one shared global setting
 - property creation supports setting finance defaults at create time
-- cleaners can have pay profiles with room-combo rate and unit bonus
+- cleaners and inspectors can have pay profiles with room-combo rate and unit bonus
 - completed checklist review includes a finance panel for draft review, approval, and unlock
 - revenue/payroll stay live-derived for unapproved work and become locked snapshots once approved
-- finance is currently cleaning-focused and admin-facing; exports and broader accounting workflows are still future work
+- cleaning revenue remains admin-only and cleaning-focused; approved payroll now also supports inspectors
+
+### Worker Pay history and admin hourly payroll are live
+The August 4 worker Pay and admin Payroll build is deployed to production. Convex production was deployed first, followed by the matching Cloudflare Pages frontend.
+
+Current repository behavior:
+- cleaners and inspectors receive a worker-only `Pay` tab on desktop and mobile
+- only the signed-in worker's approved payroll records are returned; pending work, admin notes, client revenue, gross margin, and other workers' pay are excluded
+- weekly history follows the Thursday-to-Wednesday payroll rule and shows totals only; workers do not receive a per-job breakdown
+- weekly, monthly, and year-to-date views summarize approved pay, locked property combo rooms, one unit per job, job counts, and Hours Paid
+- Paid-Hour Rate is `approved pay / Hours Paid`; Actual Hours Worked use explicit checklist `startedAt` (or creation-time fallback for older records) through checklist completion; True Hourly Wage is approved pay divided by that recorded elapsed time
+- missing/invalid checklist timing is excluded together with its matching pay from True Hourly Wage, and the UI discloses timed-job coverage
+- worker pay reuses the same locked room-combo and approved-pay snapshots shown in Admin Payroll; it does not count checklist-room rows or rerun the payroll formula
+- team jobs split combo rooms, the one job unit, unit pay, and approved pay evenly
+- each approved week has a Dazzle-branded totals-only pay-stub print route for browser printing or `Save as PDF`; it is an internal gross-pay record, not a tax document
+- inspectors now have pay profiles and can receive approved payroll snapshots from completed inspection jobs; inspector payroll does not feed cleaning revenue or invoice eligibility
+- the self-service query uses `jobs.by_status_completed_at` to keep each selected-year read bounded instead of collecting all payroll history
 
 ### Invoicing v1 is live
 The July 24 invoicing rollout is deployed to production. Convex production received the schema, indexes, and backend functions first, followed by the matching Cloudflare Pages frontend.
@@ -58,6 +75,18 @@ Current production behavior:
 - Photo storage is now controlled by a 90-day retention policy. Do not bypass it or leave manual purge credentials enabled.
 
 ## What Changed Since The Previous Handoff
+### August 4 worker Pay and admin Payroll rollout (deployed)
+- Added worker-only weekly, monthly, and year-to-date Pay history plus printable weekly pay stubs.
+- Added locked room-combo totals, one-unit-per-job totals, approved-pay totals, Hours Paid, recorded Actual Hours Worked, Paid-Hour Rate, and True Hourly Wage.
+- Added those same hourly and workload totals to every employee card in Admin Finance Payroll for the selected week, month, or year-to-date period, including partial-timing coverage warnings.
+- Removed worker-facing per-job breakdowns from both Pay history and printable weekly stubs.
+- Extended pay-profile setup and completed-job payroll approval to inspectors while keeping cleaning revenue and invoices cleaning-only.
+- Added the bounded `jobs.by_status_completed_at` index and self-only `finance.getMyPayHistory` query.
+- Reworked worker mobile navigation so `Pay` is a primary item and `History` plus `Sign Out` remain available under `More`.
+- Validation completed in the repo: frontend typecheck, backend typecheck, production web build/bundle gate, 86 tests, and rollout smoke coverage.
+- Convex production `stoic-dinosaur-501` was deployed first with schema validation complete, no deleted indexes, and the new `jobs.by_status_completed_at` index; the matching Cloudflare Pages frontend followed from `main`.
+- Development acceptance data is ready: `dev-cleaner@dazzledivas.test` has 56 sanitized, production-derived approved finance/timing records covering solo and team jobs. The copy used production reads only, wrote only to `festive-crocodile-100`, archived the account's previous dev assignments, and left no seed mutation or token enabled.
+
 ### July 24 invoicing rollout (deployed)
 - Added Convex-backed invoice clients, property mappings, invoice records, line items, sequence allocation, and lifecycle audit events.
 - Added indexed eligible-job lookup by client property and finance status to avoid scanning all approved production history.
@@ -95,7 +124,7 @@ This batch was deployed on July 16, 2026. Convex production received the schema 
 
 ### Finance rollout
 - Admin-only finance reporting and approval is now wired into the product.
-- Property finance settings and cleaner pay profiles are editable in the admin UI.
+- Property finance settings plus cleaner and inspector pay profiles are editable in the admin UI.
 - Job financial review/approval is embedded in completed checklist review.
 - Thursday-to-Wednesday weekly payroll reporting is the current business rule.
 
@@ -171,6 +200,10 @@ Before shipping meaningful changes, validate:
 - Admin review of completed work
 - Finance approval/unlock on a completed job
 - Payroll totals and Thursday-through-Wednesday grouping
+- Cleaner and inspector Pay-tab access controls, including rejection for admins and other workers' records
+- Weekly, monthly, and year-to-date approved Pay totals against the admin payroll view
+- Team-job combo-room/unit/pay splitting, actual-time handling, exact agreement with Admin Payroll snapshots, and both hourly-rate calculations
+- Weekly pay-stub print layout and browser `Save as PDF`
 - Property create/edit including finance config
 - History `Finished Today` cleaner attribution
 - Convex production deploy after any retention, photo storage, or cron change
@@ -190,8 +223,8 @@ Before shipping meaningful changes, validate:
 - Confirm destructive History deletion is blocked while a job is attached to a non-void invoice
 
 ## Recommended Next Moves
-1. Deploy the invoice schema/functions to Convex production before deploying the matching Cloudflare frontend.
-2. Smoke-test one manual draft and one approved-job invoice with a non-production client or controlled internal record before operational use.
-3. Compare the generated PDF against a real reference invoice and confirm the client accepts the billing detail/terms presentation.
-4. Pilot payment and overdue tracking before retiring the external invoice website; partial payments and direct email sending are not part of v1.
-5. Continue building later enhancement batches from real cleaner/admin feedback, not speculation.
+1. Monitor the first live worker Pay usage and compare any reported discrepancies directly against Admin Payroll approved snapshots.
+2. Create or verify an inspector pay profile, approve one controlled completed inspection, and compare inspector Pay totals with the admin Payroll view.
+3. Periodically confirm desktop/mobile Pay navigation, self-only access, and weekly stub printing with active worker accounts.
+4. Keep checklist start/completion timing coverage under review because True Hourly Wage intentionally excludes untimed jobs and their matching pay.
+5. Continue real-client invoicing acceptance; partial payments and direct email sending remain outside v1.

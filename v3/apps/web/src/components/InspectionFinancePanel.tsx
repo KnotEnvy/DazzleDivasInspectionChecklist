@@ -4,6 +4,8 @@ import { AlertTriangle, CheckCircle2, LockOpen, ReceiptText } from "lucide-react
 
 export type InspectionFinanceReview = {
   jobId: string;
+  jobType: "CLEANING" | "INSPECTION";
+  financialScope: "CLEANING" | "INSPECTION";
   inspectionId: string;
   propertyName: string;
   assigneeName: string;
@@ -96,13 +98,14 @@ export function InspectionFinancePanel(props: {
       <section className="rounded-2xl border border-border bg-white p-4">
         <h2 className="text-lg font-bold">Finance Approval</h2>
         <p className="mt-2 text-sm text-slate-600">
-          This checklist is not linked to a cleaning job finance record.
+          This checklist is not linked to a payroll-eligible job.
         </p>
       </section>
     );
   }
 
   const locked = review.financeStatus === "APPROVED";
+  const tracksRevenue = review.financialScope === "CLEANING";
   const workerLabel =
     review.assigneeNames && review.assigneeNames.length > 0
       ? review.assigneeNames.map(firstName).join(" + ")
@@ -112,9 +115,13 @@ export function InspectionFinancePanel(props: {
     <section className="rounded-2xl border border-border bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold">Finance Approval</h2>
+          <h2 className="text-lg font-bold">
+            {tracksRevenue ? "Finance Approval" : "Inspector Pay Approval"}
+          </h2>
           <p className="text-sm text-slate-600">
-            Review the revenue and payroll snapshot before this job counts in realized totals.
+            {tracksRevenue
+              ? "Review the revenue and payroll snapshot before this job counts in realized totals."
+              : "Review the inspector payroll snapshot before it appears in the worker's Pay history."}
           </p>
           <p className="mt-1 text-xs font-semibold text-brand-700">
             Workers: {workerLabel}
@@ -128,10 +135,10 @@ export function InspectionFinancePanel(props: {
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
-        <SummaryCell label="Revenue" value={formatCurrency(review.revenueAmount)} />
+      <div className={`mt-4 grid gap-3 ${tracksRevenue ? "md:grid-cols-4" : "md:grid-cols-2"}`}>
+        {tracksRevenue ? <SummaryCell label="Revenue" value={formatCurrency(review.revenueAmount)} /> : null}
         <SummaryCell label="Payroll" value={formatCurrency(review.payrollAmount)} />
-        <SummaryCell label="Gross" value={formatCurrency(review.grossMargin)} />
+        {tracksRevenue ? <SummaryCell label="Gross" value={formatCurrency(review.grossMargin)} /> : null}
         <SummaryCell
           label="Completed"
           value={review.completedAt ? new Date(review.completedAt).toLocaleString() : "--"}
@@ -154,18 +161,20 @@ export function InspectionFinancePanel(props: {
         </div>
       ) : null}
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <label className="text-sm font-medium text-slate-700">
-          Revenue Amount
-          <input
-            className="input mt-1"
-            disabled={locked}
-            onChange={(event) => setDraft((current) => ({ ...current, revenueAmount: event.target.value }))}
-            step="0.01"
-            type="number"
-            value={draft.revenueAmount}
-          />
-        </label>
+      <div className={`mt-4 grid gap-3 md:grid-cols-2 ${tracksRevenue ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
+        {tracksRevenue ? (
+          <label className="text-sm font-medium text-slate-700">
+            Revenue Amount
+            <input
+              className="input mt-1"
+              disabled={locked}
+              onChange={(event) => setDraft((current) => ({ ...current, revenueAmount: event.target.value }))}
+              step="0.01"
+              type="number"
+              value={draft.revenueAmount}
+            />
+          </label>
+        ) : null}
         <label className="text-sm font-medium text-slate-700">
           Room Combo Units
           <input
@@ -241,14 +250,16 @@ export function InspectionFinancePanel(props: {
             Approved {review.approvedAt ? new Date(review.approvedAt).toLocaleString() : ""}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              className="field-button primary px-4"
-              onClick={() => navigate(`/invoices/new?jobId=${review.jobId}`)}
-              type="button"
-            >
-              <ReceiptText className="mr-2 h-4 w-4" />
-              Create Invoice From Job
-            </button>
+            {tracksRevenue ? (
+              <button
+                className="field-button primary px-4"
+                onClick={() => navigate(`/invoices/new?jobId=${review.jobId}`)}
+                type="button"
+              >
+                <ReceiptText className="mr-2 h-4 w-4" />
+                Create Invoice From Job
+              </button>
+            ) : null}
           </div>
           <label className="mt-4 block text-sm font-medium text-slate-700">
             Unlock Reason

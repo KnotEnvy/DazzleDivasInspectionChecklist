@@ -2,12 +2,15 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
-import { requireAdmin } from "./lib/permissions";
+import { requireAdmin, requireAuth } from "./lib/permissions";
 import {
   calculateCleanerPayroll,
+  calculateApprovedPayrollShare,
+  calculateChecklistHours,
   calculateGrossMargin,
   deriveRoomComboUnitsFromProperty,
   roundCurrency,
+  summarizeApprovedWorkerPay,
 } from "./lib/finance";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -91,29 +94,33 @@ function isCleaningJob(job: Pick<Doc<"jobs">, "jobType">) {
   return job.jobType === "CLEANING";
 }
 
+function getPayrollScope(job: Pick<Doc<"jobs">, "jobType">) {
+  if (job.jobType === "CLEANING") {
+    return "CLEANING" as const;
+  }
+
+  if (job.jobType === "INSPECTION") {
+    return "INSPECTION" as const;
+  }
+
+  return null;
+}
+
+function getPayrollRole(job: Pick<Doc<"jobs">, "jobType">) {
+  const scope = getPayrollScope(job);
+  return scope === "CLEANING" ? "CLEANER" as const : scope === "INSPECTION" ? "INSPECTOR" as const : null;
+}
+
+function isPayrollJob(job: Pick<Doc<"jobs">, "jobType">) {
+  return getPayrollScope(job) !== null;
+}
+
 function getAssignedWorkerIds(job: Pick<Doc<"jobs">, "assigneeId" | "additionalAssigneeIds">) {
   return [...new Set([job.assigneeId, ...(job.additionalAssigneeIds ?? [])].filter(isDefined))];
 }
 
 function getSplitCount(job: Pick<Doc<"jobs">, "assigneeId" | "additionalAssigneeIds">) {
   return Math.max(1, getAssignedWorkerIds(job).length);
-}
-
-function calculateCleanerPayrollShare(params: {
-  roomComboUnits?: number;
-  perRoomComboRate?: number;
-  unitBonus?: number;
-  splitCount: number;
-}) {
-  return calculateCleanerPayroll({
-    roomComboUnits:
-      params.roomComboUnits === undefined
-        ? undefined
-        : roundCurrency(params.roomComboUnits / params.splitCount),
-    perRoomComboRate: params.perRoomComboRate,
-    unitBonus:
-      params.unitBonus === undefined ? undefined : roundCurrency(params.unitBonus / params.splitCount),
-  });
 }
 
 async function getPropertyConfigByPropertyId(ctx: QueryCtx | MutationCtx, propertyId: Id<"properties">) {
@@ -192,8 +199,9 @@ function buildDerivedFinanceSnapshot(params: {
       bedrooms: property?.bedrooms,
       bathrooms: property?.bathrooms,
     });
-  const revenueAmount =
-    jobFinancial?.revenueAmountSnapshot ?? propertyConfig?.cleaningRevenuePerJob;
+  const revenueAmount = isCleaningJob(job)
+    ? jobFinancial?.revenueAmountSnapshot ?? propertyConfig?.cleaningRevenuePerJob
+    : undefined;
   const perRoomComboRate =
     jobFinancial?.perRoomComboRateSnapshot ?? workerPayProfile?.perRoomComboRate;
   const unitBonus = jobFinancial?.unitBonusSnapshot ?? workerPayProfile?.unitBonus;
@@ -214,10 +222,10 @@ function buildDerivedFinanceSnapshot(params: {
   }
 
   if (job.assigneeId && !workerPayProfile) {
-    warnings.push("Cleaner pay profile is missing for the assigned worker.");
+    warnings.push("Worker pay profile is missing for the assigned worker.");
   }
 
-  if (revenueAmount === undefined) {
+  if (isCleaningJob(job) && revenueAmount === undefined) {
     missingFields.push("Revenue amount");
   }
   if (roomComboUnits === undefined) {
@@ -302,7 +310,7 @@ async function upsertJobFinancialRecord(
     inspectionId: job.linkedInspectionId,
     assigneeId: job.assigneeId,
     jobType: job.jobType,
-    financialScope: "CLEANING" as const,
+    financialScope: getPayrollScope(job) ?? "CLEANING",
     revenueAmountSnapshot: values.revenueAmountSnapshot,
     roomComboUnitsSnapshot: values.roomComboUnitsSnapshot,
     perRoomComboRateSnapshot: values.perRoomComboRateSnapshot,
@@ -574,7 +582,12 @@ export const getInspectionReview = query({
     }
 
     const job = await getLinkedJobForInspection(ctx, args.inspectionId);
-    if (!job || !isCleaningJob(job)) {
+    if (!job || !isPayrollJob(job)) {
+      return null;
+    }
+
+    const payrollRole = getPayrollRole(job);
+    if (!payrollRole) {
       return null;
     }
 
@@ -582,7 +595,7 @@ export const getInspectionReview = query({
       ctx.db.get(job.propertyId),
       getJobFinancialByJobId(ctx, job._id),
       getPropertyConfigByPropertyId(ctx, job.propertyId),
-      getActiveWorkerPayProfile(ctx, job.assigneeId, "CLEANER", Date.now()),
+      getActiveWorkerPayProfile(ctx, job.assigneeId, payrollRole, Date.now()),
     ]);
     const assignedWorkers = await Promise.all(
       getAssignedWorkerIds(job).map(async (assigneeId) => ctx.db.get(assigneeId))
@@ -597,6 +610,8 @@ export const getInspectionReview = query({
 
     return {
       jobId: job._id,
+      jobType: job.jobType,
+      financialScope: getPayrollScope(job),
       inspectionId: inspection._id,
       propertyName: inspection.propertyName,
       assigneeName: inspection.assigneeName,
@@ -639,8 +654,13 @@ export const saveJobFinancialDraft = mutation({
     const actor = await requireAdmin(ctx);
     const job = await ctx.db.get(args.jobId);
 
-    if (!job || !isCleaningJob(job)) {
-      throw new Error("Cleaning job not found");
+    if (!job || !isPayrollJob(job)) {
+      throw new Error("Payroll-eligible job not found");
+    }
+
+    const payrollRole = getPayrollRole(job);
+    if (!payrollRole) {
+      throw new Error("Payroll role not found");
     }
 
     const existing = await getJobFinancialByJobId(ctx, job._id);
@@ -651,7 +671,7 @@ export const saveJobFinancialDraft = mutation({
     const [property, propertyConfig, workerPayProfile] = await Promise.all([
       ctx.db.get(job.propertyId),
       getPropertyConfigByPropertyId(ctx, job.propertyId),
-      getActiveWorkerPayProfile(ctx, job.assigneeId, "CLEANER", Date.now()),
+      getActiveWorkerPayProfile(ctx, job.assigneeId, payrollRole, Date.now()),
     ]);
     const snapshot = buildDerivedFinanceSnapshot({
       job,
@@ -713,8 +733,13 @@ export const approveJobFinancial = mutation({
     const actor = await requireAdmin(ctx);
     const job = await ctx.db.get(args.jobId);
 
-    if (!job || !isCleaningJob(job)) {
-      throw new Error("Cleaning job not found");
+    if (!job || !isPayrollJob(job)) {
+      throw new Error("Payroll-eligible job not found");
+    }
+
+    const payrollRole = getPayrollRole(job);
+    if (!payrollRole) {
+      throw new Error("Payroll role not found");
     }
 
     if (job.status !== "COMPLETED") {
@@ -725,7 +750,7 @@ export const approveJobFinancial = mutation({
     const [property, propertyConfig, workerPayProfile] = await Promise.all([
       ctx.db.get(job.propertyId),
       getPropertyConfigByPropertyId(ctx, job.propertyId),
-      getActiveWorkerPayProfile(ctx, job.assigneeId, "CLEANER", Date.now()),
+      getActiveWorkerPayProfile(ctx, job.assigneeId, payrollRole, Date.now()),
     ]);
     const snapshot = buildDerivedFinanceSnapshot({
       job,
@@ -747,13 +772,17 @@ export const approveJobFinancial = mutation({
     });
 
     if (
-      revenueAmount === undefined ||
+      (isCleaningJob(job) && revenueAmount === undefined) ||
       roomComboUnits === undefined ||
       perRoomComboRate === undefined ||
       unitBonus === undefined ||
       payrollAmount === undefined
     ) {
-      throw new Error("Revenue, units, rate, bonus, and payroll must all be set before approval");
+      throw new Error(
+        isCleaningJob(job)
+          ? "Revenue, units, rate, bonus, and payroll must all be set before approval"
+          : "Units, rate, bonus, and payroll must all be set before approval"
+      );
     }
 
     const approvedAt = Date.now();
@@ -984,7 +1013,10 @@ export const listPayroll = query({
           .withIndex("by_status", (q) => q.eq("status", "APPROVED"))
           .collect(),
       [] as Array<Doc<"jobFinancials">>
-    )).filter((financial) => financial.financialScope === "CLEANING");
+    )).filter(
+      (financial) =>
+        financial.financialScope === "CLEANING" || financial.financialScope === "INSPECTION"
+    );
 
     const jobs = await Promise.all(financials.map((financial) => ctx.db.get(financial.jobId)));
     const relevantPairs = financials
@@ -992,19 +1024,30 @@ export const listPayroll = query({
       .filter(
         (pair): pair is { financial: typeof financials[number]; job: Doc<"jobs"> } =>
           !!pair.job &&
-          isCleaningJob(pair.job) &&
+          isPayrollJob(pair.job) &&
           (pair.job.completedAt ?? 0) >= args.weekStart &&
           (pair.job.completedAt ?? 0) < periodEnd
       );
 
     const assigneeIds = [...new Set(relevantPairs.flatMap((pair) => getAssignedWorkerIds(pair.job)))];
     const propertyIds = [...new Set(relevantPairs.map((pair) => pair.job.propertyId))];
-    const [users, properties] = await Promise.all([
+    const inspectionIds = [
+      ...new Set(
+        relevantPairs
+          .map(({ financial, job }) => job.linkedInspectionId ?? financial.inspectionId)
+          .filter(isDefined)
+      ),
+    ];
+    const [users, properties, inspections] = await Promise.all([
       Promise.all(assigneeIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
       Promise.all(propertyIds.map(async (id) => [id, await ctx.db.get(id)] as const)),
+      Promise.all(
+        inspectionIds.map(async (id) => [id, await ctx.db.get(id)] as const)
+      ),
     ]);
     const userById = new Map(users);
     const propertyById = new Map(properties);
+    const inspectionById = new Map(inspections);
 
     const payrollByAssignee = new Map<string, {
       assigneeId: Id<"users">;
@@ -1015,14 +1058,17 @@ export const listPayroll = query({
       jobs: Array<{
         jobId: Id<"jobs">;
         inspectionId?: Id<"inspections">;
+        jobType: "CLEANING" | "INSPECTION";
         propertyName: string;
         completedAt?: number;
         roomComboUnits?: number;
+        unitCount: number;
         perRoomComboRate?: number;
         unitBonus?: number;
         payrollAmount?: number;
         revenueAmount?: number;
         assignmentCount: number;
+        actualHoursWorked?: number;
       }>;
     }>();
 
@@ -1041,16 +1087,20 @@ export const listPayroll = query({
         pair.financial.unitBonusSnapshot === undefined
           ? undefined
           : roundCurrency(pair.financial.unitBonusSnapshot / splitCount);
-      const splitPayrollAmount = calculateCleanerPayrollShare({
-        roomComboUnits: pair.financial.roomComboUnitsSnapshot,
-        perRoomComboRate: pair.financial.perRoomComboRateSnapshot,
-        unitBonus: pair.financial.unitBonusSnapshot,
+      const splitPayrollAmount = calculateApprovedPayrollShare({
+        payrollAmount: pair.financial.payrollAmountSnapshot,
         splitCount,
       });
       const splitRevenueAmount =
         pair.financial.revenueAmountSnapshot === undefined
           ? undefined
           : roundCurrency(pair.financial.revenueAmountSnapshot / splitCount);
+      const inspectionId = pair.job.linkedInspectionId ?? pair.financial.inspectionId;
+      const inspection = inspectionId ? inspectionById.get(inspectionId) : undefined;
+      const actualHoursWorked = calculateChecklistHours(
+        inspection?.startedAt ?? inspection?._creationTime,
+        inspection?.completedAt
+      );
 
       for (const assignedWorkerId of assignedWorkerIds) {
         const key = String(assignedWorkerId);
@@ -1069,14 +1119,17 @@ export const listPayroll = query({
         entry.jobs.push({
           jobId: pair.job._id,
           inspectionId: pair.job.linkedInspectionId,
+          jobType: pair.job.jobType === "INSPECTION" ? "INSPECTION" : "CLEANING",
           propertyName: propertyById.get(pair.job.propertyId)?.name ?? "Unknown property",
           completedAt: pair.job.completedAt,
           roomComboUnits: splitRoomComboUnits,
+          unitCount: roundCurrency(1 / splitCount),
           perRoomComboRate: pair.financial.perRoomComboRateSnapshot,
           unitBonus: splitUnitBonus,
           payrollAmount: splitPayrollAmount,
           revenueAmount: splitRevenueAmount,
           assignmentCount: splitCount,
+          actualHoursWorked,
         });
 
         payrollByAssignee.set(key, entry);
@@ -1084,13 +1137,127 @@ export const listPayroll = query({
     }
 
     return Array.from(payrollByAssignee.values())
-      .map((entry) => ({
-        ...entry,
-        totalPayroll: roundCurrency(entry.totalPayroll),
-        totalRevenue: roundCurrency(entry.totalRevenue),
-        grossMargin: roundCurrency(entry.grossMargin),
-        jobs: entry.jobs.sort((left, right) => (right.completedAt ?? 0) - (left.completedAt ?? 0)),
-      }))
+      .map((entry) => {
+        const paySummary = summarizeApprovedWorkerPay(
+          entry.jobs.map((job) => ({
+            payrollAmount: job.payrollAmount,
+            comboRooms: job.roomComboUnits,
+            unitCount: job.unitCount,
+            actualHoursWorked: job.actualHoursWorked,
+          }))
+        );
+
+        return {
+          ...entry,
+          totalPayroll: paySummary.totalPay,
+          totalRevenue: roundCurrency(entry.totalRevenue),
+          grossMargin: roundCurrency(entry.grossMargin),
+          totalComboRooms: paySummary.totalComboRooms,
+          totalUnits: paySummary.totalUnits,
+          totalPaidHours: paySummary.totalPaidHours,
+          paidHourlyRate: paySummary.paidHourlyRate,
+          totalActualHoursWorked: paySummary.totalActualHoursWorked,
+          actualHourlyWage: paySummary.actualHourlyWage,
+          actualHoursJobCount: paySummary.actualHoursJobCount,
+          missingActualHoursJobCount: paySummary.missingActualHoursJobCount,
+          jobs: entry.jobs.sort(
+            (left, right) => (right.completedAt ?? 0) - (left.completedAt ?? 0)
+          ),
+        };
+      })
       .sort((left, right) => right.totalPayroll - left.totalPayroll);
+  },
+});
+
+export const getMyPayHistory = query({
+  args: {
+    from: v.number(),
+    to: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const worker = await requireAuth(ctx);
+    if (worker.role !== "CLEANER" && worker.role !== "INSPECTOR") {
+      throw new Error("Worker access required");
+    }
+
+    if (args.to <= args.from || args.to - args.from > 380 * DAY_MS) {
+      throw new Error("Pay history period must be between 1 and 380 days");
+    }
+
+    const completedJobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_status_completed_at", (q) =>
+        q
+          .eq("status", "COMPLETED")
+          .gte("completedAt", args.from)
+          .lt("completedAt", args.to)
+      )
+      .collect();
+    const workerJobs = completedJobs.filter(
+      (job) =>
+        isPayrollJob(job) &&
+        getPayrollRole(job) === worker.role &&
+        getAssignedWorkerIds(job).some((workerId) => workerId === worker._id)
+    );
+    const financials = await Promise.all(
+      workerJobs.map((job) => getJobFinancialByJobId(ctx, job._id))
+    );
+    const relevantPairs = workerJobs
+      .map((job, index) => ({ job, financial: financials[index] }))
+      .filter(
+        (pair): pair is { financial: Doc<"jobFinancials">; job: Doc<"jobs"> } =>
+          pair.financial?.status === "APPROVED" &&
+          pair.financial.financialScope === getPayrollScope(pair.job)
+      );
+
+    const inspectionIds = [
+      ...new Set(
+        relevantPairs
+          .map(({ financial, job }) => job.linkedInspectionId ?? financial.inspectionId)
+          .filter(isDefined)
+      ),
+    ];
+    const inspections = await Promise.all(
+      inspectionIds.map(async (inspectionId) => [inspectionId, await ctx.db.get(inspectionId)] as const)
+    );
+    const inspectionById = new Map(inspections);
+
+    const entries = relevantPairs.map(({ financial, job }) => {
+      const assignmentCount = getSplitCount(job);
+      const propertyComboRooms = financial.roomComboUnitsSnapshot ?? 0;
+      const comboRooms = roundCurrency(propertyComboRooms / assignmentCount);
+      const unitCount = roundCurrency(1 / assignmentCount);
+      const payrollAmount =
+        calculateApprovedPayrollShare({
+          payrollAmount: financial.payrollAmountSnapshot,
+          splitCount: assignmentCount,
+        }) ?? 0;
+      const paidHours = roundCurrency(comboRooms + unitCount);
+      const inspectionId = job.linkedInspectionId ?? financial.inspectionId;
+      const inspection = inspectionId ? inspectionById.get(inspectionId) : undefined;
+      const actualHoursWorked = calculateChecklistHours(
+        inspection?.startedAt ?? inspection?._creationTime,
+        inspection?.completedAt
+      );
+
+      return {
+        jobId: job._id,
+        completedAt: job.completedAt ?? 0,
+        comboRooms,
+        unitCount,
+        payrollAmount: roundCurrency(payrollAmount),
+        paidHours,
+        actualHoursWorked,
+      };
+    });
+
+    return {
+      workerId: worker._id,
+      workerName: worker.name,
+      workerRole: worker.role,
+      from: args.from,
+      to: args.to,
+      entries: entries.sort((left, right) => right.completedAt - left.completedAt),
+    };
   },
 });

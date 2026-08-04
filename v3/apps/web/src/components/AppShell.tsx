@@ -12,6 +12,7 @@ import {
   ReceiptText,
   Shield,
   SlidersHorizontal,
+  WalletCards,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -122,6 +123,16 @@ export function AppShell() {
         >
           <Clock3 className="mr-1 inline-block h-4 w-4" /> History
         </NavLink>
+        {!isAdmin && (
+          <NavLink
+            to="/pay"
+            className={({ isActive }) =>
+              `${baseLink} ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-brand-50"}`
+            }
+          >
+            <WalletCards className="mr-1 inline-block h-4 w-4" /> Pay
+          </NavLink>
+        )}
         {isAdmin && (
           <NavLink
             to="/invoices"
@@ -283,15 +294,40 @@ export function AppShell() {
               icon={<ClipboardList className="h-5 w-5" />}
               label="Active"
             />
-            <MobileNavItem to="/history" icon={<Clock3 className="h-5 w-5" />} label="History" />
-            <button
-              className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-brand-50"
-              onClick={() => void signOut()}
-              type="button"
-            >
-              <Shield className="h-5 w-5" />
-              Sign Out
-            </button>
+            <MobileNavItem to="/pay" icon={<WalletCards className="h-5 w-5" />} label="Pay" />
+            <div className="relative" ref={moreRef}>
+              <button
+                aria-expanded={moreOpen}
+                aria-haspopup="true"
+                className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-brand-50"
+                onClick={() => setMoreOpen(!moreOpen)}
+                onKeyDown={(event) => { if (event.key === "Escape") setMoreOpen(false); }}
+                type="button"
+              >
+                <MoreHorizontal className="h-5 w-5" />
+                More
+              </button>
+              {moreOpen ? (
+                <div className="absolute bottom-full right-0 mb-2 w-48 rounded-2xl border border-border bg-white p-2 shadow-lg" role="menu">
+                  <NavLink
+                    className="block rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-brand-50"
+                    onClick={() => setMoreOpen(false)}
+                    role="menuitem"
+                    to="/history"
+                  >
+                    <Clock3 className="mr-2 inline-block h-4 w-4" /> History
+                  </NavLink>
+                  <button
+                    className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-brand-50"
+                    onClick={() => { setMoreOpen(false); void signOut(); }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <Shield className="mr-2 inline-block h-4 w-4" /> Sign Out
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </>
         )}
       </nav>
