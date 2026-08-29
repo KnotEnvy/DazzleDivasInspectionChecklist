@@ -47,6 +47,19 @@ function formatDate(value: number) {
   });
 }
 
+function InvoiceItemDescription({ description }: { description: string }) {
+  const [heading, ...details] = description.split(/\r?\n/);
+
+  return (
+    <div className="break-words">
+      <p className="font-semibold">{heading}</p>
+      {details.length > 0 ? (
+        <p className="mt-0.5 whitespace-pre-wrap text-slate-600">{details.join("\n")}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export function InvoiceDocument({ invoice }: { invoice: InvoiceDocumentData }) {
   const balanceDue = invoice.status === "PAID" ? 0 : invoice.total;
 
@@ -119,7 +132,7 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDocumentData }) {
             {invoice.lines.map((line, index) => (
               <tr className="border-t border-slate-200" key={line._id ?? `${line.description}-${index}`}>
                 <td className="px-4 py-3">
-                  <p className="font-semibold">{line.description}</p>
+                  <InvoiceItemDescription description={line.description} />
                   {line.serviceDate ? (
                     <p className="mt-0.5 text-xs text-slate-500">
                       Service date: {formatDate(line.serviceDate)}

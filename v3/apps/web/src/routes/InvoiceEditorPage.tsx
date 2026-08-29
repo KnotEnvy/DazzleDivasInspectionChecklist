@@ -673,10 +673,11 @@ export function InvoiceEditorPage() {
               <div className="grid gap-3 md:grid-cols-12">
                 <label className="text-sm font-medium text-slate-700 md:col-span-5">
                   Description
-                  <input
-                    className="input mt-1"
+                  <textarea
+                    className="input mt-1 min-h-24 resize-y"
                     disabled={locked}
                     onChange={(event) => updateLine(line.key, { description: event.target.value })}
+                    rows={3}
                     value={line.description}
                   />
                 </label>

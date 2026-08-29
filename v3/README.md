@@ -32,6 +32,7 @@ July 24 invoicing rollout (deployed to Convex production and Cloudflare Pages):
 - admin-only `Invoices` section with invoice dashboard, client directory, outstanding/overdue/paid metrics, and status filters
 - invoice clients store bill-to details, payment terms, and explicit property mappings
 - invoices support manual line items plus one or more approved jobs for the same client
+- invoice item descriptions support multiline service and linen-package details in the editor, preview, and print/PDF output
 - completed History finance review can start an invoice after a job is approved
 - invoices move through `DRAFT`, `OPEN`, `PAID`, and `VOID`; overdue is derived for open invoices past their due date
 - paid invoices can be corrected back to open with a required reason, and invoice lifecycle changes keep an audit trail

@@ -59,6 +59,7 @@ Current production behavior:
 - admin-only `Invoices` section with invoice list, status filters, receivables metrics, and invoice-client setup
 - invoice clients store billing contact/address/email, payment terms, due-day defaults, and property mappings
 - invoices can be built manually or from one or more approved cleaning jobs for the same client
+- invoice item descriptions preserve multiline service and linen-package details from the editor through preview and print/PDF output
 - approved jobs expose `Create Invoice From Job` in completed History review
 - invoices support `DRAFT`, `OPEN`, `PAID`, and `VOID`; overdue is derived from an open invoice's due date
 - open invoices count as receivables, while paid invoices count as cash collected; these are complementary to approved job revenue and are not added to revenue a second time

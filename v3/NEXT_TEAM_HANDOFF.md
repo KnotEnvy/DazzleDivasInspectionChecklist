@@ -432,6 +432,7 @@ Current repository behavior:
 - only admins can read or mutate invoice data
 - invoice clients map explicitly to properties so approved jobs route to the correct bill-to party
 - line items may be fully manual or linked to approved cleaning jobs
+- line-item descriptions support multiline service and linen-package details and preserve those line breaks in preview and print/PDF output
 - one invoice may contain multiple approved jobs, but every linked job must belong to the selected client's mapped properties
 - a job cannot appear on more than one non-void invoice
 - draft and open invoices are editable; paid invoices must be corrected back to open before editing; void invoices remain immutable audit records
