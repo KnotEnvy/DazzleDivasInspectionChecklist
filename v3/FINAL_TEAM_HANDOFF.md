@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: August 4, 2026
+Updated: August 28, 2026
 
 ## Purpose
 This is the active high-level handoff for the next working team.
@@ -14,7 +14,7 @@ Treat this repository like operating infrastructure, not a rebuild sandbox.
 - Cleaners and inspectors complete field checklists room by room.
 - Completed-work review is live for admins.
 - Photo review and iPhone-friendly save/export flows are live.
-- Backend photo retention is live: photos older than 90 days are purged monthly.
+- Backend photo retention is live: photos older than 60 days are purged daily, followed by a fail-closed orphaned-file cleanup.
 - Offline queue/replay is live and remains business-critical for field use.
 - The finance module is now live for admin operations.
 
@@ -75,7 +75,7 @@ Current production behavior:
 - Any schema/auth/env change must be treated as a rollout change.
 - Cloudflare Pages and Convex deploy separately. Do not assume a frontend deploy updated backend behavior.
 - Convex production is warning that the project is above or near Free plan limits. Bandwidth, storage, and usage headroom are active operational concerns.
-- Photo storage is now controlled by a 90-day retention policy. Do not bypass it or leave manual purge credentials enabled.
+- Photo storage is controlled by a 60-day daily retention policy and seven-day orphan grace period. Do not bypass either guardrail or leave manual purge credentials enabled.
 
 ## What Changed Since The Previous Handoff
 ### August 4 worker Pay and admin Payroll rollout (deployed)
@@ -133,13 +133,15 @@ This batch was deployed on July 16, 2026. Convex production received the schema 
 - Thursday-to-Wednesday weekly payroll reporting is the current business rule.
 
 ### Photo retention and capacity
-- Convex now runs `purge photos older than 90 days` monthly on the 1st at `06:00 UTC`.
-- Retention implementation lives in `packages/backend/convex/crons.ts`, `photoRetention.ts`, `photoRetentionBatches.ts`, `photoRetentionAdmin.ts`, and `lib/photoRetention.ts`.
+- Convex runs `purge photos older than 60 days` daily at `06:00 UTC` and orphan cleanup daily at `06:30 UTC`.
+- Retention implementation lives in `packages/backend/convex/crons.ts`, `photoRetention.ts`, `photoRetentionBatches.ts`, `photoOrphanCleanup.ts`, `photoRetentionAdmin.ts`, and `lib/photoRetention.ts`.
 - The retention purge deletes Convex storage objects and `photos` rows, then recomputes room photo counts without reopening completed checklists.
 - The manual purge entrypoint is `photoRetentionAdmin:purgeExpiredPhotosNow`; it requires the temporary server env var `PHOTO_RETENTION_PURGE_TOKEN`.
+- The orphan purge entrypoint is `photoRetentionAdmin:purgeOrphanedPhotoFilesNow`; it uses the same temporary token and preserves unreferenced uploads for seven days.
 - July 4, 2026 production catch-up purge completed with 564 photos deleted, 444,408,306 bytes removed, 223 room inspections touched, `0` failures, and `incomplete: false`.
 - July 16, 2026 pre-May cleanup used cutoff `2026-05-01T04:00:00.000Z` and completed with 1,840 photos deleted, 542,414,995 bytes removed, 751 room inspections touched, `0` failures, and `incomplete: false`.
-- The temporary production purge token was removed after each manual run; the standard 90-day retention action was restored and redeployed after the July 16 cleanup.
+- August 28, 2026 cleanup used the 60-day cutoff `2026-06-30T01:06:21.899Z` and removed 4,659 photos / 1,503,481,028 bytes plus 5 orphaned files / 3,064,568 bytes with no failures. Final verification found 4,279 storage objects matching 4,279 photo rows, no orphans, no missing files, and 1,751,839,799 stored bytes.
+- The temporary production purge token was removed after the August 28 cleanup.
 
 ## Priority Workstreams For The Next Team
 ### 1. Cleaner/admin workflow polish from real usage
@@ -183,7 +185,7 @@ Primary goal: keep the app online and responsive under real usage growth.
 Focus:
 - inspect Convex bandwidth, storage, and function usage in the dashboard
 - understand the cost of photos, finance queries, and history/reporting volume
-- confirm monthly photo retention is running before storage pressure returns
+- confirm daily photo retention and orphan cleanup are running before storage pressure returns
 - decide whether to reduce usage or move plans before growth forces the decision
 
 ## Validation Standard

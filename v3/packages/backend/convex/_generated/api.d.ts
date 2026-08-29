@@ -31,6 +31,7 @@ import type * as lib_photoRetention from "../lib/photoRetention.js";
 import type * as lib_propertySummaries from "../lib/propertySummaries.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as notifications from "../notifications.js";
+import type * as photoOrphanCleanup from "../photoOrphanCleanup.js";
 import type * as photoRetention from "../photoRetention.js";
 import type * as photoRetentionAdmin from "../photoRetentionAdmin.js";
 import type * as photoRetentionBatches from "../photoRetentionBatches.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   "lib/propertySummaries": typeof lib_propertySummaries;
   "lib/validators": typeof lib_validators;
   notifications: typeof notifications;
+  photoOrphanCleanup: typeof photoOrphanCleanup;
   photoRetention: typeof photoRetention;
   photoRetentionAdmin: typeof photoRetentionAdmin;
   photoRetentionBatches: typeof photoRetentionBatches;

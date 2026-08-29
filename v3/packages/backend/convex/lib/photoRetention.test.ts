@@ -1,20 +1,37 @@
 import { describe, expect, it } from "vitest";
 import {
+  getPhotoOrphanCutoff,
   getPhotoRetentionCutoff,
   normalizeRetentionBatchSize,
   normalizeRetentionMaxBatches,
+  PHOTO_ORPHAN_DAILY_SCHEDULE,
+  PHOTO_ORPHAN_GRACE_DAYS,
   PHOTO_RETENTION_BATCH_SIZE,
+  PHOTO_RETENTION_DAILY_SCHEDULE,
   PHOTO_RETENTION_DAYS,
   PHOTO_RETENTION_MAX_BATCHES,
 } from "./photoRetention";
 
 describe("getPhotoRetentionCutoff", () => {
-  it("returns the exact 90-day cutoff for expired photos", () => {
+  it("returns the exact 60-day cutoff for expired photos", () => {
     const now = Date.UTC(2026, 6, 4, 12, 0, 0);
-    const cutoff = Date.UTC(2026, 3, 5, 12, 0, 0);
+    const cutoff = Date.UTC(2026, 4, 5, 12, 0, 0);
 
-    expect(PHOTO_RETENTION_DAYS).toBe(90);
+    expect(PHOTO_RETENTION_DAYS).toBe(60);
     expect(getPhotoRetentionCutoff(now)).toBe(cutoff);
+  });
+
+  it("keeps recent unreferenced uploads inside the orphan grace period", () => {
+    const now = Date.UTC(2026, 6, 4, 12, 0, 0);
+    const cutoff = Date.UTC(2026, 5, 27, 12, 0, 0);
+
+    expect(PHOTO_ORPHAN_GRACE_DAYS).toBe(7);
+    expect(getPhotoOrphanCutoff(now)).toBe(cutoff);
+  });
+
+  it("runs retention and orphan cleanup every day at separate UTC times", () => {
+    expect(PHOTO_RETENTION_DAILY_SCHEDULE).toEqual({ hourUTC: 6, minuteUTC: 0 });
+    expect(PHOTO_ORPHAN_DAILY_SCHEDULE).toEqual({ hourUTC: 6, minuteUTC: 30 });
   });
 });
 

@@ -288,7 +288,8 @@ const schema = defineSchema({
     ),
   })
     .index("by_room_inspection", ["roomInspectionId"])
-    .index("by_inspection", ["inspectionId"]),
+    .index("by_inspection", ["inspectionId"])
+    .index("by_storage_id", ["storageId"]),
 
 
   financePropertyConfigs: defineTable({

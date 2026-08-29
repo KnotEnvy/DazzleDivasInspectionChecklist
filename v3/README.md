@@ -1,6 +1,6 @@
 # Dazzle Divas v3
 
-Updated: August 4, 2026
+Updated: August 28, 2026
 
 ## Status
 `v3` is the active production app for Dazzle Divas field operations and back-office management.
@@ -13,7 +13,7 @@ Currently live and actively used:
 - cleaner and inspector checklist execution
 - proof photo capture and room-level notes
 - admin completed-checklist review and photo saving/export
-- 90-day backend photo retention with monthly storage cleanup
+- 60-day backend photo retention with daily storage and orphan cleanup
 - offline queueing and replay for field work
 - invite-based staff onboarding
 - admin finance tracking for payroll, revenue, and job-level finance review
@@ -64,7 +64,7 @@ Earlier production improvements that matter:
 - room completion now advances to the next room in list order without auto-expanding it
 - history cards show the cleaner name for finished work
 - finance now includes property-level revenue settings, cleaner and inspector pay profiles, job financial review/approval, revenue views, payroll views, and Thursday-through-Wednesday weekly payroll grouping
-- photo retention now removes photos older than 90 days; a July 16, 2026 cleanup removed all remaining pre-May photos (1,840 photos / about 542 MB) with no failures
+- photo retention removes photos older than 60 days every day and deletes unreferenced photo storage after a seven-day upload grace period
 
 Current emphasis:
 - keep production stable while improving workflows from real cleaner/admin feedback
@@ -82,12 +82,13 @@ Current emphasis:
 - Shared package: `@dazzle/shared`
 
 ## Photo Retention And Capacity
-- Proof photos are retained for 90 days.
-- Convex runs the monthly purge on the 1st at `06:00 UTC` from `packages/backend/convex/crons.ts`.
-- Retention code lives in `packages/backend/convex/photoRetention.ts`, `packages/backend/convex/photoRetentionBatches.ts`, `packages/backend/convex/photoRetentionAdmin.ts`, and `packages/backend/convex/lib/photoRetention.ts`.
+- Proof photos are retained for 60 days.
+- Convex runs the retention purge daily at `06:00 UTC` and the orphaned-file cleanup daily at `06:30 UTC` from `packages/backend/convex/crons.ts`.
+- Retention code lives in `packages/backend/convex/photoRetention.ts`, `packages/backend/convex/photoRetentionBatches.ts`, `packages/backend/convex/photoOrphanCleanup.ts`, `packages/backend/convex/photoRetentionAdmin.ts`, and `packages/backend/convex/lib/photoRetention.ts`.
 - The purge deletes Convex storage objects and matching `photos` rows, then recomputes room photo counts without reopening completed rooms.
+- Orphan cleanup scans the full `_storage` table, requires a complete scan before deleting, rechecks `photos.by_storage_id` immediately before each deletion, and preserves unreferenced uploads for seven days.
 - The manual purge action is guarded by `PHOTO_RETENTION_PURGE_TOKEN`; only set that env var temporarily for an intentional production cleanup and remove it immediately after the run.
-- Last manual production cleanup: July 16, 2026, cutoff `2026-05-01T04:00:00.000Z` (midnight Eastern), deleted 1,840 photos / 542,414,995 bytes across 751 room inspections, `0` failures, `incomplete: false`.
+- Last manual production cleanup: August 28, 2026, 60-day cutoff `2026-06-30T01:06:21.899Z`, deleted 4,659 photos / 1,503,481,028 bytes across 1,922 room inspections, then deleted 5 orphaned files / 3,064,568 bytes. Both actions completed with `0` failures; the temporary token was removed. Final verification found 4,279 storage objects matching 4,279 photo rows, `0` orphans, `0` missing files, and 1,751,839,799 stored bytes.
 
 ## Repo Layout
 ```text

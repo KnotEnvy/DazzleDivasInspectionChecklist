@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Next Team Handoff
 
-Updated: August 4, 2026
+Updated: August 28, 2026
 
 ## Purpose
 This is the fastest path for the next engineering team to understand the current production app, find the important code, and make safe improvements.
@@ -11,7 +11,7 @@ The app is already used in production by admins, cleaners, and inspectors, and f
 - Cleaners and inspectors complete room-by-room checklists in the field.
 - Field workers capture proof photos and notes during checklist execution.
 - Admins review completed work and save/export photos.
-- Backend retention keeps proof photos for 90 days and purges older storage monthly.
+- Backend retention keeps proof photos for 60 days, purges expired storage daily, and removes orphaned photo files after a seven-day grace period.
 - Admins now review payroll/revenue data and approve job financials inside the app.
 - Offline queue/replay exists so field work can continue with weak or missing connectivity.
 
@@ -277,27 +277,31 @@ Retention files:
 - `crons.ts`
 - `photoRetention.ts`
 - `photoRetentionBatches.ts`
+- `photoOrphanCleanup.ts`
 - `photoRetentionAdmin.ts`
 - `lib/photoRetention.ts`
 
 Current production behavior:
-- proof photos are retained for 90 days
-- monthly Convex cron runs on the 1st at `06:00 UTC`
+- proof photos are retained for 60 days
+- daily Convex retention runs at `06:00 UTC`; orphan cleanup follows at `06:30 UTC`
 - purge deletes Convex storage objects and matching `photos` rows
+- orphan cleanup requires a complete storage scan, rechecks the indexed photo reference before every delete, and protects uploads younger than seven days
 - room photo counts are recomputed after deletion
 - completed room/checklist status is not reopened just because retained proof photos aged out
 - manual purge uses `photoRetentionAdmin:purgeExpiredPhotosNow` and requires `PHOTO_RETENTION_PURGE_TOKEN`
 - only set `PHOTO_RETENTION_PURGE_TOKEN` temporarily, run the cleanup, then remove it immediately
 
 Last manual production cleanup:
-- date: July 16, 2026
-- cutoff: `2026-05-01T04:00:00.000Z` (May 1 at midnight Eastern)
-- deleted: 1,840 photos / 542,414,995 bytes
-- affected room inspections: 751
+- date: August 28, 2026
+- 60-day cutoff: `2026-06-30T01:06:21.899Z`
+- deleted: 4,659 photos / 1,503,481,028 bytes
+- affected room inspections: 1,922
 - failures: 0
 - incomplete: false
+- orphan cleanup deleted: 5 files / 3,064,568 bytes, 0 failures, complete scan
+- final verification: 4,279 storage objects, 4,279 photo rows, 0 orphans, 0 missing files, 1,751,839,799 stored bytes
 - temporary production purge token was removed after the run
-- temporary custom-cutoff support was removed and the standard 90-day retention action was redeployed
+- production now runs the standard 60-day retention and seven-day-grace orphan cleanup daily
 
 ### 5. Admin completed review / photo saving / finance approval
 Completed review and photo save:
@@ -464,8 +468,8 @@ Current repository behavior:
 - Android capture flow was updated so workers can take pictures directly from the app instead of being pushed into gallery selection.
 
 ### Photo retention and Convex capacity
-- Production storage pressure led to a 90-day photo retention policy.
-- Monthly retention is implemented as a Convex cron and backend action/mutation pair, not a frontend cleanup.
+- Production storage pressure led to a 60-day photo retention policy with daily enforcement.
+- Daily retention and orphan cleanup are implemented as Convex crons and backend action/query/mutation flows, not frontend cleanup.
 - User-initiated photo deletes still use `photos.remove`; retention uses separate code so historical completed rooms are not reopened when old proof photos age out.
 - July 4, 2026 catch-up purge removed 564 photos and 444,408,306 bytes with no failures.
 - The manual purge action is token-gated for CLI use; do not leave `PHOTO_RETENTION_PURGE_TOKEN` set in production.
@@ -503,8 +507,8 @@ Current repository behavior:
 - Convex production has warned that the project is above or near Free plan limits.
 - The next team should inspect Convex dashboard usage before taking on bandwidth-heavy, reporting-heavy, or photo-heavy work.
 - Assume photos, exports, history views, and finance queries may now have real cost and service implications.
-- Photo storage is now reduced by 90-day retention, but dashboard storage/bandwidth should still be checked after each heavy photo batch.
-- If storage pressure returns, first confirm monthly retention is running before changing capture quality or deleting additional business data.
+- Photo storage is reduced by 60-day daily retention and orphan cleanup, but dashboard storage/bandwidth should still be checked after each heavy photo batch.
+- If storage pressure returns, first confirm both daily cleanup jobs are running before changing capture quality or deleting additional business data.
 - Capacity work is production-risk reduction, not optional cleanup.
 
 ## Dev Environment Notes
@@ -615,7 +619,7 @@ Before shipping meaningful changes, validate:
 - Auth/custom-domain correctness must always be rechecked before onboarding changes ship.
 - Frontend-vs-backend deployment drift is a real operational risk because Cloudflare and Convex do not auto-roll together.
 - Convex bandwidth, storage, and plan headroom need active monitoring.
-- Monthly photo retention reduces storage growth but does not replace Convex plan monitoring.
+- Daily photo retention and orphan cleanup reduce storage growth but do not replace Convex plan monitoring.
 - The app has real production data now, so any schema, auth, env, history, or finance change should be treated as a rollout change.
 
 ## Next UX Batch The Team Should Be Ready For

@@ -1,15 +1,27 @@
 import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
-import { PHOTO_RETENTION_MONTHLY_SCHEDULE } from "./lib/photoRetention";
+import {
+  PHOTO_ORPHAN_DAILY_SCHEDULE,
+  PHOTO_RETENTION_DAILY_SCHEDULE,
+} from "./lib/photoRetention";
 
 const crons = cronJobs();
 
-crons.monthly(
-  "purge photos older than 90 days",
-  PHOTO_RETENTION_MONTHLY_SCHEDULE,
+crons.daily(
+  "purge photos older than 60 days",
+  PHOTO_RETENTION_DAILY_SCHEDULE,
   internal.photoRetention.purgeExpiredPhotosInternal,
   {
-    trigger: "monthly-cron",
+    trigger: "daily-cron",
+  }
+);
+
+crons.daily(
+  "purge orphaned photo files",
+  PHOTO_ORPHAN_DAILY_SCHEDULE,
+  internal.photoOrphanCleanup.purgeOrphanedPhotoFilesInternal,
+  {
+    trigger: "daily-cron",
   }
 );
 
