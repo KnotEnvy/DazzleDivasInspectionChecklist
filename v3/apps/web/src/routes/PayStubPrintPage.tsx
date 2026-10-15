@@ -4,27 +4,26 @@ import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { ArrowLeft, Printer } from "lucide-react";
 import { PayStubDocument } from "@/components/PayStubDocument";
-import { DAY_MS, type WorkerPayHistory } from "@/lib/payHistory";
+import { getPayStubPeriod, type WorkerPayHistory } from "@/lib/payHistory";
 
 export function PayStubPrintPage() {
-  const { weekStart: weekStartParam } = useParams();
-  const weekStart = Number(weekStartParam);
-  const validWeekStart = Number.isFinite(weekStart) && weekStart > 0;
+  const { periodType, periodStart } = useParams();
+  const period = getPayStubPeriod(periodType, periodStart);
   const history = useQuery(
     api.finance.getMyPayHistory,
-    validWeekStart ? { from: weekStart, to: weekStart + 7 * DAY_MS } : "skip"
+    period ? { from: period.periodStart, to: period.periodEnd } : "skip"
   ) as WorkerPayHistory | undefined;
 
   useEffect(() => {
-    if (!history) return;
+    if (!history || !period) return;
     const previousTitle = document.title;
-    document.title = `Pay Stub - ${history.workerName} - ${new Date(weekStart).toLocaleDateString()}`;
+    document.title = `${period.label} Pay Stub - ${history.workerName} - ${new Date(period.periodStart).toLocaleDateString()}`;
     return () => {
       document.title = previousTitle;
     };
-  }, [history, weekStart]);
+  }, [history, period?.label, period?.periodStart]);
 
-  if (!validWeekStart) {
+  if (!period) {
     return <p className="p-6 text-slate-600">That pay period is not valid.</p>;
   }
 
@@ -40,7 +39,7 @@ export function PayStubPrintPage() {
   if (history.entries.length === 0) {
     return (
       <div className="mx-auto max-w-xl p-6 text-center">
-        <p className="text-slate-600">No approved pay was found for this week.</p>
+        <p className="text-slate-600">No approved pay was found for this period.</p>
         <Link className="field-button secondary mt-4 px-4" to="/pay">Back to My Pay</Link>
       </div>
     );
@@ -54,7 +53,7 @@ export function PayStubPrintPage() {
           Back to My Pay
         </Link>
         <div className="text-center">
-          <p className="text-sm font-bold">Weekly Pay Stub</p>
+          <p className="text-sm font-bold">{period.label} Pay Stub</p>
           <p className="text-xs text-slate-500">Choose Save as PDF in the print destination to keep a copy.</p>
         </div>
         <button className="field-button primary px-4" onClick={() => window.print()} type="button">
@@ -64,8 +63,9 @@ export function PayStubPrintPage() {
       </div>
       <PayStubDocument
         entries={history.entries}
-        periodEnd={weekStart + 7 * DAY_MS}
-        periodStart={weekStart}
+        periodEnd={period.periodEnd}
+        periodStart={period.periodStart}
+        periodType={period.type}
         workerName={history.workerName}
         workerRole={history.workerRole}
       />

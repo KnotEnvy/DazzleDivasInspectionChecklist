@@ -5,7 +5,7 @@ import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import { ArrowLeft, Printer } from "lucide-react";
 import { PayStubDocument } from "@/components/PayStubDocument";
-import { DAY_MS, type WorkerPayEntry } from "@/lib/payHistory";
+import { getPayStubPeriod, type WorkerPayEntry } from "@/lib/payHistory";
 
 type AdminPayrollWorker = {
   assigneeId: Id<"users">;
@@ -22,12 +22,11 @@ type AdminPayrollWorker = {
 };
 
 export function AdminPayStubPrintPage() {
-  const { weekStart: weekStartParam, workerId } = useParams();
-  const weekStart = Number(weekStartParam);
-  const validPeriod = Number.isFinite(weekStart) && weekStart > 0 && Boolean(workerId);
+  const { periodStart, periodType, workerId } = useParams();
+  const period = getPayStubPeriod(periodType, periodStart);
   const payroll = useQuery(
     api.finance.listPayroll,
-    validPeriod ? { weekStart, periodEnd: weekStart + 7 * DAY_MS } : "skip"
+    period && workerId ? { weekStart: period.periodStart, periodEnd: period.periodEnd } : "skip"
   ) as AdminPayrollWorker[] | undefined;
   const worker = payroll?.find((entry) => String(entry.assigneeId) === workerId);
   const entries: WorkerPayEntry[] =
@@ -43,15 +42,15 @@ export function AdminPayStubPrintPage() {
   const workerRole = worker?.jobs[0]?.jobType === "INSPECTION" ? "INSPECTOR" : "CLEANER";
 
   useEffect(() => {
-    if (!worker) return;
+    if (!worker || !period) return;
     const previousTitle = document.title;
-    document.title = `Pay Stub - ${worker.assigneeName} - ${new Date(weekStart).toLocaleDateString()}`;
+    document.title = `${period.label} Pay Stub - ${worker.assigneeName} - ${new Date(period.periodStart).toLocaleDateString()}`;
     return () => {
       document.title = previousTitle;
     };
-  }, [weekStart, worker]);
+  }, [period?.label, period?.periodStart, worker]);
 
-  if (!validPeriod) {
+  if (!period || !workerId) {
     return <p className="p-6 text-slate-600">That employee or pay period is not valid.</p>;
   }
 
@@ -67,7 +66,7 @@ export function AdminPayStubPrintPage() {
   if (!worker || entries.length === 0) {
     return (
       <div className="mx-auto max-w-xl p-6 text-center">
-        <p className="text-slate-600">No approved pay was found for this employee and week.</p>
+        <p className="text-slate-600">No approved pay was found for this employee and period.</p>
         <Link className="field-button secondary mt-4 px-4" to="/finance">Back to Finance</Link>
       </div>
     );
@@ -81,7 +80,7 @@ export function AdminPayStubPrintPage() {
           Back to Finance
         </Link>
         <div className="text-center">
-          <p className="text-sm font-bold">Employee Weekly Pay Stub</p>
+          <p className="text-sm font-bold">Employee {period.label} Pay Stub</p>
           <p className="text-xs text-slate-500">Choose Save as PDF in the print destination to keep a copy.</p>
         </div>
         <button className="field-button primary px-4" onClick={() => window.print()} type="button">
@@ -91,8 +90,9 @@ export function AdminPayStubPrintPage() {
       </div>
       <PayStubDocument
         entries={entries}
-        periodEnd={weekStart + 7 * DAY_MS}
-        periodStart={weekStart}
+        periodEnd={period.periodEnd}
+        periodStart={period.periodStart}
+        periodType={period.type}
         workerName={worker.assigneeName}
         workerRole={workerRole}
       />

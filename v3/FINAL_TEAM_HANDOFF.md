@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Final Team Handoff
 
-Updated: August 28, 2026
+Updated: October 14, 2026
 
 ## Purpose
 This is the active high-level handoff for the next working team.
@@ -37,7 +37,7 @@ Current finance behavior:
 ### Worker Pay history and admin hourly payroll are live
 The August 4 worker Pay and admin Payroll build is deployed to production. Convex production was deployed first, followed by the matching Cloudflare Pages frontend.
 
-Current repository behavior:
+Current repository behavior (October 14 payroll print release):
 - cleaners and inspectors receive a worker-only `Pay` tab on desktop and mobile
 - the worker-facing navigation label is `My Pay`; the route remains `/pay`
 - only the signed-in worker's approved payroll records are returned; pending work, admin notes, client revenue, gross margin, and other workers' pay are excluded
@@ -47,8 +47,8 @@ Current repository behavior:
 - missing/invalid checklist timing is excluded together with its matching pay from True Hourly Wage, and the UI discloses timed-job coverage
 - worker pay reuses the same locked room-combo and approved-pay snapshots shown in Admin Payroll; it does not count checklist-room rows or rerun the payroll formula
 - team jobs split combo rooms, the one job unit, unit pay, and approved pay evenly
-- each approved week has a Dazzle-branded totals-only pay-stub print route for browser printing or `Save as PDF`; it is an internal gross-pay record, not a tax document
-- admins can print that same weekly document on a worker's behalf from the employee card in Admin Finance Payroll's weekly view
+- weekly, monthly, and yearly periods have Dazzle-branded totals-only print routes for browser printing or `Save as PDF`; printed records omit individual jobs and hourly/time analysis
+- admins can print the same document on a worker's behalf from any selected period in Admin Finance Payroll; current-period date ranges stop at the preparation date
 - inspectors now have pay profiles and can receive approved payroll snapshots from completed inspection jobs; inspector payroll does not feed cleaning revenue or invoice eligibility
 - the self-service query uses `jobs.by_status_completed_at` to keep each selected-year read bounded instead of collecting all payroll history
 

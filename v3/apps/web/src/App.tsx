@@ -106,7 +106,7 @@ export default function App() {
         }
       />
       <Route
-        path="/pay/week/:weekStart"
+        path="/pay/:periodType/:periodStart"
         element={
           <AuthGuard>
             <RoleGuard role={["CLEANER", "INSPECTOR"]}>
@@ -116,7 +116,7 @@ export default function App() {
         }
       />
       <Route
-        path="/finance/pay-stub/:workerId/:weekStart"
+        path="/finance/pay-stub/:workerId/:periodStart/:periodType?"
         element={
           <AuthGuard>
             <RoleGuard role="ADMIN">{withSuspense(<AdminPayStubPrintPage />)}</RoleGuard>

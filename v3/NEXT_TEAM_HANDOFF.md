@@ -1,6 +1,6 @@
 # Dazzle Divas v3 Next Team Handoff
 
-Updated: August 28, 2026
+Updated: October 14, 2026
 
 ## Purpose
 This is the fastest path for the next engineering team to understand the current production app, find the important code, and make safe improvements.
@@ -15,8 +15,11 @@ The app is already used in production by admins, cleaners, and inspectors, and f
 - Admins now review payroll/revenue data and approve job financials inside the app.
 - Offline queue/replay exists so field work can continue with weak or missing connectivity.
 
+## October 14 Payroll Print Release
+The October 14 frontend change adds monthly and yearly statements to admin Finance Payroll and worker My Pay. Weekly, monthly, and yearly printouts now show only identity, period dates, approved gross earnings, approved jobs, combo rooms, units, and Hours Paid. Actual-time/hourly analysis and individual jobs are omitted. Current-period end dates stop on the preparation date. The existing approved-pay queries and authorization guards are reused; no Convex deployment is needed for this change. Older weekly print URLs remain supported.
+
 ## Latest Production Rollout
-The August 4 worker Pay and admin Payroll rollout is live. Convex production deployment `stoic-dinosaur-501` received the schema, new completed-job index, and functions first, followed by the matching Cloudflare Pages frontend. The July 24 invoicing rollout remains the preceding production baseline.
+The October 14 payroll print release is frontend-only and deploys through Cloudflare Pages from `main`. It adds weekly/monthly/yearly totals-only statements without changing Convex. Validate the Cloudflare deployment check and served production assets for the release commit. The August 4 worker Pay backend remains the baseline: Convex production deployment `stoic-dinosaur-501` received the schema, completed-job index, and functions before its matching frontend. The July 24 invoicing rollout remains supported.
 
 ## Current Production: Worker Pay History And Admin Hourly Payroll
 The August 4 worker Pay and admin Payroll build is deployed to production.
@@ -397,8 +400,8 @@ Current behavior:
 ### 9. Worker Pay history / pay stubs
 Primary screens:
 - `PayPage.tsx` for weekly, monthly, and year-to-date worker records
-- `PayStubPrintPage.tsx` plus `PayStubDocument.tsx` for weekly print/PDF output
-- `AdminPayStubPrintPage.tsx` for admin-on-behalf weekly print/PDF output
+- `PayStubPrintPage.tsx` plus `PayStubDocument.tsx` for weekly, monthly, and yearly print/PDF output
+- `AdminPayStubPrintPage.tsx` for admin-on-behalf weekly, monthly, and yearly print/PDF output
 
 Backend source:
 - `finance.getMyPayHistory`
@@ -418,7 +421,7 @@ Current repository behavior:
 - missing or invalid checklist timing excludes both that job's pay and hours from the true-wage calculation and surfaces timed-job coverage
 - team jobs split paid hours and pay, but every assigned teammate receives the shared checklist's full elapsed time because individual arrival/departure times are not recorded
 - print output is an internal gross-pay record and does not represent taxes, deductions, or off-app adjustments
-- admins can open the same totals-only weekly stub from Finance Payroll; the admin print route is role-guarded and reuses `finance.listPayroll`
+- admins can open the same totals-only stub for any selected Finance Payroll period; the admin print route is role-guarded and reuses `finance.listPayroll`
 - inspector payroll approval is separate from cleaning revenue and cannot create an invoice
 
 ### 10. Invoicing / accounts receivable

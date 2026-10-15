@@ -279,14 +279,26 @@ function MonthlyHistory({ periods }: { periods: PayPeriod[] }) {
       <div className="grid gap-3 md:grid-cols-2">
         {periods.map((period) => (
           <article className="rounded-2xl border border-border bg-white p-4" key={period.periodStart}>
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="font-bold">
                   {new Date(period.periodStart).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
                 </h3>
                 <p className="text-sm text-slate-500">{period.jobCount} approved jobs</p>
               </div>
-              <p className="text-xl font-black text-emerald-700">{formatCurrency(period.totalPay)}</p>
+              <div className="flex items-center gap-3">
+                <p className="text-xl font-black text-emerald-700">{formatCurrency(period.totalPay)}</p>
+                <Link
+                  aria-label={`Print monthly pay stub for ${new Date(period.periodStart).toLocaleDateString(undefined, { month: "long", year: "numeric" })}`}
+                  className="field-button secondary px-3"
+                  target="_blank"
+                  rel="noreferrer"
+                  to={`/pay/month/${period.periodStart}`}
+                >
+                  <Printer className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Pay Stub</span>
+                </Link>
+              </div>
             </div>
             <dl className="mt-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-3">
               <SmallMetric label="Combo Rooms" value={formatNumber(period.totalComboRooms)} />
@@ -313,8 +325,22 @@ function YearToDateHistory({ periods, selectedYear }: { periods: PayPeriod[]; se
 
   return (
     <section className="rounded-2xl border border-border bg-white p-4">
-      <h2 className="text-xl font-bold">{selectedYear} Year-to-Date Record</h2>
-      <p className="text-sm text-slate-600">Monthly line items make it easy to track how approved earnings build over the year.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">{selectedYear} Year-to-Date Record</h2>
+          <p className="text-sm text-slate-600">Monthly line items make it easy to track how approved earnings build over the year.</p>
+        </div>
+        <Link
+          aria-label={`Print yearly pay stub for ${selectedYear}`}
+          className="field-button secondary px-3"
+          target="_blank"
+          rel="noreferrer"
+          to={`/pay/year/${new Date(selectedYear, 0, 1).getTime()}`}
+        >
+          <Printer className="mr-2 h-4 w-4" />
+          Yearly Pay Stub
+        </Link>
+      </div>
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[940px] border-collapse text-left text-sm">
           <thead>

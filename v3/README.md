@@ -1,11 +1,17 @@
 # Dazzle Divas v3
 
-Updated: August 28, 2026
+Updated: October 14, 2026
 
 ## Status
 `v3` is the active production app for Dazzle Divas field operations and back-office management.
 
 This codebase now supports live daily operations across scheduling, checklist execution, completed-work review, and the first production finance workflow. Treat it like business infrastructure with real production data, not as a sandbox for broad rewrites.
+
+## October 14 Payroll Print Release
+- Finance Payroll and worker My Pay support weekly, calendar-month, and yearly print/PDF statements.
+- Statements contain worker/company identity, period dates, approved gross earnings, approved jobs, combo rooms, units, and Hours Paid only. Individual jobs and hourly/time analysis are excluded from all printed periods.
+- Current-period output ends on the preparation date; completed periods end at their calendar boundary. Payroll weeks use local Thursday-to-Wednesday boundaries, including daylight-saving transitions.
+- This is a frontend-only change using the existing approved-pay queries; existing weekly print links remain valid.
 
 ## Production Summary
 Currently live and actively used:

@@ -36,6 +36,51 @@ export type PayPeriod = PaySummary & {
   entries: WorkerPayEntry[];
 };
 
+export type PayStubPeriodType = "week" | "month" | "year";
+
+export function getPayStubPeriod(type: string | undefined, start: string | undefined): {
+  type: PayStubPeriodType;
+  label: string;
+  periodStart: number;
+  periodEnd: number;
+} | null {
+  const periodType = type ?? "week";
+  if (
+    (periodType !== "week" && periodType !== "month" && periodType !== "year") ||
+    !start ||
+    !/^\d+$/.test(start)
+  ) {
+    return null;
+  }
+
+  const periodStart = Number(start);
+  const date = new Date(periodStart);
+  if (!Number.isFinite(date.getTime()) || periodStart <= 0) return null;
+
+  const expectedStart =
+    periodType === "week"
+      ? getThursday(date)
+      : periodType === "month"
+        ? new Date(date.getFullYear(), date.getMonth(), 1)
+        : startOfYear(date);
+  if (expectedStart.getTime() !== periodStart) return null;
+
+  const periodEnd =
+    periodType === "week"
+      ? addDays(date, 7)
+      : periodType === "month"
+        ? new Date(date.getFullYear(), date.getMonth() + 1, 1)
+        : addYears(date, 1);
+  if (!Number.isFinite(periodEnd.getTime())) return null;
+
+  return {
+    type: periodType,
+    label: periodType === "week" ? "Weekly" : periodType === "month" ? "Monthly" : "Yearly",
+    periodStart,
+    periodEnd: periodEnd.getTime(),
+  };
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function roundMetric(value: number) {

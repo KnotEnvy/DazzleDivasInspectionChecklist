@@ -516,17 +516,16 @@ export function FinancePage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      {payrollPeriod === "WEEK" ? (
-                        <Link
-                          className="inline-flex min-h-9 items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-700"
-                          rel="noreferrer"
-                          target="_blank"
-                          to={`/finance/pay-stub/${worker.assigneeId}/${payrollPeriodStart}`}
-                        >
-                          <Printer className="h-3.5 w-3.5" />
-                          Pay Stub
-                        </Link>
-                      ) : null}
+                      <Link
+                        aria-label={`Print ${payrollPeriod.toLowerCase()} pay stub for ${worker.assigneeName}`}
+                        className="inline-flex min-h-9 items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-700"
+                        rel="noreferrer"
+                        target="_blank"
+                        to={`/finance/pay-stub/${worker.assigneeId}/${payrollPeriodStart}/${payrollPeriod.toLowerCase()}`}
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                        Pay Stub
+                      </Link>
                       <button
                         aria-expanded={!collapsedPayees[worker.assigneeId]}
                         className="inline-flex min-h-9 items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700"
